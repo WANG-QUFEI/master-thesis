@@ -1,0 +1,48 @@
+name:                thesis
+version:             0.1.0.0
+github:              "WANG-QUFEI/thesis"
+license:             BSD3
+author:              "qufei"
+maintainer:          "wangqufei2009@gmail.com"
+copyright:           "Copyright (c) 2020 Qufei Wang"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Dependent Types
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/WANG-QUFEI/thesis#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+
+executables:
+  thesis-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - thesis
+
+tests:
+  thesis-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - thesis
