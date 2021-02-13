@@ -1,0 +1,133 @@
+Sun 24/01/2021 15:24
+
+I think we can start the work now (the proposal is fine for me).
+
+ The first thing will be to write a type-checker for a system with a type of all types
+as simple as possible in which one can check Hurkens paradox.
+
+ The most complex thing will be probably to write a parser and printer.
+
+ I suggest the following syntax (it is important that the syntax is as uniform as possible)
+
+ A, M ::=    DM |  E
+ F ::=   x | U | (M)
+ E ::= F | E F
+ D ::= [x : A = M] | [x : A]
+
+ I don’t think there is a problem to use the same syntax for lambda and pi.
+
+ So a term is a list (maybe empty) of declarations followed by a (nonempty) list 
+of atomic expressions, where an atomic expressions is a variable the constant U or (M)
+where M is a term.
+
+ You define then in Haskell a corresponding type of  -concrete- expressions
+
+ You also define a type of -abstract- expressions
+
+ An abstract expression is describe by the data type
+
+ Exp ::=   U | Ref nat |  Abs Exp Exp | Let Exp Exp Exp | App Exp Exp 
+
+ You then write a type-checker for this, following the description in miniTT.
+
+ The goal is to have something working for Hurkens paradox within one week.
+
+ The next step will be to add some locking/unlocking annotation.
+
+ Thierry
+
+
+Fri 12/02/2021 16:25
+
+Here is a file with the syntax I would like you to use (I will complete the file later)
+
+Please write the concrete and abstract syntax in Haskell as well for the next meeting
+
+ Thierry
+
+——————
+
+Pow : * -> *
+Pow X = X -> *
+
+T : * -> *
+T = [X : *] Pow (Pow X)
+
+funT : [X : *][Y : *] (X -> Y) -> T X -> T Y
+funT = [X : *][Y : *][f : X -> Y][t : T x][g : Y -> *] t ([x : X] g (f x))
+
+⊥ = [X : *] X
+
+¬ : * -> *
+¬ X = X -> ⊥
+
+U : *
+U = [X : *] (T X -> X) -> X
+
+tau : T U -> U
+tau = [t : T U][X : *][f : T X -> X] f ([g : X -> *] t ([z : U] g (z X f)))
+
+sigma : U -> T U
+sigma = [z : U]z (T U) ([t : T (T U)][g : U -> *] t ([x : T U] g (tau x)))
+
+Q : T U
+Q = [p : U -> *][z : U] sigma z p -> p z
+
+B : Pow U
+B = [z : U] ¬ ([p : Pow U] sigma z p -> p (tau (sigma z)))
+
+**************************************************************************************
+{-# OPTIONS --type-in-type #-}
+
+module loop2 where
+
+Pow : Set -> Set
+Pow X = X -> Set
+
+T : Set -> Set
+T X = Pow (Pow X)
+
+funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
+funT X Y f t g = t (λ x -> g (f x))
+
+postulate ⊥ : Set
+postulate foo : ⊥ -> ⊥
+-- ⊥ = (X : Set) -> X
+
+¬ : Set -> Set
+¬ X = X -> ⊥
+
+U : Set
+U = (X : Set) -> (T X -> X) -> X
+
+tau : T U -> U
+tau t X f = f (λ g -> t (λ z -> g (z X f)))
+
+
+sigma : U -> T U
+sigma z = z (T U) (λ t g -> t (λ x -> g (tau x)))
+
+
+Q : T U
+Q p = (z : U) -> sigma z p -> p z
+
+B : Pow U
+B z = ¬ ((p : Pow U) -> sigma z p -> p (tau (sigma z)))
+
+C : U
+C = tau Q
+
+lem1 : Q B 
+lem1 z k l = l B k (λ p -> l (λ z -> p (tau (sigma z)))) 
+
+A : Set
+A = (p : Pow U) -> Q p -> p C
+
+lem2 : ¬ A
+lem2 h = h B lem1 (λ p -> h  (λ z -> p (tau (sigma z))))
+
+lem3 : A
+lem3 p h = h C (λ x -> h (tau (sigma x)))
+
+loop : ⊥
+loop = lem2 lem3
