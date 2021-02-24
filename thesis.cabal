@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bb2f908384b95d2c9fa4e9f98388f3d205f09b8e188fd32f37b5efc0cb2f4d35
+-- hash: 0e2a17ff86fea05fb664f894e5cdfbccd7304285c3dcab8606897dd899dc25e1
 
 name:           thesis
 version:        0.1.0.0
@@ -27,13 +27,21 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      SimMiniTT.Abs
+      SimMiniTT.ErrM
+      SimMiniTT.Layout
+      SimMiniTT.Lex
+      SimMiniTT.Par
+      SimMiniTT.Print
+      SimMiniTT.Skel
+      SimMiniTT.Test
   other-modules:
       Paths_thesis
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+                  array >= 0.5.4.0
+                , base >=4.7 && <5
   default-language: Haskell2010
 
 executable thesis-exe
@@ -44,8 +52,9 @@ executable thesis-exe
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
-    , thesis
+                  base >=4.7 && <5
+                , array >= 0.5.4.0
+                , thesis
   default-language: Haskell2010
 
 test-suite thesis-test
@@ -57,6 +66,7 @@ test-suite thesis-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
-    , thesis
+                  base >=4.7 && <5
+                , array >= 0.5.4.0
+                , thesis
   default-language: Haskell2010

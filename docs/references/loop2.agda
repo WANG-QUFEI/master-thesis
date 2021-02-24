@@ -11,8 +11,6 @@ T X = Pow (Pow X)
 funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
 funT X Y f t g = t (λ x -> g (f x))
 
-
-
 postulate ⊥ : Set
 postulate foo : ⊥ -> ⊥
 -- ⊥ = (X : Set) -> X

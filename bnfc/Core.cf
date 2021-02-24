@@ -1,0 +1,26 @@
+-- A simplified version of grammar for the language MiniTT
+position token Id ((letter | '⊥' | '¬') (letter | digit | '_')*) ;
+
+entrypoints Program                             ;
+
+layout toplevel                                 ;
+
+Prog      .      Program ::= [Exp]              ;
+
+EPostu    .      Exp4    ::= Id ":" Exp         ;
+EVar      .      Exp3    ::= Id                 ;
+ESet      .      Exp3    ::= "*"                ;
+EAPP      .      Exp2    ::= Exp2 Exp3          ;
+EArrow    .      Exp1    ::= Exp2 "->" Exp1     ;
+EAbs      .      Exp1    ::= "[" Exp4 "]" Exp1  ;
+EDec      .      Exp     ::= Decl ";" Exp       ;
+
+Def       .      Decl    ::= Id ":" Exp "=" Exp ;
+
+separator Exp ";"  ;
+
+coercions Exp   4                               ;
+
+comment "--"                                    ;
+comment "{-" "-}"                               ;
+

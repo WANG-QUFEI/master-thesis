@@ -1,2 +1,2 @@
 #!/bin/zsh
-./SimMiniTT/Test sample.smtt
+./Core/Test sample.smtt

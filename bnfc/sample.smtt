@@ -8,15 +8,15 @@ T : * -> * =
 funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
   [X : *][Y : *][f : X -> Y][t : T x][g : Y -> *] t ([x : X] g (f x))
 
-¬ : * → * =
-  [X : *] X → ⊥
+¬ : * -> * =
+  [X : *] X -> ⊥
 
 U : * = [X : *] (T X -> X) -> X
 
-tau : T U → U =
+tau : T U -> U =
   [t : T U][X : *][f : T X -> X] f ([g : X -> *] t ([z : U] g (z X f)))
 
-sigma : U → T U =
+sigma : U -> T U =
   [z : U]z (T U) ([t : T (T U)][g : U -> *] t ([x : T U] g (tau x)))
 
 Q : T U =
@@ -24,3 +24,5 @@ Q : T U =
 
 B : Pow U =
   [z : U] ¬ ([p : Pow U] sigma z p -> p (tau (sigma z)))
+
+*
