@@ -156,9 +156,9 @@ happy_n_nonterms = 9 :: Prelude.Int
 
 happyReduce_1 = happySpecReduce_1  0# happyReduction_1
 happyReduction_1 happy_x_1
-	 =  case happyOutTok happy_x_1 of { happy_var_1 -> 
+	 =  case happyOutTok happy_x_1 of { (PT _ (T_Id happy_var_1)) -> 
 	happyIn4
-		 (Core.Abs.Id (mkPosToken happy_var_1)
+		 (Core.Abs.Id happy_var_1
 	)}
 
 happyReduce_2 = happySpecReduce_1  1# happyReduction_2
@@ -230,7 +230,7 @@ happyReduction_10 happy_x_3
 	 =  case happyOut8 happy_x_1 of { (HappyWrap8 happy_var_1) -> 
 	case happyOut9 happy_x_3 of { (HappyWrap9 happy_var_3) -> 
 	happyIn9
-		 (Core.Abs.EArrow happy_var_1 happy_var_3
+		 (Core.Abs.EImpl happy_var_1 happy_var_3
 	)}}
 
 happyReduce_11 = happyReduce 4# 5# happyReduction_11
@@ -242,7 +242,7 @@ happyReduction_11 (happy_x_4 `HappyStk`
 	 = case happyOut6 happy_x_2 of { (HappyWrap6 happy_var_2) -> 
 	case happyOut9 happy_x_4 of { (HappyWrap9 happy_var_4) -> 
 	happyIn9
-		 (Core.Abs.EAbs happy_var_2 happy_var_4
+		 (Core.Abs.ELam happy_var_2 happy_var_4
 	) `HappyStk` happyRest}}
 
 happyReduce_12 = happySpecReduce_1  5# happyReduction_12
@@ -320,7 +320,7 @@ happyNewToken action sts stk (tk:tks) =
 	PT _ (TS _ 7) -> cont 7#;
 	PT _ (TS _ 8) -> cont 8#;
 	PT _ (TS _ 9) -> cont 9#;
-	PT _ (T_Id _) -> cont 10#;
+	PT _ (T_Id happy_dollar_dollar) -> cont 10#;
 	_ -> happyError' ((tk:tks), [])
 	}
 

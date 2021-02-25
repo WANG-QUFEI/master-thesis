@@ -98,7 +98,7 @@ instance Print Double where
   prt _ x = doc (shows x)
 
 instance Print Core.Abs.Id where
-  prt _ (Core.Abs.Id (_,i)) = doc $ showString $ i
+  prt _ (Core.Abs.Id i) = doc $ showString $ i
 
 instance Print Core.Abs.Program where
   prt i e = case e of
@@ -110,8 +110,8 @@ instance Print Core.Abs.Exp where
     Core.Abs.EVar id -> prPrec i 3 (concatD [prt 0 id])
     Core.Abs.ESet -> prPrec i 3 (concatD [doc (showString "*")])
     Core.Abs.EAPP exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
-    Core.Abs.EArrow exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
-    Core.Abs.EAbs exp1 exp2 -> prPrec i 1 (concatD [doc (showString "["), prt 4 exp1, doc (showString "]"), prt 1 exp2])
+    Core.Abs.EImpl exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
+    Core.Abs.ELam exp1 exp2 -> prPrec i 1 (concatD [doc (showString "["), prt 4 exp1, doc (showString "]"), prt 1 exp2])
     Core.Abs.EDec decl exp -> prPrec i 0 (concatD [prt 0 decl, doc (showString ";"), prt 0 exp])
   prtList _ [] = concatD []
   prtList _ [x] = concatD [prt 0 x]

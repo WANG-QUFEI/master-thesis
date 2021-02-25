@@ -8,85 +8,128 @@ import Core.Print
 import Core.Par
 
 -- value of this language in weak head normal form
-data Value = VNt Neutral
+data Value = VNt Neut
            | VSet
-           | VArrow Value Closure
-           | VLam Closure
-           | VPostu Id Value
+           | VLam Value Closure
            deriving Show
 
 -- neutral value
-data Neutral = NGen Int Id
-             | NApp Neutral Value
-             deriving Show
+data Neut = NGen Int
+          | NApp Neut Value
+          deriving Show
 
--- pattern used in closure to represent binding variables in a lambda expression
-data Pattern = PUnit
-             | PVar Id Value
-             deriving Show
+-- binding variable used in lambda expression
+data Binding = BUnit
+             | BVar Id
+             deriving (Eq, Show)
 
--- get a pattern from a special kind of expression (EPostu)
-mkPattern :: Rho -> Exp -> Pattern
-mkPattern rho (EPostu id e) = PVar id (eval e rho)
-mkPattern _ _ = PUnit
+-- environment
+data Rho = RNil | UpVar Rho Binding Value | UpDec Rho Decl deriving Show
 
-ideq :: Id -> Id -> Bool
-ideq (Id (_, id1)) (Id (_, id2)) = id1 == id2
-
--- whether an identifer is in a pattern
-inPat :: Id -> Pattern -> Bool
-inPat x PUnit = False
-inPat x (PVar x' _) = ideq x x'
-
--- function closures
-data Closure = Closure Pattern Exp Rho deriving Show
+-- function closure
+data Closure = Closure Binding Exp Rho deriving Show
 
 -- instantiation of a closure by a value
 (*) :: Closure -> Value -> Value
-(Closure p e r) * v = eval e (UpVar r p v)
+(Closure b e r) * v = eval e (UpVar r b v)
 
-mkClosure :: Pattern -> Exp -> Rho -> Closure
-mkClosure p e rho = Closure p e rho
-
--- environment
-data Rho = RNil | UpVar Rho Pattern Value | UpDec Rho Decl deriving Show
+-- whether a variable is binded
+inBinding :: Id -> Binding -> Bool
+inBinding x BUnit     = False
+inBinding x (BVar x') = x == x'
 
 -- get variable from environment
 getRho :: Rho -> Id -> Value
-getRho (UpVar r p v) x
-  | x `inPat` p = v
-  | otherwise   = getRho r x
+getRho (UpVar r b v) x
+  | x `inBinding` b = v
+  | otherwise       = getRho r x
 getRho r0@(UpDec r (Def id _ e)) x
-  | x `ideq` id = eval e r0
-  | otherwise   = getRho r x
-getRho RNil (Id (pos, id)) = error ("unbound variable " ++ id ++ ", at " ++ show pos)
+  | x == id   = eval e r0
+  | otherwise = getRho r x
+getRho RNil (Id id) = error ("unbound variable: " ++ id)
 
 -- length of environment
-envSize :: Rho -> Int
-envSize RNil = 0
-envSize (UpVar rho _ _) = envSize rho + 1
-envSize (UpDec rho _)   = envSize rho
+lRho :: Rho -> Int
+lRho RNil            = 0
+lRho (UpVar rho _ _) = lRho rho + 1
+lRho (UpDec rho _  ) = lRho rho
 
 -- Operaions on Values
 app :: Value -> Value -> Value
-app (VLam c) v = c * v
-app (VNt k)  v = VNt (NApp k v)
-app v1 v2 = error ("app " ++ show v1 ++ ", " ++ show v2)
+app (VLam _ f) v = f * v
+app (VNt k)    v = VNt (NApp k v)
+app v1 v2        = error ("app " ++ show v1 ++ ", " ++ show v2)
 
 -- semantics fo this language, an expression evaluates to a value in a certain environment
 eval :: Exp -> Rho -> Value
 eval e0 rho = case e0 of
-  EPostu id e      -> VPostu id (eval e rho)
-  EVar id          -> getRho rho id
-  ESet             -> VSet
-  EAPP e1  e2      -> app (eval e1 rho) (eval e2 rho)
-  EArrow e1 e2     -> VArrow (eval e1 rho) (mkClosure PUnit e2 rho)
-  EAbs   e1 e2     -> VLam (mkClosure (mkPattern rho e1) e2 rho)
-  EDec d   e       -> eval e (UpDec rho d)
+  EVar id         -> getRho rho id
+  ESet            -> VSet
+  EAPP  e1 e2     -> app (eval e1 rho) (eval e2 rho)
+  EImpl e1 e2     -> VLam (eval e1 rho) $ Closure BUnit e2 rho
+  ELam  e1 e2     -> case e1 of
+                       EPostu id e' -> VLam (eval e' rho) $ Closure (BVar id) e2 rho
+                       _            -> error "invalid lambda"
+  EDec  d  e      -> eval e (UpDec rho d)
+  _               -> error "Can not evaluate postulates"
 
+-----------------------------------------------------------------------------------------
+-- normal expression
+data NExp = NNt NNeut
+          | NSet
+          | NLam NExp Int NExp
+          deriving (Eq, Show)
 
+data NNeut = NNGen Int
+           | NNApp NNeut NExp
+           deriving (Eq, Show)
 
+data NRho = NRNil
+          | NUpVar NRho Binding NExp
+          | NUpDec NRho Decl
+          deriving (Eq, Show)
 
+-- readback functions
+rbV :: Int -> Value -> NExp
+rbV k v = case v of
+  VNt n -> NNt (rbN k n)
+  VSet  -> NSet
+  VLam t g -> NLam (rbV k t) k (rbV (k + 1) (g * genV k))
+
+rbN :: Int -> Neut -> NNeut
+rbN i (NGen j) = NNGen j
+rbN i (NApp n v) = NNApp (rbN i n) (rbV i v)
+
+genV :: Int -> Value
+genV k = VNt (NGen k)
+
+rbRho :: Int -> Rho -> NRho
+rbRho _ RNil = NRNil
+rbRho i (UpVar r b v) = NUpVar (rbRho i r) b (rbV i v)
+rbRho i (UpDec r dec) = NUpDec (rbRho i r) dec
+
+------------------------------------------------
+-- Error monad and type environment
+------------------------------------------------
+data G a = Success a | Fail String
+
+instance Functor G where
+  fmap f (Success a) = Success (f a)
+  fmap _ (Fail s)    = Fail s
+
+instance Applicative G where
+  pure = return
+  (Fail s) <*> _              = Fail s
+  _ <*> (Fail s)              = Fail s
+  (Success f) <*> (Success a) = Success (f a)
+
+instance Monad G where
+  (Success x) >>= k = k x
+  Fail s      >>= k = Fail s
+  return            = Success
+
+instance MonadFail G where
+  fail s = Fail s
 
 
 

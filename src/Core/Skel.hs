@@ -22,8 +22,8 @@ transExp x = case x of
   Core.Abs.EVar id -> failure x
   Core.Abs.ESet -> failure x
   Core.Abs.EAPP exp1 exp2 -> failure x
-  Core.Abs.EArrow exp1 exp2 -> failure x
-  Core.Abs.EAbs exp1 exp2 -> failure x
+  Core.Abs.EImpl exp1 exp2 -> failure x
+  Core.Abs.ELam exp1 exp2 -> failure x
   Core.Abs.EDec decl exp -> failure x
 transDecl :: Core.Abs.Decl -> Result
 transDecl x = case x of
