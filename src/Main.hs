@@ -8,14 +8,14 @@ import Core.Print
 import Core.Par
 
 -- value of this language in weak head normal form
-data Value = VNt Neut
-           | VSet
-           | VLam Value Closure
-           deriving Show
+data Val = VNt Neut
+         | VSet
+         | VLam Val Closure
+         deriving Show
 
 -- neutral value
 data Neut = NGen Int
-          | NApp Neut Value
+          | NApp Neut Val
           deriving Show
 
 -- binding variable used in lambda expression
@@ -24,13 +24,13 @@ data Binding = BUnit
              deriving (Eq, Show)
 
 -- environment
-data Rho = RNil | UpVar Rho Binding Value | UpDec Rho Decl deriving Show
+data Rho = RNil | UpVar Rho Binding Val | UpDec Rho Decl deriving Show
 
 -- function closure
 data Closure = Closure Binding Exp Rho deriving Show
 
 -- instantiation of a closure by a value
-(*) :: Closure -> Value -> Value
+(*) :: Closure -> Val -> Val
 (Closure b e r) * v = eval e (UpVar r b v)
 
 -- whether a variable is binded
@@ -39,7 +39,7 @@ inBinding x BUnit     = False
 inBinding x (BVar x') = x == x'
 
 -- get variable from environment
-getRho :: Rho -> Id -> Value
+getRho :: Rho -> Id -> Val
 getRho (UpVar r b v) x
   | x `inBinding` b = v
   | otherwise       = getRho r x
@@ -54,14 +54,14 @@ lRho RNil            = 0
 lRho (UpVar rho _ _) = lRho rho + 1
 lRho (UpDec rho _  ) = lRho rho
 
--- Operaions on Values
-app :: Value -> Value -> Value
+-- Operaions on Vals
+app :: Val -> Val -> Val
 app (VLam _ f) v = f * v
 app (VNt k)    v = VNt (NApp k v)
 app v1 v2        = error ("app " ++ show v1 ++ ", " ++ show v2)
 
 -- semantics fo this language, an expression evaluates to a value in a certain environment
-eval :: Exp -> Rho -> Value
+eval :: Exp -> Rho -> Val
 eval e0 rho = case e0 of
   EVar id         -> getRho rho id
   ESet            -> VSet
@@ -90,7 +90,7 @@ data NRho = NRNil
           deriving (Eq, Show)
 
 -- readback functions
-rbV :: Int -> Value -> NExp
+rbV :: Int -> Val -> NExp
 rbV k v = case v of
   VNt n -> NNt (rbN k n)
   VSet  -> NSet
@@ -100,7 +100,7 @@ rbN :: Int -> Neut -> NNeut
 rbN i (NGen j) = NNGen j
 rbN i (NApp n v) = NNApp (rbN i n) (rbV i v)
 
-genV :: Int -> Value
+genV :: Int -> Val
 genV k = VNt (NGen k)
 
 rbRho :: Int -> Rho -> NRho
@@ -131,12 +131,86 @@ instance Monad G where
 instance MonadFail G where
   fail s = Fail s
 
+-- type environment
+type Gamma = [(Id, Val)]
+
+lookupG :: (Show a, Eq a) => a -> [(a, b)] -> G b
+lookupG s [] = fail ("lookupG " ++ show s)
+lookupG s ((s1, u) : us) | s == s1   = return u
+                         | otherwise = lookupG s us
+
+-- update type environment: Gamma |- x : t => Gamma'
+upG :: Gamma -> Binding -> Val -> G Gamma
+upG gma BUnit _ = return gma
+upG gma (BVar x) t = return ((x, t) : gma)
+
+-------------------------------------------------
+-- Type checking rules
+-------------------------------------------------
+checkT :: Int -> Rho -> Gamma -> Exp  -> G ()
+check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G ()
+checkI :: Int -> Rho -> Gamma -> Exp  -> G Val
+checkD :: Int -> Rho -> Gamma -> Decl -> G Gamma
+
+-- check that an expression e0 is a type
+checkT i rho gam e0 = case e0 of
+  EImpl e1 e2 -> do checkT i rho gam e1
+                    checkT i rho gam e2
+  ELam  (EPostu id e1) e2 -> do
+    checkT i rho gam e1
+    gam' <- upG gam (BVar id) (eval e1 rho)
+    checkT (i + 1) (UpVar rho (BVar id) (genV i)) gam' e2
+  ESet       -> return ()
+  EPostu _ _ -> fail $ "Postulate can not be a type: " ++ show e0
+  _          -> check i rho gam e0 VSet
+
+-- check that an expression e0 has type t0
+check i rho gam e0 t0 = case (e0, t0) of
+  (ELam (EPostu id e1) e2, VLam val clo) -> do
+    eqNf i (eval e1 rho) val
+    let vi = genV i
+    gam' <- upG gam (BVar id) val
+    check (i + 1) (UpVar rho (BVar id) vi) gam' e2 (clo * vi)
+  (ELam (EPostu id e1) e2, VSet)         -> do
+    check i rho gam e1 VSet
+    gam' <- upG gam (BVar id) (eval e1 rho)
+    let vi = genV i
+    check (i + 1) (UpVar rho (BVar id) vi) gam' e2 VSet
+  ((EImpl e1 e2), VSet)                  -> do
+    check i rho gam e1 VSet
+    check i rho gam e2 VSet
+  ((EDec dec e'), t)                     -> do
+    gam' <- checkD i rho gam dec
+    check i (UpDec rho dec) gam' e' t
+  (e, t)                                 -> do
+    v <- checkI i rho gam e
+    eqNf i v t
+
+-- infer the type of an expression e0
+checkI i rho gam e0 = case e0 of
+  EVar id                  -> lookupG id gam
+  EAPP (e1 e2)             -> do
+    v1     <- checkI i rho gam e1
+    (t, g) <- extLam v1
+    check i rho gam e2 t
+    return $ g * (eval e2 rho)
+
+checkD i rho gam (Def id t v) = do
+  
 
 
+-- test equality of values by applying read back function  
+eqNf :: Int -> Val -> Val -> G ()
+eqNf i v1 v2
+  | n1 == n2  = return ()
+  | otherwise = fail $ "Values not equal: " ++ show v1 ++ " =/= " ++ show v2
+  where n1 = rbV i v1
+        n2 = rbV i v2
 
-
-
-
+extLam :: Val -> G (Val, Closure)
+extLam v = case v of
+  VLam t g -> return (t, g)
+  _        -> fail $ "invalid lambda value: " ++ show v
 
 
 

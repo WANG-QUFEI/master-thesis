@@ -5,11 +5,9 @@ module loop2 where
 Pow : Set -> Set
 Pow X = X -> Set
 
-test : Set -> Set
-test X = Pow X 
-
 T : Set -> Set
 T X = Pow (Pow X)
+
 
 funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
 funT X Y f t g = t (λ x -> g (f x))
@@ -56,6 +54,3 @@ lem3 p h = h C (λ x -> h (tau (sigma x)))
 
 loop : ⊥
 loop = lem2 lem3
-
-id : (A : Set) -> A -> A
-id A x = x

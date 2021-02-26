@@ -48,7 +48,7 @@ Please write the concrete and abstract syntax in Haskell as well for the next me
 ——————
 
 Pow : * -> *
-Pow X = X -> *
+Pow = [X : *] X -> *
 
 T : * -> *
 T = [X : *] Pow (Pow X)
