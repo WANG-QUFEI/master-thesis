@@ -1,6 +1,8 @@
-module Main where
+module TypeChecker (runTypeCheck) where
 
 import Prelude hiding ((*))
+import Control.Monad.State
+import Data.Maybe
 
 import Core.Abs
 import Core.ErrM
@@ -131,6 +133,10 @@ instance Monad G where
 instance MonadFail G where
   fail s = Fail s
 
+getResultG :: G a -> Either a String
+getResultG (Success a) = Left a
+getResultG (Fail s)    = Right s
+
 -- type environment
 type Gamma = [(Id, Val)]
 
@@ -148,9 +154,9 @@ upG gma (BVar x) t = return ((x, t) : gma)
 -- Type checking rules
 -------------------------------------------------
 checkT :: Int -> Rho -> Gamma -> Exp  -> G ()
-check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G ()
+check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G (Rho, Gamma)
 checkI :: Int -> Rho -> Gamma -> Exp  -> G Val
-checkD :: Int -> Rho -> Gamma -> Decl -> G Gamma
+checkD :: Int -> Rho -> Gamma -> Decl -> G (Rho, Gamma)
 
 -- check that an expression e0 is a type
 checkT i rho gam e0 = case e0 of
@@ -162,7 +168,9 @@ checkT i rho gam e0 = case e0 of
     checkT (i + 1) (UpVar rho (BVar id) (genV i)) gam' e2
   ESet       -> return ()
   EPostu _ _ -> fail $ "Postulate can not be a type: " ++ show e0
-  _          -> check i rho gam e0 VSet
+  _          -> do
+    check i rho gam e0 VSet
+    return ()
 
 -- check that an expression e0 has type t0
 check i rho gam e0 t0 = case (e0, t0) of
@@ -171,33 +179,48 @@ check i rho gam e0 t0 = case (e0, t0) of
     let vi = genV i
     gam' <- upG gam (BVar id) val
     check (i + 1) (UpVar rho (BVar id) vi) gam' e2 (clo * vi)
+    return (rho, gam)
   (ELam (EPostu id e1) e2, VSet)         -> do
     check i rho gam e1 VSet
     gam' <- upG gam (BVar id) (eval e1 rho)
     let vi = genV i
     check (i + 1) (UpVar rho (BVar id) vi) gam' e2 VSet
+    return (rho, gam)
   ((EImpl e1 e2), VSet)                  -> do
     check i rho gam e1 VSet
     check i rho gam e2 VSet
+    return (rho, gam)
   ((EDec dec e'), t)                     -> do
-    gam' <- checkD i rho gam dec
-    check i (UpDec rho dec) gam' e' t
+    (rho', gam') <- checkD i rho gam dec
+    check i rho' gam' e' t
+    case e' of
+      EPostu id e1 ->
+        return (rho', (id, t) : gam')
+      _            ->
+        return (rho', gam')
   (e, t)                                 -> do
     v <- checkI i rho gam e
     eqNf i v t
-
+    return (rho, gam)
 -- infer the type of an expression e0
 checkI i rho gam e0 = case e0 of
-  EVar id                  -> lookupG id gam
-  EAPP (e1 e2)             -> do
+  EVar id    -> lookupG id gam
+  EAPP e1 e2 -> do
     v1     <- checkI i rho gam e1
     (t, g) <- extLam v1
     check i rho gam e2 t
     return $ g * (eval e2 rho)
+  ESet       -> return VSet
+  EPostu id e -> return $ eval e rho
+  _          -> fail $ "checkI: " ++ show e0
 
-checkD i rho gam (Def id t v) = do
-  
-
+checkD i rho gam dec@(Def id et ev) = do
+  checkT i rho gam et
+  let t  = eval et rho
+      vi = genV i
+  gam' <- upG gam (BVar id) t
+  check (i + 1) (UpVar rho (BVar id) vi) gam' ev t
+  return (UpDec rho dec, gam')
 
 -- test equality of values by applying read back function  
 eqNf :: Int -> Val -> Val -> G ()
@@ -212,15 +235,49 @@ extLam v = case v of
   VLam t g -> return (t, g)
   _        -> fail $ "invalid lambda value: " ++ show v
 
+----------------------------------------------------------------------------
+--------------- type checking monad for the entire program -----------------
+----------------------------------------------------------------------------
+type TypeCheckProg a = State (Bool, Rho, Gamma) a
 
+progTypeCheck :: Program -> TypeCheckProg [String]
+progTypeCheck (Prog explist) = do
+  msx <- mapM checkExp explist
+  return $ catMaybes msx
+  where checkExp :: Exp -> TypeCheckProg (Maybe String)
+        checkExp e = do
+          (continue, rho, gam) <- get
+          case continue of
+            False -> return Nothing
+            _     -> case e of
+              EPostu id e0 -> case getResultG (checkT 0 rho gam e0) of
+                Left _      -> do -- e0 is a valid type
+                  let t    = eval e0 rho
+                      gam' = (id, t) : gam
+                  put (True, rho, gam')
+                  return Nothing
+                Right err -> do -- e0 is not a type
+                  put (False, rho, gam)
+                  return (Just err)
+              EVar id      -> case getResultG (checkI 0 rho gam e) of
+                Left _      -> return Nothing -- id is a bounded variable
+                Right err -> do
+                  put (False, rho, gam)
+                  return (Just err)
+              ESet -> return Nothing
+              EAPP _ _     -> case getResultG (checkI 0 rho gam e) of
+                Left _      -> return Nothing -- valid application
+                Right err -> do
+                  put (False, rho, gam)
+                  return (Just err)
+              EDec _ _     -> case getResultG (check 0 rho gam e VSet) of -- a list of declarations must be followed by a expression whose type is VSet, like ESet
+                Left (rho', gam') -> do -- valid application
+                  put (True, rho', gam')
+                  return Nothing 
+                Right err -> do
+                  put (False, rho, gam)
+                  return (Just err)
+              _             -> return $ Just ("invalid single expression: " ++ show e)
 
-
-
-
-
-
-
--------------------------------------------------------------------------------------------
-main :: IO ()
-main = do
-  error "<Not Yet Implemented!>"
+runTypeCheck :: Program -> [String]
+runTypeCheck p = evalState (progTypeCheck p) (True, RNil, [])

@@ -1,4 +1,4 @@
-name:                thesis
+name:                siminitt
 version:             0.1.0.0
 github:              "WANG-QUFEI/thesis"
 license:             BSD3
@@ -11,8 +11,8 @@ extra-source-files:
 - ChangeLog.md
 
 # Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Dependent Types
+synopsis:            A simplified version of Mini-TT
+category:            Dependent Types
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
@@ -21,28 +21,16 @@ description:         Please see the README on GitHub at <https://github.com/WANG
 
 dependencies:
 - base >= 4.7 && < 5
-
-library:
-  source-dirs: src
+- mtl >= 2.2
+- containers >= 0.6.2
+- array >= 0.5.4
 
 executables:
-  thesis-exe:
+  siminitt-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
-    - thesis
-
-tests:
-  thesis-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - thesis
+    dependencies: []
