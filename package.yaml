@@ -26,7 +26,7 @@ dependencies:
 - array >= 0.5.4
 
 executables:
-  siminitt-exe:
+  siminitt:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

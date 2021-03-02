@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8390bf160a61a2abf97c25cbf1d6946821059dc5afef1b73a238396069055d6c
+-- hash: 620c092e1486e402fa5c3ad3161969c7dd3d1f52000f084a73db3b6a135216eb
 
 name:           siminitt
 version:        0.1.0.0
@@ -27,7 +27,7 @@ source-repository head
   type: git
   location: https://github.com/WANG-QUFEI/thesis
 
-executable siminitt-exe
+executable siminitt
   main-is: Main.hs
   other-modules:
       Core.Abs

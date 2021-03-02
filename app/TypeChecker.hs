@@ -154,7 +154,7 @@ upG gma (BVar x) t = return ((x, t) : gma)
 -- Type checking rules
 -------------------------------------------------
 checkT :: Int -> Rho -> Gamma -> Exp  -> G ()
-check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G (Rho, Gamma)
+check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G ()
 checkI :: Int -> Rho -> Gamma -> Exp  -> G Val
 checkD :: Int -> Rho -> Gamma -> Decl -> G (Rho, Gamma)
 
@@ -179,29 +179,20 @@ check i rho gam e0 t0 = case (e0, t0) of
     let vi = genV i
     gam' <- upG gam (BVar id) val
     check (i + 1) (UpVar rho (BVar id) vi) gam' e2 (clo * vi)
-    return (rho, gam)
   (ELam (EPostu id e1) e2, VSet)         -> do
     check i rho gam e1 VSet
     gam' <- upG gam (BVar id) (eval e1 rho)
     let vi = genV i
     check (i + 1) (UpVar rho (BVar id) vi) gam' e2 VSet
-    return (rho, gam)
   ((EImpl e1 e2), VSet)                  -> do
     check i rho gam e1 VSet
     check i rho gam e2 VSet
-    return (rho, gam)
   ((EDec dec e'), t)                     -> do
     (rho', gam') <- checkD i rho gam dec
     check i rho' gam' e' t
-    case e' of
-      EPostu id e1 ->
-        return (rho', (id, t) : gam')
-      _            ->
-        return (rho', gam')
   (e, t)                                 -> do
     v <- checkI i rho gam e
     eqNf i v t
-    return (rho, gam)
 -- infer the type of an expression e0
 checkI i rho gam e0 = case e0 of
   EVar id    -> lookupG id gam
@@ -256,28 +247,26 @@ progTypeCheck (Prog explist) = do
                       gam' = (id, t) : gam
                   put (True, rho, gam')
                   return Nothing
-                Right err -> do -- e0 is not a type
-                  put (False, rho, gam)
-                  return (Just err)
-              EVar id      -> case getResultG (checkI 0 rho gam e) of
-                Left _      -> return Nothing -- id is a bounded variable
-                Right err -> do
-                  put (False, rho, gam)
-                  return (Just err)
-              ESet -> return Nothing
-              EAPP _ _     -> case getResultG (checkI 0 rho gam e) of
-                Left _      -> return Nothing -- valid application
-                Right err -> do
-                  put (False, rho, gam)
-                  return (Just err)
-              EDec _ _     -> case getResultG (check 0 rho gam e VSet) of -- a list of declarations must be followed by a expression whose type is VSet, like ESet
-                Left (rho', gam') -> do -- valid application
+                Right err -> doErr err -- e0 is not a valid type
+              EVar id -> case getResultG (checkI 0 rho gam e) of
+                Left _    -> return Nothing -- id is a bounded variable
+                Right err -> doErr err
+              EAPP _ _ -> case getResultG (checkI 0 rho gam e) of
+                Left _ -> return Nothing -- valid application
+                Right err -> doErr err
+              EDec decl exp -> case getResultG (checkD 0 rho gam decl) of
+                Left (rho', gam') -> do
                   put (True, rho', gam')
-                  return Nothing 
-                Right err -> do
-                  put (False, rho, gam)
-                  return (Just err)
+                  checkExp exp
+                Right err -> doErr err
+              ESet -> return Nothing
               _             -> return $ Just ("invalid single expression: " ++ show e)
+        doErr :: String -> TypeCheckProg (Maybe String)
+        doErr err = modify (updateFst False) >> return (Just err)
+        
+
+updateFst :: a -> (a, b, c) -> (a, b, c)
+updateFst x (x', y', z') = (x, y', z')
 
 runTypeCheck :: Program -> [String]
 runTypeCheck p = evalState (progTypeCheck p) (True, RNil, [])
