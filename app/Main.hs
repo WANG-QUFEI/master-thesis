@@ -3,13 +3,12 @@ module Main (main) where
 import System.Environment ( getArgs, getProgName )
 import System.Exit        ( exitFailure, exitSuccess )
 import Control.Monad      ( when )
-import Control.Monad.State
+import Debug.Trace
 
 import Core.Lex    ( Token )
 import Core.Par    ( pProgram, myLexer )
-import Core.Skel   ()
 import Core.Print  ( Print, printTree )
-import Core.Abs    (Program)
+import Core.Abs
 import Core.Layout ( resolveLayout )
 import TypeChecker
 
@@ -24,7 +23,7 @@ putStrV :: Verbosity -> String -> IO ()
 putStrV v s = when (v > 1) $ putStrLn s
 
 runFile :: (Print a, Show a) => Verbosity -> ParseFun a -> FilePath -> IO ()
-runFile v p f = putStrLn f >> readFile f >>= run v p
+runFile v p f = readFile f >>= run v p
 
 run :: (Print a, Show a) => Verbosity -> ParseFun a -> String -> IO ()
 run v p s = case p ts of
@@ -34,31 +33,48 @@ run v p s = case p ts of
       putStrV v $ show ts
       putStrLn s
       exitFailure
-    Right prog -> do
-      putStrLn "\nParse Successful!"
-      showTree v prog
-      case typeCheckProgram ts of
-        []       -> putStrLn "\nType-checking Successful!" >> exitSuccess
-        (err:_)  -> putStrLn ("\nType check error: " ++ err) >> exitFailure
+    Right src -> do
+      printSuccess "PARSING SUCCESS"
+      printSource v src
+      let Right p = pProgram ts
+      case runTypeCheck p of
+        Left err -> printError err
+        Right _  -> printSuccess "TYPE CHECK SUCCESS" >> exitSuccess
   where
   ts = myLLexer s
-  typeCheckProgram :: [Token] -> [String]
-  typeCheckProgram ts = let (Right p) = pProgram ts in runTypeCheck p
-    
-showTree :: (Show a, Print a) => Int -> a -> IO ()
-showTree v tree
- = do
-      putStrV v $ "\n[Abstract Syntax]\n\n" ++ show tree
-      putStrV v $ "\n[Linearized tree]\n\n" ++ printTree tree
+
+printSource :: (Show a, Print a) => Int -> a -> IO ()
+printSource v src = do
+  let ls  = lines $ printTree src
+      k   = maximum . (fmap length) $ ls
+      cut = take k (repeat '-')    
+      ls' = ("" : cut : ls) ++ [cut, ""]
+  mapM_ (putStrV v) ls'
+
+printSyntax :: (Show a, Print a) => Int -> a -> IO ()
+printSyntax v tree = (putStrV v $ show tree) >> putStrV v ""
+
+printError :: TypeCheckError -> IO ()
+printError err = do
+   putStrLn "\9889\9889\9889 TYPE CHECK FAILED \9889\9889\9889"
+   let ts  = errorText err
+   case ts of
+     [] -> return ()
+     (h : tail) -> do
+       let ts' = fmap (\x -> " \10008 " ++ x) ts
+       mapM_ putStrLn ts'
+       exitFailure
+
+printSuccess :: String -> IO ()
+printSuccess s = putStrLn ("\9972 " ++ s ++ " \9972")
 
 usage :: IO ()
 usage = do
   putStrLn $ unlines
-    [ "usage: Call with one of the following argument combinations:"
-    , "  --help          Display this help message."
-    , "  (no arguments)  Parse stdin verbosely."
-    , "  (files)         Parse content of files verbosely."
-    , "  -s (files)      Silent mode. Parse content of files silently."
+    [ "usage: siminitt [Option] File"
+    , "Options: "
+    , "  --help          Display this help message"
+    , "  -p              print parsing result"
     ]
   exitFailure
 
@@ -66,8 +82,8 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["--help"] -> usage
-    [] -> getContents >>= run 2 pProgram
-    "-s":fs -> mapM_ (runFile 0 pProgram) fs
-    fs -> mapM_ (runFile 2 pProgram) fs
-
+    [] -> putStrLn "invalid argument!" >> usage
+    "--help":_   -> usage
+    "-p":file:_  -> runFile 2 pProgram file
+    file:_       -> runFile 0 pProgram file
+  

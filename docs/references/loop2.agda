@@ -41,7 +41,7 @@ C : U
 C = tau Q
 
 lem1 : Q B 
-lem1 z k l = l B k (λ p -> l (λ z -> p (tau (sigma z)))) 
+lem1 = λ z k l -> l B k (λ p1 -> l (λ z1 -> p1 (tau (sigma z1))))
 
 A : Set
 A = (p : Pow U) -> Q p -> p C

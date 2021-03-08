@@ -1,272 +1,317 @@
-module TypeChecker (runTypeCheck) where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module TypeChecker (
+    runTypeCheck
+  , errorText
+  , TypeCheckError
+  , ErrorText
+  ) where
 
-import Prelude hiding ((*))
-import Control.Monad.State
 import Data.Maybe
+import Data.List
+import Debug.Trace
+import Control.Monad.State
+import Control.Monad.Except
 
 import Core.Abs
-import Core.ErrM
-import Core.Print
-import Core.Par
+import Core.Print  ( printTree )
+----------------------------------------------------------
+-- Data types
+----------------------------------------------------------
 
--- value of this language in weak head normal form
-data Val = VNt Neut
-         | VSet
-         | VLam Val Closure
-         deriving Show
+-- |Abstract syntax for expressions, using the same syntax for lambda and dependent product
+data AbsExp = U
+            | Ref   Int
+            | App   AbsExp AbsExp
+            | Lam   AbsExp AbsExp
+            | Post  AbsExp
+            | Where AbsDef
+            deriving (Eq, Show)
 
--- neutral value
-data Neut = NGen Int
-          | NApp Neut Val
-          deriving Show
+-- | abstract syntax for definition
+data AbsDef = AbsDef AbsExp AbsExp deriving (Eq, Show)
 
--- binding variable used in lambda expression
-data Binding = BUnit
-             | BVar Id
-             deriving (Eq, Show)
+-- | program in abstract syntax
+type AbsProgram = [AbsExp]
 
--- environment
-data Rho = RNil | UpVar Rho Binding Val | UpDec Rho Decl deriving Show
+-- | value for an abstract expression
+data Val = VU
+         | Var Int
+         | VApp Val Val
+         | VLam Val Clos
+         deriving (Eq, Show)
 
--- function closure
-data Closure = Closure Binding Exp Rho deriving Show
+type Env   = [Val] -- ^ value enviroment for type checking
+type Gamma = [Val] -- ^ type environment for type checking
 
--- instantiation of a closure by a value
-(*) :: Closure -> Val -> Val
-(Closure b e r) * v = eval e (UpVar r b v)
+-- | closure as value for expressions in lambda and pi form
+data Clos = Clos AbsExp Env deriving (Eq, Show)
 
--- whether a variable is binded
-inBinding :: Id -> Binding -> Bool
-inBinding x BUnit     = False
-inBinding x (BVar x') = x == x'
-
--- get variable from environment
-getRho :: Rho -> Id -> Val
-getRho (UpVar r b v) x
-  | x `inBinding` b = v
-  | otherwise       = getRho r x
-getRho r0@(UpDec r (Def id _ e)) x
-  | x == id   = eval e r0
-  | otherwise = getRho r x
-getRho RNil (Id id) = error ("unbound variable: " ++ id)
-
--- length of environment
-lRho :: Rho -> Int
-lRho RNil            = 0
-lRho (UpVar rho _ _) = lRho rho + 1
-lRho (UpDec rho _  ) = lRho rho
-
--- Operaions on Vals
-app :: Val -> Val -> Val
-app (VLam _ f) v = f * v
-app (VNt k)    v = VNt (NApp k v)
-app v1 v2        = error ("app " ++ show v1 ++ ", " ++ show v2)
-
--- semantics fo this language, an expression evaluates to a value in a certain environment
-eval :: Exp -> Rho -> Val
-eval e0 rho = case e0 of
-  EVar id         -> getRho rho id
-  ESet            -> VSet
-  EAPP  e1 e2     -> app (eval e1 rho) (eval e2 rho)
-  EImpl e1 e2     -> VLam (eval e1 rho) $ Closure BUnit e2 rho
-  ELam  e1 e2     -> case e1 of
-                       EPostu id e' -> VLam (eval e' rho) $ Closure (BVar id) e2 rho
-                       _            -> error "invalid lambda"
-  EDec  d  e      -> eval e (UpDec rho d)
-  _               -> error "Can not evaluate postulates"
-
------------------------------------------------------------------------------------------
--- normal expression
-data NExp = NNt NNeut
-          | NSet
-          | NLam NExp Int NExp
+-- | expression in normal form, used for convertibility checking
+data NExp = NU
+          | NInt Int
+          | NApp NExp NExp
+          | NLam Int NExp NExp
           deriving (Eq, Show)
 
-data NNeut = NNGen Int
-           | NNApp NNeut NExp
-           deriving (Eq, Show)
+type ErrorStack = [(AbsExp, String)]
 
-data NRho = NRNil
-          | NUpVar NRho Binding NExp
-          | NUpDec NRho Decl
-          deriving (Eq, Show)
+data TypeCheckError = DupDecl           Id
+                    | ValNotEqual       ErrorStack
+                    | VarNotbound       Id
+                    | TypeNotMatch      AbsExp Val
+                    | InvalidApp        ErrorStack
+                    | InferErr          ErrorStack
+                    | CanNotEvaluate    AbsExp
+                    | ExtendWithContext TypeCheckError String
+                    deriving (Show)
 
--- readback functions
-rbV :: Int -> Val -> NExp
-rbV k v = case v of
-  VNt n -> NNt (rbN k n)
-  VSet  -> NSet
-  VLam t g -> NLam (rbV k t) k (rbV (k + 1) (g * genV k))
+type ErrorText = String
 
-rbN :: Int -> Neut -> NNeut
-rbN i (NGen j) = NNGen j
-rbN i (NApp n v) = NNApp (rbN i n) (rbV i v)
+errorText :: TypeCheckError -> [ErrorText]
+errorText err = case err of
+  DupDecl (Id (pos, id))     -> ["Duplicated declaration of variable " ++ id ++ ", at " ++ show pos]
+  ValNotEqual s              -> "Unequal terms" : map (\(e, f) -> "  " ++ f ++  show e) (reverse s)
+  VarNotbound (Id (pos, id)) -> ["Unbound variable " ++ id ++ ", at " ++ show pos]
+  TypeNotMatch e t           -> ["Type unmatch, the expression does not have the value as its type", "\10070 expression: " ++ show e, "\10070 value: " ++ show t]
+  InvalidApp s               -> "Invalid application: " : map (\(e, f) -> "  " ++ f ++  show e) (reverse s)
+  InferErr s                 -> "Type can not be inferred: " : map (\(e, f) -> "  " ++ f ++ show e) (reverse s)
+  CanNotEvaluate e           -> ["Expression can not be evaluated", "\10070 " ++ show e]
+  ExtendWithContext pre tail -> (errorText pre) ++ [tail]
 
-genV :: Int -> Val
-genV k = VNt (NGen k)
+-- | monad used for type checking
+newtype G e s a = G {mkg :: ExceptT e (State s) a}
+  deriving (Monad, Applicative, Functor, MonadError e, MonadState s)
 
-rbRho :: Int -> Rho -> NRho
-rbRho _ RNil = NRNil
-rbRho i (UpVar r b v) = NUpVar (rbRho i r) b (rbV i v)
-rbRho i (UpDec r dec) = NUpDec (rbRho i r) dec
+type TypeCheckM a = G TypeCheckError (Env, Gamma) a
 
-------------------------------------------------
--- Error monad and type environment
-------------------------------------------------
-data G a = Success a | Fail String
+type ConvertM a = G TypeCheckError [String] a
 
-instance Functor G where
-  fmap f (Success a) = Success (f a)
-  fmap _ (Fail s)    = Fail s
+runG :: G e s a -> s -> Either e a
+runG g s = evalState (runExceptT (mkg g)) s
 
-instance Applicative G where
-  pure = return
-  (Fail s) <*> _              = Fail s
-  _ <*> (Fail s)              = Fail s
-  (Success f) <*> (Success a) = Success (f a)
+-- | string part of an id
+idAsString :: Id -> String
+idAsString (Id (_, id)) = id
 
-instance Monad G where
-  (Success x) >>= k = k x
-  Fail s      >>= k = Fail s
-  return            = Success
+-- | create a closure for an abstract expression from the enclosing environment
+mkClos :: AbsExp -> Env -> Clos
+mkClos ae env = Clos ae env
+----------------------------------------------------------
+-- type checking methods
+----------------------------------------------------------
+-- | check the duplication of declaration
+checkDuplicateDecl :: Program -> Either TypeCheckError Bool
+checkDuplicateDecl (Prog es) =
+  let xs = evalState (mapM check es) []
+  in  foldl (>>) (Right True) xs
+  where
+    check :: Exp -> State [String] (Either TypeCheckError Bool)
+    check e = case getExpId e of
+      Just id -> do
+        idlist <- get
+        case (idAsString id) `elem` idlist of
+          True -> return . Left $ DupDecl id
+          _    -> put ((idAsString id) : idlist) >> return (Right True)
+      _       -> return (Right True)
+    getExpId :: Exp -> Maybe Id
+    getExpId e = case e of
+      EPost id _ -> Just id
+      EDec  id _ -> Just id
+      _          -> Nothing
 
-instance MonadFail G where
-  fail s = Fail s
+-- | get the abstract syntax of a program
+absProg :: Program -> TypeCheckM AbsProgram
+absProg p@(Prog es) = case checkDuplicateDecl p of
+  Left error -> throwError error
+  _          -> case runG (mapM g es) [] of
+    Left error -> throwError error
+    Right as   -> return as
+  where g :: Exp -> ConvertM AbsExp
+        g e = case e of
+          EU                    -> return U
+          EVar id               -> do
+            idlist <- get
+            case (idAsString id) `elemIndex` idlist of
+              Just idx -> return $ Ref idx
+              Nothing  -> throwError $ VarNotbound id
+          EApp e1 e2            -> do
+            e1' <- g e1
+            e2' <- g e2
+            return $ App e1' e2'
+          EArr e1 e2            -> do
+            e1' <- g e1
+            modify (\s -> "" : s)
+            e2' <- g e2
+            modify (\s -> tail s)
+            return $ Lam e1' e2'
+          EPi id e1 e2 -> do
+            e1' <- g e1
+            modify (\s -> idAsString id : s)
+            e2' <- g e2
+            modify (\s -> tail s)
+            return $ Lam e1' e2'
+          EPost id e            -> do
+            e' <-  g e
+            l  <-  gets length
+            modify (\s -> idAsString id : s)
+            return $ Post e'
+          EDec id (Def e1 e2)   -> do
+            e1' <- g e1
+            e2' <- g e2
+            l   <- gets length
+            modify (\s -> idAsString id : s)
+            return $ Where (AbsDef e1' e2')
 
-getResultG :: G a -> Either a String
-getResultG (Success a) = Left a
-getResultG (Fail s)    = Right s
+-- | semantics of the language, evaluation of the abstract expressions
+eval :: AbsExp -> Env -> TypeCheckM Val
+eval e env = case e of
+  U         -> return VU
+  Ref idx   -> return (env !! idx)
+  App e1 e2 -> app e1 e2 env
+  Lam e1 e2 -> do
+    v1 <- eval e1 env
+    return $ VLam v1 (mkClos e2 env)
+  _         -> throwError $ CanNotEvaluate e
 
--- type environment
-type Gamma = [(Id, Val)]
+-- | instantiation of a closure by a value
+inst :: Clos -> Val -> TypeCheckM Val
+inst (Clos e env) v = eval e (v : env)
 
-lookupG :: (Show a, Eq a) => a -> [(a, b)] -> G b
-lookupG s [] = fail ("lookupG " ++ show s)
-lookupG s ((s1, u) : us) | s == s1   = return u
-                         | otherwise = lookupG s us
+-- | application of values
+app :: AbsExp -> AbsExp -> Env -> TypeCheckM Val
+app e1 e2 env = do
+  v1 <- eval e1 env
+  v2 <- eval e2 env
+  case v1 of
+    (VLam _ clos) -> inst clos v2
+    Var _         -> return $ VApp v1 v2
+    VApp _ _      -> return $ VApp v1 v2
+    _             -> trace (show v1 ++ "\n" ++ show v2) throwError (InvalidApp [(e1, "app: ")])
+-- | readback function, converting a value to its normal form
+rbV :: Int -> Val -> TypeCheckM NExp
+rbV i v = case v of
+  VU           -> return NU
+  Var k        -> return $ NInt k
+  VApp v1 v2   -> do
+    n1 <- rbV i v1
+    n2 <- rbV i v2
+    return $ NApp n1 n2
+  VLam v  clos -> do
+    n1 <- rbV i v
+    v' <- inst clos (Var i)
+    n2 <- rbV (i + 1) v'
+    return $ NLam i n1 n2
 
--- update type environment: Gamma |- x : t => Gamma'
-upG :: Gamma -> Binding -> Val -> G Gamma
-upG gma BUnit _ = return gma
-upG gma (BVar x) t = return ((x, t) : gma)
+updateContext :: Val -> Val -> TypeCheckM ()
+updateContext v1 v2 = do
+  (env, gamma) <- get
+  put (v1 : env, v2 : gamma)
 
--------------------------------------------------
--- Type checking rules
--------------------------------------------------
-checkT :: Int -> Rho -> Gamma -> Exp  -> G ()
-check  :: Int -> Rho -> Gamma -> Exp  -> Val -> G ()
-checkI :: Int -> Rho -> Gamma -> Exp  -> G Val
-checkD :: Int -> Rho -> Gamma -> Decl -> G (Rho, Gamma)
+-- | check the equality of two values by first reducing them to the normal form
+eqNe :: Int -> Val -> Val -> TypeCheckM ()
+eqNe i v1 v2 = do
+  n1 <- rbV i v1
+  n2 <- rbV i v2
+  if n1 == n2
+    then return ()
+    else throwError $ ValNotEqual []
 
--- check that an expression e0 is a type
-checkT i rho gam e0 = case e0 of
-  EImpl e1 e2 -> do checkT i rho gam e1
-                    checkT i rho gam e2
-  ELam  (EPostu id e1) e2 -> do
-    checkT i rho gam e1
-    gam' <- upG gam (BVar id) (eval e1 rho)
-    checkT (i + 1) (UpVar rho (BVar id) (genV i)) gam' e2
-  ESet       -> return ()
-  EPostu _ _ -> fail $ "Postulate can not be a type: " ++ show e0
-  _          -> do
-    check i rho gam e0 VSet
-    return ()
+handleErrStack :: AbsExp -> String -> TypeCheckError -> TypeCheckM a
+handleErrStack e fs err = case err of
+  InvalidApp  s -> throwError $ InvalidApp  ((e, fs) : s)
+  InferErr    s -> throwError $ InferErr    ((e, fs) : s)
+  ValNotEqual s -> throwError $ ValNotEqual ((e, fs) : s)
 
--- check that an expression e0 has type t0
-check i rho gam e0 t0 = case (e0, t0) of
-  (ELam (EPostu id e1) e2, VLam val clo) -> do
-    eqNf i (eval e1 rho) val
-    let vi = genV i
-    gam' <- upG gam (BVar id) val
-    check (i + 1) (UpVar rho (BVar id) vi) gam' e2 (clo * vi)
-  (ELam (EPostu id e1) e2, VSet)         -> do
-    check i rho gam e1 VSet
-    gam' <- upG gam (BVar id) (eval e1 rho)
-    let vi = genV i
-    check (i + 1) (UpVar rho (BVar id) vi) gam' e2 VSet
-  ((EImpl e1 e2), VSet)                  -> do
-    check i rho gam e1 VSet
-    check i rho gam e2 VSet
-  ((EDec dec e'), t)                     -> do
-    (rho', gam') <- checkD i rho gam dec
-    check i rho' gam' e' t
-  (e, t)                                 -> do
-    v <- checkI i rho gam e
-    eqNf i v t
--- infer the type of an expression e0
-checkI i rho gam e0 = case e0 of
-  EVar id    -> lookupG id gam
-  EAPP e1 e2 -> do
-    v1     <- checkI i rho gam e1
-    (t, g) <- extLam v1
-    check i rho gam e2 t
-    return $ g * (eval e2 rho)
-  ESet       -> return VSet
-  EPostu id e -> return $ eval e rho
-  _          -> fail $ "checkI: " ++ show e0
+checkT :: AbsExp ->        TypeCheckM ()   -- ^ check an expression is a type
+check  :: AbsExp -> Val -> TypeCheckM ()   -- ^ check an expression has a value as its type
+checkI :: AbsExp ->        TypeCheckM Val  -- ^ infer the type of an expression
+checkD :: AbsDef ->        TypeCheckM ()   -- ^ check an definition is valid
 
-checkD i rho gam dec@(Def id et ev) = do
-  checkT i rho gam et
-  let t  = eval et rho
-      vi = genV i
-  gam' <- upG gam (BVar id) t
-  check (i + 1) (UpVar rho (BVar id) vi) gam' ev t
-  return (UpDec rho dec, gam')
+checkT e = do {
+  case e of
+    U -> return ()
+    Lam e1 e2 -> do
+      checkT e1
+      init_ctx@(env, gamma) <- get
+      let v1 = Var (length env)
+      v2 <- eval e1 env
+      updateContext v1 v2
+      checkT e2
+      put init_ctx
+    Post e -> do
+      checkT e
+      env <- gets fst
+      t   <- eval e env
+      updateContext (Var (length env)) t
+    _ -> check e VU } `catchError` handleErrStack e "checkT: "
 
--- test equality of values by applying read back function  
-eqNf :: Int -> Val -> Val -> G ()
-eqNf i v1 v2
-  | n1 == n2  = return ()
-  | otherwise = fail $ "Values not equal: " ++ show v1 ++ " =/= " ++ show v2
-  where n1 = rbV i v1
-        n2 = rbV i v2
+check e t = do {
+  case (e, t) of
+    (Lam e1 e2, VLam t g) -> do
+      init_ctx@(env, gamma) <- get
+      let s = length env
+      t' <- eval e1 env
+      eqNe s t' t
+      updateContext (Var s) t
+      tt <- inst g (Var s)
+      check e2 tt
+      put init_ctx
+    (Lam e1 e2, VU) -> do
+      check e1 VU
+      init_ctx@(env, gamma) <- get
+      let v1 = Var (length env)
+      v2 <- eval e1 env
+      updateContext v1 v2
+      check e2 VU
+      put init_ctx
+    (Lam _ _, _) -> throwError (TypeNotMatch e t)
+    _ -> do
+      t'  <- checkI e
+      env <- gets fst
+      eqNe (length env) t t' } `catchError` handleErrStack e "check: "
 
-extLam :: Val -> G (Val, Closure)
-extLam v = case v of
-  VLam t g -> return (t, g)
-  _        -> fail $ "invalid lambda value: " ++ show v
+checkI e = do {
+  case e of
+    U -> return VU
+    Ref idx -> do
+      gamma <- gets snd
+      return (gamma !! idx)
+    App e1 e2 -> do
+      v1 <- checkI e1
+      case v1 of
+        VLam t g -> do
+          check e2 t
+          env <- gets fst
+          v2 <- eval e2 env
+          inst g v2
+        _ -> throwError (InvalidApp [(e1, "checkI: ")])  
+    _ -> throwError (InferErr []) } `catchError` handleErrStack e "checkI: "
 
-----------------------------------------------------------------------------
---------------- type checking monad for the entire program -----------------
-----------------------------------------------------------------------------
-type TypeCheckProg a = State (Bool, Rho, Gamma) a
+checkD d@(AbsDef e1 e2) = do { do
+  checkT e1
+  env <- gets fst
+  t <- eval e1 env
+  check e2 t
+  v <- eval e2 env
+  updateContext v t } `catchError` handleErrStack (Where d) "checkD: "
 
-progTypeCheck :: Program -> TypeCheckProg [String]
-progTypeCheck (Prog explist) = do
-  msx <- mapM checkExp explist
-  return $ catMaybes msx
-  where checkExp :: Exp -> TypeCheckProg (Maybe String)
-        checkExp e = do
-          (continue, rho, gam) <- get
-          case continue of
-            False -> return Nothing
-            _     -> case e of
-              EPostu id e0 -> case getResultG (checkT 0 rho gam e0) of
-                Left _      -> do -- e0 is a valid type
-                  let t    = eval e0 rho
-                      gam' = (id, t) : gam
-                  put (True, rho, gam')
-                  return Nothing
-                Right err -> doErr err -- e0 is not a valid type
-              EVar id -> case getResultG (checkI 0 rho gam e) of
-                Left _    -> return Nothing -- id is a bounded variable
-                Right err -> doErr err
-              EAPP _ _ -> case getResultG (checkI 0 rho gam e) of
-                Left _ -> return Nothing -- valid application
-                Right err -> doErr err
-              EDec decl exp -> case getResultG (checkD 0 rho gam decl) of
-                Left (rho', gam') -> do
-                  put (True, rho', gam')
-                  checkExp exp
-                Right err -> doErr err
-              ESet -> return Nothing
-              _             -> return $ Just ("invalid single expression: " ++ show e)
-        doErr :: String -> TypeCheckProg (Maybe String)
-        doErr err = modify (updateFst False) >> return (Just err)
-        
-
-updateFst :: a -> (a, b, c) -> (a, b, c)
-updateFst x (x', y', z') = (x, y', z')
-
-runTypeCheck :: Program -> [String]
-runTypeCheck p = evalState (progTypeCheck p) (True, RNil, [])
+-- | type check a program
+runTypeCheck :: Program -> Either TypeCheckError ()
+runTypeCheck p@(Prog es) = runG pCheck ([], [])
+  where pCheck :: TypeCheckM ()
+        pCheck = do
+          p' <- absProg p
+          mapM_ f (zip p' [0..])
+        f :: (AbsExp, Int) -> TypeCheckM ()
+        f (e, n) = do
+          case e of
+            U                 -> return ()
+            Ref _             -> (checkI e >> return ()) `catchError` (h n)
+            App _ _           -> (checkI e >> return ()) `catchError` (h n)
+            Lam _ _           -> (checkT e)              `catchError` (h n)
+            Post _            -> (checkT e)              `catchError` (h n)
+            Where dec         -> (checkD dec)            `catchError` (h n)
+        h :: Int -> TypeCheckError -> TypeCheckM ()
+        h n error = let e_origin    = es !! n
+                        msg_context = "When checking source \9944 " ++ printTree e_origin
+                    in  throwError $ ExtendWithContext error msg_context

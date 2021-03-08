@@ -18,14 +18,14 @@ transProgram x = case x of
   Core.Abs.Prog exps -> failure x
 transExp :: Core.Abs.Exp -> Result
 transExp x = case x of
-  Core.Abs.EPostu id exp -> failure x
+  Core.Abs.EU -> failure x
   Core.Abs.EVar id -> failure x
-  Core.Abs.ESet -> failure x
-  Core.Abs.EAPP exp1 exp2 -> failure x
-  Core.Abs.EImpl exp1 exp2 -> failure x
-  Core.Abs.ELam exp1 exp2 -> failure x
-  Core.Abs.EDec decl exp -> failure x
-transDecl :: Core.Abs.Decl -> Result
-transDecl x = case x of
-  Core.Abs.Def id exp1 exp2 -> failure x
+  Core.Abs.EApp exp1 exp2 -> failure x
+  Core.Abs.EArr exp1 exp2 -> failure x
+  Core.Abs.EPi id exp1 exp2 -> failure x
+  Core.Abs.EPost id exp -> failure x
+  Core.Abs.EDec id def -> failure x
+transDef :: Core.Abs.Def -> Result
+transDef x = case x of
+  Core.Abs.Def exp1 exp2 -> failure x
 

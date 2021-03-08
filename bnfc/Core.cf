@@ -1,26 +1,26 @@
--- A simplified version of grammar for the language MiniTT
-token Id ((letter | '⊥' | '¬') (letter | digit | '_')*) ;
+-- concrete syntax
+position token Id ((letter | '⊥' | '¬') (letter | digit | '_')*);
 
-entrypoints Program                             ;
+entrypoints Program;
 
-layout toplevel                                 ;
+layout toplevel;
 
-Prog      .      Program ::= [Exp]              ;
+Prog. Program ::= [Exp];
 
-EPostu    .      Exp4    ::= Id ":" Exp         ;
-EVar      .      Exp3    ::= Id                 ;
-ESet      .      Exp3    ::= "*"                ;
-EAPP      .      Exp2    ::= Exp2 Exp3          ;
-EImpl     .      Exp1    ::= Exp2 "->" Exp1     ;
-ELam      .      Exp1    ::= "[" Exp4 "]" Exp1  ;
-EDec      .      Exp     ::= Decl ";" Exp       ;
+EU.    Exp3 ::= "*";
+EVar.  Exp3 ::= Id;
+EApp.  Exp2 ::= Exp2 Exp3;
+EArr.  Exp1 ::= Exp2 "->" Exp1;
+EPi.   Exp1 ::= "[" Id ":" Exp1 "]" Exp1;
+EPost. Exp1 ::= Id ":" Exp1;
+EDec.  Exp  ::= Id ":" Def;
 
-Def       .      Decl    ::= Id ":" Exp "=" Exp ;
+Def.  Def  ::= Exp1 "=" Exp1;
 
-separator Exp ";"  ;
+separator Exp ";";
 
-coercions Exp   4                               ;
+coercions Exp 3;
 
-comment "--"                                    ;
-comment "{-" "-}"                               ;
+comment "--";
 
+comment "{-" "-}";

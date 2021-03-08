@@ -98,7 +98,7 @@ instance Print Double where
   prt _ x = doc (shows x)
 
 instance Print Core.Abs.Id where
-  prt _ (Core.Abs.Id i) = doc $ showString $ i
+  prt _ (Core.Abs.Id (_,i)) = doc $ showString $ i
 
 instance Print Core.Abs.Program where
   prt i e = case e of
@@ -106,20 +106,20 @@ instance Print Core.Abs.Program where
 
 instance Print Core.Abs.Exp where
   prt i e = case e of
-    Core.Abs.EPostu id exp -> prPrec i 4 (concatD [prt 0 id, doc (showString ":"), prt 0 exp])
+    Core.Abs.EU -> prPrec i 3 (concatD [doc (showString "*")])
     Core.Abs.EVar id -> prPrec i 3 (concatD [prt 0 id])
-    Core.Abs.ESet -> prPrec i 3 (concatD [doc (showString "*")])
-    Core.Abs.EAPP exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
-    Core.Abs.EImpl exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
-    Core.Abs.ELam exp1 exp2 -> prPrec i 1 (concatD [doc (showString "["), prt 4 exp1, doc (showString "]"), prt 1 exp2])
-    Core.Abs.EDec decl exp -> prPrec i 0 (concatD [prt 0 decl, doc (showString ";"), prt 0 exp])
+    Core.Abs.EApp exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
+    Core.Abs.EArr exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
+    Core.Abs.EPi id exp1 exp2 -> prPrec i 1 (concatD [doc (showString "["), prt 0 id, doc (showString ":"), prt 1 exp1, doc (showString "]"), prt 1 exp2])
+    Core.Abs.EPost id exp -> prPrec i 1 (concatD [prt 0 id, doc (showString ":"), prt 1 exp])
+    Core.Abs.EDec id def -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 def])
   prtList _ [] = concatD []
   prtList _ [x] = concatD [prt 0 x]
   prtList _ (x:xs) = concatD [prt 0 x, doc (showString ";"), prt 0 xs]
 
-instance Print Core.Abs.Decl where
+instance Print Core.Abs.Def where
   prt i e = case e of
-    Core.Abs.Def id exp1 exp2 -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 exp1, doc (showString "="), prt 0 exp2])
+    Core.Abs.Def exp1 exp2 -> prPrec i 0 (concatD [prt 1 exp1, doc (showString "="), prt 1 exp2])
 
 instance Print [Core.Abs.Exp] where
   prt = prtList

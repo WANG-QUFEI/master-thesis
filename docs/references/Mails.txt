@@ -1,4 +1,4 @@
-Sun 24/01/2021 15:24
+$- Sun 24/01/2021 15:24
 
 I think we can start the work now (the proposal is fine for me).
 
@@ -25,7 +25,7 @@ where M is a term.
  You also define a type of -abstract- expressions
 
  An abstract expression is describe by the data type
-
+ 
  Exp ::=   U | Ref nat |  Abs Exp Exp | Let Exp Exp Exp | App Exp Exp 
 
  You then write a type-checker for this, following the description in miniTT.
@@ -37,7 +37,7 @@ where M is a term.
  Thierry
 
 
-Fri 12/02/2021 16:25
+$- Fri 12/02/2021 16:25
 
 Here is a file with the syntax I would like you to use (I will complete the file later)
 
@@ -131,3 +131,65 @@ lem3 p h = h C (λ x -> h (tau (sigma x)))
 
 loop : ⊥
 loop = lem2 lem3
+
+$- Tuesday, 2/3/2021
+
+ So you should follow the type-checker from
+
+ http://www.cse.chalmers.se/~coquand/mTT10.pdf
+
+page 4.
+
+ A difference however is that you work with -typed- abstraction and that we try
+to use the same binder from dependent product and abstraction.
+
+ So the abstract syntax should be
+
+ AExp =    Ref Int | App AExp AExp  | Lam AExp AExp | Where AExp Def
+
+ Def = Def AExp AExp
+
+
+ You should write a function   Exp -> AExp  
+from -concrete- syntax (produced by the parser) to -abstract- syntax (used for evaluation
+and type-checking).
+
+ This function has an accumulator which is a list of declared identifier.
+
+ For implication you can use a dummy identifier  “”.
+
+ You define also a type of environment and values
+
+ Env =  Nil | Push Env Val | Def Env Def
+
+ Val =  Var Int | VApp Val Val | VLam Val Val |  Clos AExp Env
+
+ with the evaluation rule given page 3
+
+ You can then use the type-checking rules on page 4.
+
+ Thierry
+
+---------------------------------------------------------------------------
+For instance, we have -impiication- or arrow in the -concrete- syntax
+but we don’t have it in the -abstract- syntax.
+
+ To use de Bruijn index takes a little time to get used to, but it becomes clearer
+in the long range, and it is good in any case to check -scope- of identifier
+early on (that any identifier that is used has been declared somewhere, which is
+what you have to do for the translation identifier -> de Bruijn index).
+
+---------------------------------------------------------------------------
+You can also look at
+
+ http://www.cse.chalmers.se/~coquand/MTT.hs
+
+where I wrote a type-checker and evaluator
+
+ There are some differences:
+
+ -use of untyped lambda
+ -the definitions are more complex (mutual definitions)
+ -I mixed the type of abstract syntax and values in one data type
+
+but this may provide some help.
