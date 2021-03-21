@@ -100,27 +100,27 @@ instance Print Double where
 instance Print Core.Abs.Id where
   prt _ (Core.Abs.Id (_,i)) = doc $ showString $ i
 
-instance Print Core.Abs.Program where
+instance Print Core.Abs.Context where
   prt i e = case e of
-    Core.Abs.Prog exps -> prPrec i 0 (concatD [prt 0 exps])
+    Core.Abs.Ctx decls -> prPrec i 0 (concatD [prt 0 decls])
 
 instance Print Core.Abs.Exp where
   prt i e = case e of
-    Core.Abs.EU -> prPrec i 3 (concatD [doc (showString "*")])
-    Core.Abs.EVar id -> prPrec i 3 (concatD [prt 0 id])
-    Core.Abs.EApp exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
-    Core.Abs.EArr exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
-    Core.Abs.EPi id exp1 exp2 -> prPrec i 1 (concatD [doc (showString "["), prt 0 id, doc (showString ":"), prt 1 exp1, doc (showString "]"), prt 1 exp2])
-    Core.Abs.EPost id exp -> prPrec i 1 (concatD [prt 0 id, doc (showString ":"), prt 1 exp])
-    Core.Abs.EDec id def -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 def])
+    Core.Abs.U -> prPrec i 3 (concatD [doc (showString "*")])
+    Core.Abs.Var id -> prPrec i 3 (concatD [prt 0 id])
+    Core.Abs.App exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
+    Core.Abs.Arr exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
+    Core.Abs.Pi decl exp -> prPrec i 1 (concatD [doc (showString "["), prt 0 decl, doc (showString "]"), prt 1 exp])
+    Core.Abs.Where exp decl -> prPrec i 0 (concatD [prt 0 exp, doc (showString "["), prt 0 decl, doc (showString "]")])
+
+instance Print Core.Abs.Decl where
+  prt i e = case e of
+    Core.Abs.Dec id exp -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 exp])
+    Core.Abs.Def id exp1 exp2 -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 exp1, doc (showString "="), prt 0 exp2])
   prtList _ [] = concatD []
   prtList _ [x] = concatD [prt 0 x]
   prtList _ (x:xs) = concatD [prt 0 x, doc (showString ";"), prt 0 xs]
 
-instance Print Core.Abs.Def where
-  prt i e = case e of
-    Core.Abs.Def exp1 exp2 -> prPrec i 0 (concatD [prt 1 exp1, doc (showString "="), prt 1 exp2])
-
-instance Print [Core.Abs.Exp] where
+instance Print [Core.Abs.Decl] where
   prt = prtList
 

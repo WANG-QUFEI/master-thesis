@@ -1,23 +1,23 @@
 -- concrete syntax
 position token Id ((letter | '⊥' | '¬') (letter | digit | '_')*);
 
-entrypoints Program;
+entrypoints Context;
 
 layout toplevel;
 
-Prog. Program ::= [Exp];
+Ctx. Context ::= [Decl];
 
-EU.    Exp3 ::= "*";
-EVar.  Exp3 ::= Id;
-EApp.  Exp2 ::= Exp2 Exp3;
-EArr.  Exp1 ::= Exp2 "->" Exp1;
-EPi.   Exp1 ::= "[" Id ":" Exp1 "]" Exp1;
-EPost. Exp1 ::= Id ":" Exp1;
-EDec.  Exp  ::= Id ":" Def;
+U.      Exp3 ::= "*";
+Var.    Exp3 ::= Id;
+App.    Exp2 ::= Exp2 Exp3;
+Arr.    Exp1 ::= Exp2 "->" Exp1;
+Pi.     Exp1 ::= "[" Decl "]" Exp1;
+Where.  Exp  ::= Exp "[" Decl "]";
 
-Def.  Def  ::= Exp1 "=" Exp1;
+Dec.    Decl ::= Id ":" Exp;
+Def.    Decl ::= Id ":" Exp "=" Exp;
 
-separator Exp ";";
+separator Decl ";";
 
 coercions Exp 3;
 
