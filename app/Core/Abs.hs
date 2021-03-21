@@ -9,19 +9,18 @@ import qualified Prelude as C (Eq, Ord, Show, Read)
 newtype Id = Id ((Int, Int), String)
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Program = Prog [Exp]
+data Context = Ctx [Decl]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 data Exp
-    = EU
-    | EVar Id
-    | EApp Exp Exp
-    | EArr Exp Exp
-    | EPi Id Exp Exp
-    | EPost Id Exp
-    | EDec Id Def
+    = U
+    | Var Id
+    | App Exp Exp
+    | Arr Exp Exp
+    | Pi Decl Exp
+    | Where Exp Decl
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Def = Def Exp Exp
+data Decl = Dec Id Exp | Def Id Exp Exp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 

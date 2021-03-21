@@ -13,19 +13,19 @@ failure x = Left $ "Undefined case: " ++ show x
 transId :: Core.Abs.Id -> Result
 transId x = case x of
   Core.Abs.Id string -> failure x
-transProgram :: Core.Abs.Program -> Result
-transProgram x = case x of
-  Core.Abs.Prog exps -> failure x
+transContext :: Core.Abs.Context -> Result
+transContext x = case x of
+  Core.Abs.Ctx decls -> failure x
 transExp :: Core.Abs.Exp -> Result
 transExp x = case x of
-  Core.Abs.EU -> failure x
-  Core.Abs.EVar id -> failure x
-  Core.Abs.EApp exp1 exp2 -> failure x
-  Core.Abs.EArr exp1 exp2 -> failure x
-  Core.Abs.EPi id exp1 exp2 -> failure x
-  Core.Abs.EPost id exp -> failure x
-  Core.Abs.EDec id def -> failure x
-transDef :: Core.Abs.Def -> Result
-transDef x = case x of
-  Core.Abs.Def exp1 exp2 -> failure x
+  Core.Abs.U -> failure x
+  Core.Abs.Var id -> failure x
+  Core.Abs.App exp1 exp2 -> failure x
+  Core.Abs.Arr exp1 exp2 -> failure x
+  Core.Abs.Pi decl exp -> failure x
+  Core.Abs.Where exp decl -> failure x
+transDecl :: Core.Abs.Decl -> Result
+transDecl x = case x of
+  Core.Abs.Dec id exp -> failure x
+  Core.Abs.Def id exp1 exp2 -> failure x
 
