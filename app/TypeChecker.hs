@@ -67,6 +67,7 @@ errorText err = case err of
   DupDecl    id1 id2          -> ["Duplicated declaration of variable at the same scope: already declared '" ++ idStr id1 ++ "' at " ++ show (idPos id1) ++
                                   ";find duplication at " ++ show (idPos id2)]
   VarNotbound (Id (pos, id))  -> ["Unbound variable " ++ id ++ ", at " ++ show pos]
+
 -- errorText err = case err of
 --   DupDecl (Id (pos, id))     -> ["Duplicated declaration of variable " ++ id ++ ", at " ++ show pos]
 --   ValNotEqual s              -> "Unequal terms" : map (\(e, f) -> "  " ++ f ++  show e) (reverse s)
@@ -76,6 +77,7 @@ errorText err = case err of
 --   InferErr s                 -> "Type can not be inferred: " : map (\(e, f) -> "  " ++ f ++ show e) (reverse s)
 --   CanNotEvaluate e           -> ["Expression can not be evaluated", "\10070 " ++ show e]
 --   ExtendWithContext pre tail -> (errorText pre) ++ [tail]
+
 
 dummyId :: Id
 dummyId = Id ((-1, -1), "")
