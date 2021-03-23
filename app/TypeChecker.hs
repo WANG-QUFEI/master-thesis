@@ -12,37 +12,20 @@ import Core.Print  ( printTree )
 ----------------------------------------------------------
 -- Data types
 ----------------------------------------------------------
-
--- | abstract syntax for expressions
-data AbsExp = U
-            | Var String
-            | App AbsExp AbsExp
-            | Pi  AbsDecl AbsExp
-            | Where AbsExp AbsDecl
-            deriving (Eq, Show)
-
--- | abstract syntax for declarations
-data AbsDecl = AbsDec String AbsExp
-             | AbsDef String AbsExp AbsExp
-             deriving (Eq, Show)
-
--- | abstract syntax for a context
-type AbsContext = [AbsDecl]
-
 -- | environment that maps variables to its values
 data Rho = Nil
          | ConsVar Rho (String, Value)
-         | ConsDef Rho AbsDecl
+         | ConsDef Rho Decl
          deriving (Show)
 
 -- | value of the expression
-data Value = VU
-           | VVar String
-           | VApp Value Value
-           | VClos AbsExp Rho
+data Value = U
+           | Var  String
+           | App  Value Value
+           | Clos Exp Rho
            deriving (Show)
                      
-type ErrorStack = [(AbsExp, String)]
+type ErrorStack = [(Exp, String)]
 
 -- data TypeCheckError = DupDecl           Id
 --                     | ValNotEqual       ErrorStack
@@ -54,7 +37,7 @@ type ErrorStack = [(AbsExp, String)]
 --                     | ExtendWithContext TypeCheckError String
 --                     deriving (Show)
 
-data TypeCheckError = IllegalExp         AbsExp
+data TypeCheckError = IllegalExp         Exp
                     | DupDecl            Id Id
                     | VarNotbound        Id
                     deriving (Show)
@@ -78,13 +61,11 @@ errorText err = case err of
 --   CanNotEvaluate e           -> ["Expression can not be evaluated", "\10070 " ++ show e]
 --   ExtendWithContext pre tail -> (errorText pre) ++ [tail]
 
-
 dummyId :: Id
 dummyId = Id ((-1, -1), "")
 
--- | desugaring, change "->" arrow expression into "Pi" expression
+-- | desugaring, change arrow expressions ("->") into "pi" expression ([x:A] M)
 desugarCtx :: Context -> Context
-desugarCtx (Ctx []) = Ctx []
 desugarCtx (Ctx ds) = Ctx (map f ds)
   where f :: Decl -> Decl
         f (Dec id e)     = Dec id (g e)
@@ -121,9 +102,9 @@ idPos :: Id -> (Int, Int)
 idPos (Id (pos, _)) = pos
 
 -- | check proper declaration and reference of variables
-convertCtx :: Context -> ConvertM AbsContext
-convertCtx (Ctx ds) = mapM f ds
-  where f :: Decl -> ConvertM AbsDecl
+checkVar :: Context -> ConvertM ()
+checkVar (Ctx ds) = mapM f ds
+  where f :: Decl -> ConvertM ()
         f (Dec id e) = do
           c <- gets head
           case Map.lookup (idStr id) c of

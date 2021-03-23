@@ -13,44 +13,45 @@ funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
 funT X Y f t g = t (λ x -> g (f x))
 
 
-postulate ⊥ : Set
-postulate foo : ⊥ -> ⊥
--- ⊥ = (X : Set) -> X
 
-¬ : Set -> Set
-¬ X = X -> ⊥
+-- postulate ⊥ : Set
+-- postulate foo : ⊥ -> ⊥
+-- -- ⊥ = (X : Set) -> X
 
-U : Set
-U = (X : Set) -> (T X -> X) -> X
+-- ¬ : Set -> Set
+-- ¬ X = X -> ⊥
 
-tau : T U -> U
-tau t X f = f (λ g -> t (λ z -> g (z X f)))
+-- U : Set
+-- U = (X : Set) -> (T X -> X) -> X
 
-
-sigma : U -> T U
-sigma z = z (T U) (λ t g -> t (λ x -> g (tau x)))
+-- tau : T U -> U
+-- tau t X f = f (λ g -> t (λ z -> g (z X f)))
 
 
-Q : T U
-Q p = (z : U) -> sigma z p -> p z
+-- sigma : U -> T U
+-- sigma z = z (T U) (λ t g -> t (λ x -> g (tau x)))
 
-B : Pow U
-B z = ¬ ((p : Pow U) -> sigma z p -> p (tau (sigma z)))
 
-C : U
-C = tau Q
+-- Q : T U
+-- Q p = (z : U) -> sigma z p -> p z
 
-lem1 : Q B 
-lem1 = λ z k l -> l B k (λ p1 -> l (λ z1 -> p1 (tau (sigma z1))))
+-- B : Pow U
+-- B z = ¬ ((p : Pow U) -> sigma z p -> p (tau (sigma z)))
 
-A : Set
-A = (p : Pow U) -> Q p -> p C
+-- C : U
+-- C = tau Q
 
-lem2 : ¬ A
-lem2 h = h B lem1 (λ p -> h  (λ z -> p (tau (sigma z))))
+-- lem1 : Q B 
+-- lem1 = λ z k l -> l B k (λ p1 -> l (λ z1 -> p1 (tau (sigma z1))))
 
-lem3 : A
-lem3 p h = h C (λ x -> h (tau (sigma x)))
+-- A : Set
+-- A = (p : Pow U) -> Q p -> p C
 
-loop : ⊥
-loop = lem2 lem3
+-- lem2 : ¬ A
+-- lem2 h = h B lem1 (λ p -> h  (λ z -> p (tau (sigma z))))
+
+-- lem3 : A
+-- lem3 p h = h C (λ x -> h (tau (sigma x)))
+
+-- loop : ⊥
+-- loop = lem2 lem3
