@@ -5,21 +5,21 @@ entrypoints Context;
 
 layout toplevel;
 
-Ctx. Context ::= [Decl];
+Ctx. Context ::= [Def];
 
-U.      Exp3 ::= "*";
-Var.    Exp3 ::= Id;
-App.    Exp2 ::= Exp2 Exp3;
-Arr.    Exp1 ::= Exp2 "->" Exp1;
-Pi.     Exp1 ::= "[" Decl "]" Exp1;
-Where.  Exp  ::= Exp "[" Decl "]";
+U.      CExp2 ::= "*";
+Var.    CExp2 ::= Id;
+App.    CExp1 ::= CExp1 CExp2;
+Arr.    CExp ::= CExp1 "->" CExp;
+Pi.     CExp ::= "[" Dec "]" CExp;
+Where.  CExp  ::= "[" Def "]" CExp ;
 
-Dec.    Decl ::= Id ":" Exp;
-Def.    Decl ::= Id ":" Exp "=" Exp;
+Dec.    Dec ::= Id ":" CExp;
+Def.    Def ::= Id ":" CExp "=" CExp;
 
-separator Decl ";";
+separator Def ";";
 
-coercions Exp 3;
+coercions CExp 3;
 
 comment "--";
 

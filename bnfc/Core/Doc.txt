@@ -39,21 +39,21 @@ The symbols -> (production),  **|**  (union)
 and **eps** (empty rule) belong to the BNF notation.
 All other symbols are terminals.
 
-  | //Context// | -> | //[Decl]//
-  | //Exp3// | -> | ``*``
+  | //Context// | -> | //[Def]//
+  | //CExp2// | -> | ``*``
   |  |  **|**  | //Id//
-  |  |  **|**  | ``(`` //Exp// ``)``
-  | //Exp2// | -> | //Exp2// //Exp3//
-  |  |  **|**  | //Exp3//
-  | //Exp1// | -> | //Exp2// ``->`` //Exp1//
-  |  |  **|**  | ``[`` //Decl// ``]`` //Exp1//
-  |  |  **|**  | //Exp2//
-  | //Exp// | -> | //Exp// ``[`` //Decl// ``]``
-  |  |  **|**  | //Exp1//
-  | //Decl// | -> | //Id// ``:`` //Exp//
-  |  |  **|**  | //Id// ``:`` //Exp// ``=`` //Exp//
-  | //[Decl]// | -> | **eps**
-  |  |  **|**  | //Decl//
-  |  |  **|**  | //Decl// ``;`` //[Decl]//
+  |  |  **|**  | //CExp3//
+  | //CExp1// | -> | //CExp1// //CExp2//
+  |  |  **|**  | //CExp2//
+  | //CExp// | -> | //CExp1// ``->`` //CExp//
+  |  |  **|**  | ``[`` //Dec// ``]`` //CExp//
+  |  |  **|**  | ``[`` //Def// ``]`` //CExp//
+  |  |  **|**  | //CExp1//
+  | //Dec// | -> | //Id// ``:`` //CExp//
+  | //Def// | -> | //Id// ``:`` //CExp// ``=`` //CExp//
+  | //[Def]// | -> | **eps**
+  |  |  **|**  | //Def//
+  |  |  **|**  | //Def// ``;`` //[Def]//
+  | //CExp3// | -> | ``(`` //CExp// ``)``
 
 

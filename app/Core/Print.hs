@@ -102,25 +102,28 @@ instance Print Core.Abs.Id where
 
 instance Print Core.Abs.Context where
   prt i e = case e of
-    Core.Abs.Ctx decls -> prPrec i 0 (concatD [prt 0 decls])
+    Core.Abs.Ctx defs -> prPrec i 0 (concatD [prt 0 defs])
 
-instance Print Core.Abs.Exp where
+instance Print Core.Abs.CExp where
   prt i e = case e of
-    Core.Abs.U -> prPrec i 3 (concatD [doc (showString "*")])
-    Core.Abs.Var id -> prPrec i 3 (concatD [prt 0 id])
-    Core.Abs.App exp1 exp2 -> prPrec i 2 (concatD [prt 2 exp1, prt 3 exp2])
-    Core.Abs.Arr exp1 exp2 -> prPrec i 1 (concatD [prt 2 exp1, doc (showString "->"), prt 1 exp2])
-    Core.Abs.Pi decl exp -> prPrec i 1 (concatD [doc (showString "["), prt 0 decl, doc (showString "]"), prt 1 exp])
-    Core.Abs.Where exp decl -> prPrec i 0 (concatD [prt 0 exp, doc (showString "["), prt 0 decl, doc (showString "]")])
+    Core.Abs.U -> prPrec i 2 (concatD [doc (showString "*")])
+    Core.Abs.Var id -> prPrec i 2 (concatD [prt 0 id])
+    Core.Abs.App cexp1 cexp2 -> prPrec i 1 (concatD [prt 1 cexp1, prt 2 cexp2])
+    Core.Abs.Arr cexp1 cexp2 -> prPrec i 0 (concatD [prt 1 cexp1, doc (showString "->"), prt 0 cexp2])
+    Core.Abs.Pi dec cexp -> prPrec i 0 (concatD [doc (showString "["), prt 0 dec, doc (showString "]"), prt 0 cexp])
+    Core.Abs.Where def cexp -> prPrec i 0 (concatD [doc (showString "["), prt 0 def, doc (showString "]"), prt 0 cexp])
 
-instance Print Core.Abs.Decl where
+instance Print Core.Abs.Dec where
   prt i e = case e of
-    Core.Abs.Dec id exp -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 exp])
-    Core.Abs.Def id exp1 exp2 -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 exp1, doc (showString "="), prt 0 exp2])
+    Core.Abs.Dec id cexp -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 cexp])
+
+instance Print Core.Abs.Def where
+  prt i e = case e of
+    Core.Abs.Def id cexp1 cexp2 -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2])
   prtList _ [] = concatD []
   prtList _ [x] = concatD [prt 0 x]
   prtList _ (x:xs) = concatD [prt 0 x, doc (showString ";"), prt 0 xs]
 
-instance Print [Core.Abs.Decl] where
+instance Print [Core.Abs.Def] where
   prt = prtList
 

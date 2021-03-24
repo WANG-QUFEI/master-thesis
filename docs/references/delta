@@ -8,14 +8,17 @@ Give name to conversion    beta-eta-delta
 
  Presentation with -names-
 
-  A,M ::=   x |  M M  | [x:A]M   |  M D  |   U    -- note that each variable is decorated with its type
-  D   ::=   x : A = M
+  A,M ::=   x |  M M  | [x:A]M   |  Def M   |   U    -- note that each variable is decorated with its type
+  Def   ::=   x : A = M
 
  A declaration is [x:A]  or  [x:A=M]
 
  We think of N[x:A=M] as    let x:A=M in N    or   N where x:A=M
 
  Thus   N[x1:A1=M1][x2:A2=M2]    means   let x2:A2 = M2 in (let x1:A1 = M1 in N)
+
+
+
 
  A file  will be  a list of declarations   D1 ... Dn  
 
@@ -26,7 +29,7 @@ Give name to conversion    beta-eta-delta
  For doing conversion and type-checking, we enlarge   the syntax of terms   with
  closures, variables (and constants when we lock definitions)
 
-  M,V ::= ... |   M r   
+  M,V ::= ... |   M r   pp
 
  (it is also possible but less elegant in Haskell to have a separate
   type of "values";  I will write V, W, ... for terms that are values)

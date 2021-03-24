@@ -8,22 +8,22 @@ Grammar
 -----------------------------------------------------------------------------
 	%start_pContext -> Context                         (0)
 	Id -> L_Id                                         (1)
-	Context -> ListDecl                                (2)
-	Exp3 -> '*'                                        (3)
-	Exp3 -> Id                                         (4)
-	Exp3 -> '(' Exp ')'                                (5)
-	Exp2 -> Exp2 Exp3                                  (6)
-	Exp2 -> Exp3                                       (7)
-	Exp1 -> Exp2 '->' Exp1                             (8)
-	Exp1 -> '[' Decl ']' Exp1                          (9)
-	Exp1 -> Exp2                                       (10)
-	Exp -> Exp '[' Decl ']'                            (11)
-	Exp -> Exp1                                        (12)
-	Decl -> Id ':' Exp                                 (13)
-	Decl -> Id ':' Exp '=' Exp                         (14)
-	ListDecl ->                                        (15)
-	ListDecl -> Decl                                   (16)
-	ListDecl -> Decl ';' ListDecl                      (17)
+	Context -> ListDef                                 (2)
+	CExp2 -> '*'                                       (3)
+	CExp2 -> Id                                        (4)
+	CExp2 -> CExp3                                     (5)
+	CExp1 -> CExp1 CExp2                               (6)
+	CExp1 -> CExp2                                     (7)
+	CExp -> CExp1 '->' CExp                            (8)
+	CExp -> '[' Dec ']' CExp                           (9)
+	CExp -> '[' Def ']' CExp                           (10)
+	CExp -> CExp1                                      (11)
+	Dec -> Id ':' CExp                                 (12)
+	Def -> Id ':' CExp '=' CExp                        (13)
+	ListDef ->                                         (14)
+	ListDef -> Def                                     (15)
+	ListDef -> Def ';' ListDef                         (16)
+	CExp3 -> '(' CExp ')'                              (17)
 
 -----------------------------------------------------------------------------
 Terminals
@@ -45,12 +45,13 @@ Non-terminals
 	%start_pContext rule  0
 	Id              rule  1
 	Context         rule  2
-	Exp3            rules 3, 4, 5
-	Exp2            rules 6, 7
-	Exp1            rules 8, 9, 10
-	Exp             rules 11, 12
-	Decl            rules 13, 14
-	ListDecl        rules 15, 16, 17
+	CExp2           rules 3, 4, 5
+	CExp1           rules 6, 7
+	CExp            rules 8, 9, 10, 11
+	Dec             rule  12
+	Def             rule  13
+	ListDef         rules 14, 15, 16
+	CExp3           rule  17
 
 -----------------------------------------------------------------------------
 States
@@ -60,12 +61,12 @@ State 0
 	%start_pContext -> . Context                        (rule 0)
 
 	L_Id           shift, and enter state 2
-	%eof           reduce using rule 15
+	%eof           reduce using rule 14
 
 	Id             goto state 3
 	Context        goto state 4
-	Decl           goto state 5
-	ListDecl       goto state 6
+	Def            goto state 5
+	ListDef        goto state 6
 
 State 1
 
@@ -85,7 +86,6 @@ State 2
 	':'            reduce using rule 1
 	';'            reduce using rule 1
 	'='            reduce using rule 1
-	'['            reduce using rule 1
 	']'            reduce using rule 1
 	L_Id           reduce using rule 1
 	%eof           reduce using rule 1
@@ -93,8 +93,7 @@ State 2
 
 State 3
 
-	Decl -> Id . ':' Exp                                (rule 13)
-	Decl -> Id . ':' Exp '=' Exp                        (rule 14)
+	Def -> Id . ':' CExp '=' CExp                       (rule 13)
 
 	':'            shift, and enter state 8
 
@@ -108,35 +107,34 @@ State 4
 
 State 5
 
-	ListDecl -> Decl .                                  (rule 16)
-	ListDecl -> Decl . ';' ListDecl                     (rule 17)
+	ListDef -> Def .                                    (rule 15)
+	ListDef -> Def . ';' ListDef                        (rule 16)
 
 	';'            shift, and enter state 7
-	%eof           reduce using rule 16
+	%eof           reduce using rule 15
 
 
 State 6
 
-	Context -> ListDecl .                               (rule 2)
+	Context -> ListDef .                                (rule 2)
 
 	%eof           reduce using rule 2
 
 
 State 7
 
-	ListDecl -> Decl ';' . ListDecl                     (rule 17)
+	ListDef -> Def ';' . ListDef                        (rule 16)
 
 	L_Id           shift, and enter state 2
-	%eof           reduce using rule 15
+	%eof           reduce using rule 14
 
 	Id             goto state 3
-	Decl           goto state 5
-	ListDecl       goto state 17
+	Def            goto state 5
+	ListDef        goto state 17
 
 State 8
 
-	Decl -> Id ':' . Exp                                (rule 13)
-	Decl -> Id ':' . Exp '=' Exp                        (rule 14)
+	Def -> Id ':' . CExp '=' CExp                       (rule 13)
 
 	'('            shift, and enter state 14
 	'*'            shift, and enter state 15
@@ -144,14 +142,14 @@ State 8
 	L_Id           shift, and enter state 2
 
 	Id             goto state 9
-	Exp3           goto state 10
-	Exp2           goto state 11
-	Exp1           goto state 12
-	Exp            goto state 13
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 12
+	CExp3          goto state 13
 
 State 9
 
-	Exp3 -> Id .                                        (rule 4)
+	CExp2 -> Id .                                       (rule 4)
 
 	'('            reduce using rule 4
 	')'            reduce using rule 4
@@ -159,7 +157,6 @@ State 9
 	'->'           reduce using rule 4
 	';'            reduce using rule 4
 	'='            reduce using rule 4
-	'['            reduce using rule 4
 	']'            reduce using rule 4
 	L_Id           reduce using rule 4
 	%eof           reduce using rule 4
@@ -167,7 +164,7 @@ State 9
 
 State 10
 
-	Exp2 -> Exp3 .                                      (rule 7)
+	CExp1 -> CExp2 .                                    (rule 7)
 
 	'('            reduce using rule 7
 	')'            reduce using rule 7
@@ -175,7 +172,6 @@ State 10
 	'->'           reduce using rule 7
 	';'            reduce using rule 7
 	'='            reduce using rule 7
-	'['            reduce using rule 7
 	']'            reduce using rule 7
 	L_Id           reduce using rule 7
 	%eof           reduce using rule 7
@@ -183,199 +179,34 @@ State 10
 
 State 11
 
-	Exp2 -> Exp2 . Exp3                                 (rule 6)
-	Exp1 -> Exp2 . '->' Exp1                            (rule 8)
-	Exp1 -> Exp2 .                                      (rule 10)
+	CExp1 -> CExp1 . CExp2                              (rule 6)
+	CExp -> CExp1 . '->' CExp                           (rule 8)
+	CExp -> CExp1 .                                     (rule 11)
 
 	'('            shift, and enter state 14
-	')'            reduce using rule 10
+	')'            reduce using rule 11
 	'*'            shift, and enter state 15
-	'->'           shift, and enter state 23
-	';'            reduce using rule 10
-	'='            reduce using rule 10
-	'['            reduce using rule 10
-	']'            reduce using rule 10
+	'->'           shift, and enter state 24
+	';'            reduce using rule 11
+	'='            reduce using rule 11
+	']'            reduce using rule 11
 	L_Id           shift, and enter state 2
-	%eof           reduce using rule 10
+	%eof           reduce using rule 11
 
 	Id             goto state 9
-	Exp3           goto state 22
+	CExp2          goto state 23
+	CExp3          goto state 13
 
 State 12
 
-	Exp -> Exp1 .                                       (rule 12)
+	Def -> Id ':' CExp . '=' CExp                       (rule 13)
 
-	')'            reduce using rule 12
-	';'            reduce using rule 12
-	'='            reduce using rule 12
-	'['            reduce using rule 12
-	']'            reduce using rule 12
-	%eof           reduce using rule 12
+	'='            shift, and enter state 22
 
 
 State 13
 
-	Exp -> Exp . '[' Decl ']'                           (rule 11)
-	Decl -> Id ':' Exp .                                (rule 13)
-	Decl -> Id ':' Exp . '=' Exp                        (rule 14)
-
-	';'            reduce using rule 13
-	'='            shift, and enter state 20
-	'['            shift, and enter state 21
-	']'            reduce using rule 13
-	%eof           reduce using rule 13
-
-
-State 14
-
-	Exp3 -> '(' . Exp ')'                               (rule 5)
-
-	'('            shift, and enter state 14
-	'*'            shift, and enter state 15
-	'['            shift, and enter state 16
-	L_Id           shift, and enter state 2
-
-	Id             goto state 9
-	Exp3           goto state 10
-	Exp2           goto state 11
-	Exp1           goto state 12
-	Exp            goto state 19
-
-State 15
-
-	Exp3 -> '*' .                                       (rule 3)
-
-	'('            reduce using rule 3
-	')'            reduce using rule 3
-	'*'            reduce using rule 3
-	'->'           reduce using rule 3
-	';'            reduce using rule 3
-	'='            reduce using rule 3
-	'['            reduce using rule 3
-	']'            reduce using rule 3
-	L_Id           reduce using rule 3
-	%eof           reduce using rule 3
-
-
-State 16
-
-	Exp1 -> '[' . Decl ']' Exp1                         (rule 9)
-
-	L_Id           shift, and enter state 2
-
-	Id             goto state 3
-	Decl           goto state 18
-
-State 17
-
-	ListDecl -> Decl ';' ListDecl .                     (rule 17)
-
-	%eof           reduce using rule 17
-
-
-State 18
-
-	Exp1 -> '[' Decl . ']' Exp1                         (rule 9)
-
-	']'            shift, and enter state 28
-
-
-State 19
-
-	Exp3 -> '(' Exp . ')'                               (rule 5)
-	Exp -> Exp . '[' Decl ']'                           (rule 11)
-
-	')'            shift, and enter state 27
-	'['            shift, and enter state 21
-
-
-State 20
-
-	Decl -> Id ':' Exp '=' . Exp                        (rule 14)
-
-	'('            shift, and enter state 14
-	'*'            shift, and enter state 15
-	'['            shift, and enter state 16
-	L_Id           shift, and enter state 2
-
-	Id             goto state 9
-	Exp3           goto state 10
-	Exp2           goto state 11
-	Exp1           goto state 12
-	Exp            goto state 26
-
-State 21
-
-	Exp -> Exp '[' . Decl ']'                           (rule 11)
-
-	L_Id           shift, and enter state 2
-
-	Id             goto state 3
-	Decl           goto state 25
-
-State 22
-
-	Exp2 -> Exp2 Exp3 .                                 (rule 6)
-
-	'('            reduce using rule 6
-	')'            reduce using rule 6
-	'*'            reduce using rule 6
-	'->'           reduce using rule 6
-	';'            reduce using rule 6
-	'='            reduce using rule 6
-	'['            reduce using rule 6
-	']'            reduce using rule 6
-	L_Id           reduce using rule 6
-	%eof           reduce using rule 6
-
-
-State 23
-
-	Exp1 -> Exp2 '->' . Exp1                            (rule 8)
-
-	'('            shift, and enter state 14
-	'*'            shift, and enter state 15
-	'['            shift, and enter state 16
-	L_Id           shift, and enter state 2
-
-	Id             goto state 9
-	Exp3           goto state 10
-	Exp2           goto state 11
-	Exp1           goto state 24
-
-State 24
-
-	Exp1 -> Exp2 '->' Exp1 .                            (rule 8)
-
-	')'            reduce using rule 8
-	';'            reduce using rule 8
-	'='            reduce using rule 8
-	'['            reduce using rule 8
-	']'            reduce using rule 8
-	%eof           reduce using rule 8
-
-
-State 25
-
-	Exp -> Exp '[' Decl . ']'                           (rule 11)
-
-	']'            shift, and enter state 30
-
-
-State 26
-
-	Exp -> Exp . '[' Decl ']'                           (rule 11)
-	Decl -> Id ':' Exp '=' Exp .                        (rule 14)
-
-	';'            reduce using rule 14
-	'['            shift, and enter state 21
-	']'            reduce using rule 14
-	%eof           reduce using rule 14
-
-
-State 27
-
-	Exp3 -> '(' Exp ')' .                               (rule 5)
+	CExp2 -> CExp3 .                                    (rule 5)
 
 	'('            reduce using rule 5
 	')'            reduce using rule 5
@@ -383,15 +214,14 @@ State 27
 	'->'           reduce using rule 5
 	';'            reduce using rule 5
 	'='            reduce using rule 5
-	'['            reduce using rule 5
 	']'            reduce using rule 5
 	L_Id           reduce using rule 5
 	%eof           reduce using rule 5
 
 
-State 28
+State 14
 
-	Exp1 -> '[' Decl ']' . Exp1                         (rule 9)
+	CExp3 -> '(' . CExp ')'                             (rule 17)
 
 	'('            shift, and enter state 14
 	'*'            shift, and enter state 15
@@ -399,32 +229,228 @@ State 28
 	L_Id           shift, and enter state 2
 
 	Id             goto state 9
-	Exp3           goto state 10
-	Exp2           goto state 11
-	Exp1           goto state 29
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 21
+	CExp3          goto state 13
+
+State 15
+
+	CExp2 -> '*' .                                      (rule 3)
+
+	'('            reduce using rule 3
+	')'            reduce using rule 3
+	'*'            reduce using rule 3
+	'->'           reduce using rule 3
+	';'            reduce using rule 3
+	'='            reduce using rule 3
+	']'            reduce using rule 3
+	L_Id           reduce using rule 3
+	%eof           reduce using rule 3
+
+
+State 16
+
+	CExp -> '[' . Dec ']' CExp                          (rule 9)
+	CExp -> '[' . Def ']' CExp                          (rule 10)
+
+	L_Id           shift, and enter state 2
+
+	Id             goto state 18
+	Dec            goto state 19
+	Def            goto state 20
+
+State 17
+
+	ListDef -> Def ';' ListDef .                        (rule 16)
+
+	%eof           reduce using rule 16
+
+
+State 18
+
+	Dec -> Id . ':' CExp                                (rule 12)
+	Def -> Id . ':' CExp '=' CExp                       (rule 13)
+
+	':'            shift, and enter state 30
+
+
+State 19
+
+	CExp -> '[' Dec . ']' CExp                          (rule 9)
+
+	']'            shift, and enter state 29
+
+
+State 20
+
+	CExp -> '[' Def . ']' CExp                          (rule 10)
+
+	']'            shift, and enter state 28
+
+
+State 21
+
+	CExp3 -> '(' CExp . ')'                             (rule 17)
+
+	')'            shift, and enter state 27
+
+
+State 22
+
+	Def -> Id ':' CExp '=' . CExp                       (rule 13)
+
+	'('            shift, and enter state 14
+	'*'            shift, and enter state 15
+	'['            shift, and enter state 16
+	L_Id           shift, and enter state 2
+
+	Id             goto state 9
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 26
+	CExp3          goto state 13
+
+State 23
+
+	CExp1 -> CExp1 CExp2 .                              (rule 6)
+
+	'('            reduce using rule 6
+	')'            reduce using rule 6
+	'*'            reduce using rule 6
+	'->'           reduce using rule 6
+	';'            reduce using rule 6
+	'='            reduce using rule 6
+	']'            reduce using rule 6
+	L_Id           reduce using rule 6
+	%eof           reduce using rule 6
+
+
+State 24
+
+	CExp -> CExp1 '->' . CExp                           (rule 8)
+
+	'('            shift, and enter state 14
+	'*'            shift, and enter state 15
+	'['            shift, and enter state 16
+	L_Id           shift, and enter state 2
+
+	Id             goto state 9
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 25
+	CExp3          goto state 13
+
+State 25
+
+	CExp -> CExp1 '->' CExp .                           (rule 8)
+
+	')'            reduce using rule 8
+	';'            reduce using rule 8
+	'='            reduce using rule 8
+	']'            reduce using rule 8
+	%eof           reduce using rule 8
+
+
+State 26
+
+	Def -> Id ':' CExp '=' CExp .                       (rule 13)
+
+	';'            reduce using rule 13
+	']'            reduce using rule 13
+	%eof           reduce using rule 13
+
+
+State 27
+
+	CExp3 -> '(' CExp ')' .                             (rule 17)
+
+	'('            reduce using rule 17
+	')'            reduce using rule 17
+	'*'            reduce using rule 17
+	'->'           reduce using rule 17
+	';'            reduce using rule 17
+	'='            reduce using rule 17
+	']'            reduce using rule 17
+	L_Id           reduce using rule 17
+	%eof           reduce using rule 17
+
+
+State 28
+
+	CExp -> '[' Def ']' . CExp                          (rule 10)
+
+	'('            shift, and enter state 14
+	'*'            shift, and enter state 15
+	'['            shift, and enter state 16
+	L_Id           shift, and enter state 2
+
+	Id             goto state 9
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 33
+	CExp3          goto state 13
 
 State 29
 
-	Exp1 -> '[' Decl ']' Exp1 .                         (rule 9)
+	CExp -> '[' Dec ']' . CExp                          (rule 9)
+
+	'('            shift, and enter state 14
+	'*'            shift, and enter state 15
+	'['            shift, and enter state 16
+	L_Id           shift, and enter state 2
+
+	Id             goto state 9
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 32
+	CExp3          goto state 13
+
+State 30
+
+	Dec -> Id ':' . CExp                                (rule 12)
+	Def -> Id ':' . CExp '=' CExp                       (rule 13)
+
+	'('            shift, and enter state 14
+	'*'            shift, and enter state 15
+	'['            shift, and enter state 16
+	L_Id           shift, and enter state 2
+
+	Id             goto state 9
+	CExp2          goto state 10
+	CExp1          goto state 11
+	CExp           goto state 31
+	CExp3          goto state 13
+
+State 31
+
+	Dec -> Id ':' CExp .                                (rule 12)
+	Def -> Id ':' CExp . '=' CExp                       (rule 13)
+
+	'='            shift, and enter state 22
+	']'            reduce using rule 12
+
+
+State 32
+
+	CExp -> '[' Dec ']' CExp .                          (rule 9)
 
 	')'            reduce using rule 9
 	';'            reduce using rule 9
 	'='            reduce using rule 9
-	'['            reduce using rule 9
 	']'            reduce using rule 9
 	%eof           reduce using rule 9
 
 
-State 30
+State 33
 
-	Exp -> Exp '[' Decl ']' .                           (rule 11)
+	CExp -> '[' Def ']' CExp .                          (rule 10)
 
-	')'            reduce using rule 11
-	';'            reduce using rule 11
-	'='            reduce using rule 11
-	'['            reduce using rule 11
-	']'            reduce using rule 11
-	%eof           reduce using rule 11
+	')'            reduce using rule 10
+	';'            reduce using rule 10
+	'='            reduce using rule 10
+	']'            reduce using rule 10
+	%eof           reduce using rule 10
 
 
 -----------------------------------------------------------------------------
@@ -432,5 +458,5 @@ Grammar Totals
 -----------------------------------------------------------------------------
 Number of rules: 18
 Number of terminals: 10
-Number of non-terminals: 9
-Number of states: 31
+Number of non-terminals: 10
+Number of states: 34
