@@ -9,21 +9,18 @@ import qualified Prelude as C (Eq, Ord, Show, Read)
 newtype Id = Id ((Int, Int), String)
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Context = Ctx [Def]
+data Context = Ctx [CDecl]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 data CExp
-    = U
-    | Var Id
-    | App CExp CExp
-    | Arr CExp CExp
-    | Pi Dec CExp
-    | Where Def CExp
+    = CU
+    | CVar Id
+    | CApp CExp CExp
+    | CArr CExp CExp
+    | CPi Id CExp CExp
+    | CWhere Id CExp CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Dec = Dec Id CExp
-  deriving (C.Eq, C.Ord, C.Show, C.Read)
-
-data Def = Def Id CExp CExp
+data CDecl = CDec Id CExp | CDef Id CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 

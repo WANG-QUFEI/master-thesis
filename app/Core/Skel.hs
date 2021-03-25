@@ -15,19 +15,17 @@ transId x = case x of
   Core.Abs.Id string -> failure x
 transContext :: Core.Abs.Context -> Result
 transContext x = case x of
-  Core.Abs.Ctx defs -> failure x
+  Core.Abs.Ctx cdecls -> failure x
 transCExp :: Core.Abs.CExp -> Result
 transCExp x = case x of
-  Core.Abs.U -> failure x
-  Core.Abs.Var id -> failure x
-  Core.Abs.App cexp1 cexp2 -> failure x
-  Core.Abs.Arr cexp1 cexp2 -> failure x
-  Core.Abs.Pi dec cexp -> failure x
-  Core.Abs.Where def cexp -> failure x
-transDec :: Core.Abs.Dec -> Result
-transDec x = case x of
-  Core.Abs.Dec id cexp -> failure x
-transDef :: Core.Abs.Def -> Result
-transDef x = case x of
-  Core.Abs.Def id cexp1 cexp2 -> failure x
+  Core.Abs.CU -> failure x
+  Core.Abs.CVar id -> failure x
+  Core.Abs.CApp cexp1 cexp2 -> failure x
+  Core.Abs.CArr cexp1 cexp2 -> failure x
+  Core.Abs.CPi id cexp1 cexp2 -> failure x
+  Core.Abs.CWhere id cexp1 cexp2 cexp3 -> failure x
+transCDecl :: Core.Abs.CDecl -> Result
+transCDecl x = case x of
+  Core.Abs.CDec id cexp -> failure x
+  Core.Abs.CDef id cexp1 cexp2 -> failure x
 

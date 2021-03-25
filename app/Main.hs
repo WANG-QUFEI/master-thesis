@@ -6,7 +6,7 @@ import Control.Monad      ( when )
 import Debug.Trace
 
 import Core.Lex    ( Token )
-import Core.Par    ( pProgram, myLexer )
+import Core.Par    ( pContext, myLexer )
 import Core.Print  ( Print, printTree )
 import Core.Abs
 import Core.Layout ( resolveLayout )
@@ -36,8 +36,8 @@ run v p s = case p ts of
     Right src -> do
       printSuccess "PARSING SUCCESS"
       printSource v src
-      let Right p = pProgram ts
-      case runTypeCheck p of
+      let Right p = pContext ts
+      case runTypeCheckCtx p of
         Left err -> printError err
         Right _  -> printSuccess "TYPE CHECK SUCCESS" >> exitSuccess
   where
@@ -84,6 +84,6 @@ main = do
   case args of
     [] -> putStrLn "invalid argument!" >> usage
     "--help":_   -> usage
-    "-p":file:_  -> runFile 2 pProgram file
-    file:_       -> runFile 0 pProgram file
+    "-p":file:_  -> runFile 2 pContext file
+    file:_       -> runFile 0 pContext file
   
