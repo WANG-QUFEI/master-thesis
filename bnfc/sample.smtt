@@ -1,3 +1,11 @@
+test_1 : * -> *
+
+test_2 : [x : *] test_1 x
+
+test : [x : test_1] * = [y : test_1] *
+
+{-
+
 Pow : * -> * =
   [X : *] X -> *
 
@@ -43,13 +51,10 @@ lem3 : A
 loop : ⊥
    = lem2 lem3
 
-{-
-loop : ⊥
-   = lem2 lem3
 
 eval {lem2} loop , it
 
-envCont' :: [String] -> Cont -> Env
+`envCont' :: [String] -> Cont -> Env
 
 write a read back function : [String] -> Val -> Exp
 -}
