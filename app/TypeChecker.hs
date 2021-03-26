@@ -51,15 +51,15 @@ data Cont = CNil
 
 type ErrorStack = [(Exp, String)]
 
+type ErrorText = String
+
 data TypeCheckError = InvalidApp     Exp
                     | DupDecl        Id Id
                     | VarNotbound    Id
                     | TypeInferErr   Exp
                     | NotConvertible Val Val
-                    | ExtendedErr    TypeCheckError String
+                    | ExtendedErr    TypeCheckError [ErrorText]
                     deriving (Show)
-
-type ErrorText = String
   
 -- | a composite monad which contains a state monad and an exception monad
 newtype G e s a = G {mkg :: ExceptT e (State s) a}
@@ -92,10 +92,7 @@ errorText err = case err of
   VarNotbound (Id (pos, id))  -> ["Unbound variable " ++ id ++ ", at " ++ show pos]
   TypeInferErr e              -> ["Can not infer type for: " ++ show e]
   NotConvertible v v'         -> ["Values not convertible", "v1: " ++ show v, "v2: " ++ show v']
-  ExtendedErr pre tail        -> (errorText pre) ++ [tail]
-
-dummyVar :: String
-dummyVar = ""
+  ExtendedErr err ss          -> (errorText err) ++ ss
 
 -- | turn a concrete context into an abstract context, check proper declaration and reference of variables at the same time
 absCtx :: Context -> ConvertM AbsCtx
@@ -134,7 +131,7 @@ absCtx (Ctx xs) = mapM absDecl xs
       CArr e1 e2 -> do
         e1' <- absExp e1
         e2' <- absExp e2
-        return $ Abs dummyVar e1' e2'
+        return $ Abs "" e1' e2'
       CPi id e1 e2 -> do
         m <- get
         case Map.lookup (idStr id) m of
@@ -160,13 +157,12 @@ absCtx (Ctx xs) = mapM absDecl xs
 
 -- | extend an environment with a variable and its value
 consEVar :: Env -> String -> Val -> Env
-consEVar r x v = case x of
-  dummyVar -> r
-  _        -> EConsVar r x v
-  
+consEVar r "" v = r
+consEVar r x v = EConsVar r x v
+
 -- | extend a type-checking context with a variable and its type
 consCVar :: Cont -> String -> Exp -> Cont
-consCVar c dummyVar _ = c
+consCVar c "" _ = c
 consCVar c x a = CConsVar c x a
 
 -- | semantics about how an expression should be evaluated
@@ -250,9 +246,7 @@ checkT c (Var x) v = do
   let tc = typeCont c
   case getType tc x of
     Just v' -> checkConvert tc v' v
-    _       -> do
-      trace (show tc) (return ()) -- ^ TODO: remove debug tracing
-      error $ "can not get type of variable: " ++ x
+    _       -> error $ "should not happen, can not get type of variable: " ++ x
 checkT c (App e1 e2) v = do
   v1 <- checkInfer c e1
   case v1 of
@@ -276,6 +270,10 @@ checkT c (Where x a e1 e) v = do
   checkT c' e v
 
 checkConvert xs U U = return ()
+checkConvert _ (Var x) (Var x') =
+  if x == x'
+  then return ()
+  else throwError $ NotConvertible (Var x) (Var x')
 checkConvert xs (App e1 e2) (App e1' e2') = do
   checkConvert xs e1 e1'
   checkConvert xs e2 e2'
@@ -298,21 +296,29 @@ checkDec c x a = do
   return $ consCVar c x a
 
 runTypeCheckCtx :: Context -> Either TypeCheckError Cont
-runTypeCheckCtx ctx = 
+runTypeCheckCtx ctx@(Ctx cs) = 
   case runG (absCtx ctx) Map.empty of
     Left err -> Left err
-    Right xs -> runG (typeCheckCtx xs) CNil
+    Right ds -> runG (typeCheckCtx (zip ds [0, 1 ..])) CNil
   where
-    typeCheckCtx :: [Decl] -> TypeCheckM Cont
+    typeCheckCtx :: [(Decl, Int)] -> TypeCheckM Cont
     typeCheckCtx ds = do
       mapM_ checkDecl ds
       get
-    checkDecl :: Decl -> TypeCheckM ()
-    checkDecl (Dec x a) = do
-      c  <- get
-      c' <- checkDec c x a
-      put c'
-    checkDecl (Def x a e) = do
-      c  <- get
-      c' <- checkDef c x a e
-      put c'
+    checkDecl :: (Decl, Int) -> TypeCheckM ()
+    checkDecl (d@(Dec x a), n) = do { 
+      c  <- get ;
+      c' <- checkDec c x a ;
+      put c' } `catchError` (errhandler d n)
+    checkDecl (d@(Def x a e), n) = do {
+      c  <- get ;
+      c' <- checkDef c x a e ;
+      put c' } `catchError` (errhandler d n)
+    errhandler :: Decl -> Int -> TypeCheckError -> TypeCheckM ()
+    errhandler d n err = do
+      let ss = ["when checking: " ++ (printTree (cs !! n)), "         decl: " ++ show d]
+      throwError $ ExtendedErr err ss
+
+
+
+

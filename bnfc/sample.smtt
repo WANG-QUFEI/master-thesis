@@ -44,6 +44,9 @@ loop : ⊥
    = lem2 lem3
 
 {-
+loop : ⊥
+   = lem2 lem3
+
 eval {lem2} loop , it
 
 envCont' :: [String] -> Cont -> Env
