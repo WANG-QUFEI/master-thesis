@@ -193,3 +193,43 @@ where I wrote a type-checker and evaluator
  -I mixed the type of abstract syntax and values in one data type
 
 but this may provide some help.
+
+-------------------------------------------------------------------------------------
+Wed 24/03/2021 12:11
+
+ Two further functions that would be nice to have are
+
+ defCont :: String -> Cont -> Exp
+ defCont x (ConsVar c y a) = if x == y then Var x else defCont x c
+ defCont x (ConsDef c y a e) = if x == y then e else defCont x c
+ defCont x Nil = Var x
+
+and 
+
+ headRed :: Cont -> Exp -> Val
+ headRed c  (Var x) = eval (defCont x) Nil
+ headRed c  (App e1 e2) = appVal (headRed c e1) (eval e2 Nil)
+ headRed c  e = eval e Nil
+
+and then you can add another interactive command   hRed  e
+that type-check e and if e is typed correct does   headRed c e
+and then applies the
+
+ readBack :: [String] -> Val -> Exp
+
+function.
+
+-------------------------------------------------------------------------------------
+Fri 26/03/2021 11:52
+
+ For the function readBack:    the rough idea is that elements of type Val  are like
+virtual expressions that are used during type-checking but themselves cannot be
+type-checked.
+ For the interactive loop, one needs first to transform a Val to a Exp which can be
+evaluated again.   
+ So what this function is doing is removing all closures for a Val so that we get
+an Exp. In order to do that we need to respect non duplication, hence the list
+of names as parameters.
+
+
+

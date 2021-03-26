@@ -1,8 +1,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module TypeChecker (
-    runTypeCheckCtx
-  , TypeCheckError
+    TypeCheckError
+  , Exp(..)
+  , Val
+  , Env(..)
+  , Cont(..)
+  , G
+  , runTypeCheckCtx
   , errorText
+  , runG
+  , eval
+  , appVal
   ) where
 
 import Data.Maybe

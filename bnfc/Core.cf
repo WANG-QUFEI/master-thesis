@@ -1,5 +1,5 @@
 -- concrete syntax
-position token Id ((letter | '⊥' | '¬') (letter | digit | '_')*);
+position token Id ((letter | '⊥' | '¬') (letter | digit | '_' | '\'')*);
 
 entrypoints Context;
 

@@ -32,7 +32,7 @@ $u = [. \n]          -- universal: any character
 $white+ ;
 @rsyms
     { tok (\p s -> PT p (eitherResIdent TV s)) }
-([\¬ \⊥]| $l)(\_ | ($d | $l)) *
+([\¬ \⊥]| $l)([\' \_]| ($d | $l)) *
     { tok (\p s -> PT p (eitherResIdent T_Id s)) }
 
 $l $i*
