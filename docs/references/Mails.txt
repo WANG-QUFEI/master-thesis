@@ -230,6 +230,3 @@ evaluated again.
  So what this function is doing is removing all closures for a Val so that we get
 an Exp. In order to do that we need to respect non duplication, hence the list
 of names as parameters.
-
-
-

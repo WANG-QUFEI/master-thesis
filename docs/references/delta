@@ -180,10 +180,9 @@ Give name to conversion    beta-eta-delta
     M with unlocked constants in xs
 
 
-    This is as follows let ns = names declared in G
+    This is as follows let ns = names declared in G (or names specified as unlocked ?)
 
      R(ns,U) = U
      R(ns,x) = x
      R(ns,V1 V2) = R(ns,V1) R(ns,V2)
      R(ns,([x:A]B)r) =  [z:R(ns, eval A r)] R(z:ns,eval B (r, x=z))      with z = fresh ns
-     

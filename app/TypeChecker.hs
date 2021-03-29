@@ -11,6 +11,7 @@ module TypeChecker (
   , runG
   , eval
   , appVal
+  , freshVar
   ) where
 
 import Data.Maybe

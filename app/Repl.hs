@@ -26,5 +26,15 @@ headRed c (Var x) = eval (defCont x c) ENil
 headRed c (App e1 e2) = appVal (headRed c e1) (eval e2 ENil)
 headRed c e = eval e ENil
 
+readBack :: [String] -> Val -> Exp
+readBack _ U = U
+readBack _ (Var x) = Var x
+readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
+readBack ns (Clos (Abs x a e) r) =
+  let z  = freshVar x ns
+      a' = readBack ns (eval a r)
+      e' = readBack (z : ns) (eval e (EConsVar r x (Var z)))
+  in Abs z a' e'
 
-
+eval2 :: Cont -> Exp -> Exp
+eval2 c e = readBack (map fst (typeCont c)) (headRed c e)
