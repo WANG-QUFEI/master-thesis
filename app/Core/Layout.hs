@@ -221,10 +221,15 @@ sToken p s = PT p (TS s i)
       "*" -> 3
       "->" -> 4
       ":" -> 5
-      ";" -> 6
-      "=" -> 7
-      "[" -> 8
-      "]" -> 9
+      ":?" -> 6
+      ":hRed" -> 7
+      ":help" -> 8
+      ":incrEval" -> 9
+      ":rb" -> 10
+      ";" -> 11
+      "=" -> 12
+      "[" -> 13
+      "]" -> 14
       _ -> error $ "not a reserved word: " ++ show s
 
 -- | Get the position of a token.

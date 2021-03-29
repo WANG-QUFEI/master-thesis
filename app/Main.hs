@@ -3,14 +3,15 @@ module Main (main) where
 import System.Environment ( getArgs, getProgName )
 import System.Exit        ( exitFailure, exitSuccess )
 import System.Directory   ( doesFileExist )
+import System.IO          ( stdout, hFlush )
 import Control.Monad      ( when )
-import Debug.Trace
-
+import Text.Regex.TDFA
+import Data.Char          ( isSpace )
+  
 import Core.Lex    ( Token )
-import Core.Par    ( pContext, myLexer )
+import Core.Par    ( pContext, pCmd, myLexer )
 import Core.Print  ( Print, printTree )
 import Core.Abs
-import Core.Layout ( resolveLayout )
 import TypeChecker
 
 type Err = Either String
@@ -20,8 +21,6 @@ type ParseFun a = [Token] -> Err a
 type Verbosity = Int
 
 type REPL_State = Int
-
-myLLexer = resolveLayout True . myLexer
 
 main :: IO ()
 main = do
@@ -74,9 +73,9 @@ load v p s = case p ts of
       let Right p = pContext ts
       case runTypeCheckCtx p of
         Left err -> printError err >> exitFailure
-        Right c  -> printSuccess "TYPE CHECK SUCCESS" >> exitSuccess >> return c
+        Right c  -> printSuccess "TYPE CHECK SUCCESS" >> return c
   where
-  ts = myLLexer s
+  ts = myLexer s
 
 printSource :: (Show a, Print a) => Int -> a -> IO ()
 printSource v src = do
@@ -91,16 +90,63 @@ printSyntax v tree = (putStrV v $ show tree) >> putStrV v ""
 
 printError :: TypeCheckError -> IO ()
 printError err = do
-   putStrLn "\9889\9889\9889 TYPE CHECK FAILED \9889\9889\9889"
-   let ts  = errorText err
-   case ts of
-     [] -> return ()
-     (h : tail) -> do
-       let ts' = fmap (\x -> " \10008 " ++ x) ts
-       mapM_ putStrLn ts'
+  putStrLn "\9889\9889\9889 TYPE CHECK FAILED \9889\9889\9889"
+  let ts  = errorText err
+  case ts of
+    [] -> return ()
+    (h : tail) -> do
+      let ts' = fmap (\x -> " \10008 " ++ x) ts
+      mapM_ putStrLn ts'
 
 printSuccess :: String -> IO ()
 printSuccess s = putStrLn ("\n\9972 " ++ s ++ " \9972\n")
 
 repl :: REPL_State -> Cont -> IO ()
-repl = undefined
+repl 0 c = do
+  putStrLn "File loaded, entering the REPL mode, type ':?' for help, ':q' to quit"
+  repl 1 c
+repl 1 c = do
+  s <- prompt "\955> "
+  handle c s
+  repl 1 c
+
+blankStr :: String -> Bool
+blankStr s = all isSpace s
+
+prompt :: String -> IO String
+prompt s = do
+  putStr s
+  hFlush stdout
+  getLine
+
+handle :: Cont -> String -> IO ()
+handle c s =
+  if blankStr s
+  then return ()
+  else case pCmd (myLexer s) of
+    Left err  -> putStrLn $ "invalid command: " ++ err
+    Right cmd -> case cmd of
+      Help -> cmdUsage
+      Exit -> putStrLn "Bye~" >> exitSuccess
+      ShowCtx -> let vs = reverse (varsCont c) in
+        case vs of
+          []  -> putStrLn "current context is empty"
+          [x] -> putStrLn ("names declared in the context:\n" ++ x)
+          _   -> do
+            let vs' = (map (\v -> v ++ ", ") (init vs)) ++ [last vs]
+            putStrLn "names declared in the context: "
+            mapM_ putStr vs'
+            putStr "\n"
+      _    -> undefined -- ^ TODO: continue
+  
+
+cmdUsage :: IO ()
+cmdUsage = putStrLn (unlines msg)
+  where msg = ["Commands available from the prompt:",
+               "  :help, :?               display this list of commands",
+               "  :quit, :q               exit REPL",
+               "  :show context           show the current type-checking context resulted from loading the file",
+               "  :rb <val>               apply readback function on a value",
+               "  :hRed <exp>             aplly head-reduction on a well-typed expression",
+               "  :incrEval <exp>         shortcut for firstly applying head-reduction on the expression, then ",
+               "                          readback function on the result of the first operation"]

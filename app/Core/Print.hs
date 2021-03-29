@@ -118,9 +118,17 @@ instance Print Core.Abs.CDecl where
     Core.Abs.CDec id cexp -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 cexp])
     Core.Abs.CDef id cexp1 cexp2 -> prPrec i 0 (concatD [prt 0 id, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2])
   prtList _ [] = concatD []
-  prtList _ [x] = concatD [prt 0 x]
   prtList _ (x:xs) = concatD [prt 0 x, doc (showString ";"), prt 0 xs]
 
 instance Print [Core.Abs.CDecl] where
   prt = prtList
+
+instance Print Core.Abs.Cmd where
+  prt i e = case e of
+    Core.Abs.Help -> prPrec i 0 (concatD [doc (showString ":?")])
+    Core.Abs.Exit -> prPrec i 0 (concatD [doc (showString ":q")])
+    Core.Abs.ShowCtx -> prPrec i 0 (concatD [doc (showString ":show-context")])
+    Core.Abs.Rb cexp -> prPrec i 0 (concatD [doc (showString ":rb"), prt 0 cexp])
+    Core.Abs.HRed cexp -> prPrec i 0 (concatD [doc (showString ":hRed"), prt 0 cexp])
+    Core.Abs.IncrEval cexp -> prPrec i 0 (concatD [doc (showString ":incrEval"), prt 0 cexp])
 

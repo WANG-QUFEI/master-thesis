@@ -28,4 +28,12 @@ transCDecl :: Core.Abs.CDecl -> Result
 transCDecl x = case x of
   Core.Abs.CDec id cexp -> failure x
   Core.Abs.CDef id cexp1 cexp2 -> failure x
+transCmd :: Core.Abs.Cmd -> Result
+transCmd x = case x of
+  Core.Abs.Help -> failure x
+  Core.Abs.Exit -> failure x
+  Core.Abs.ShowCtx -> failure x
+  Core.Abs.Rb cexp -> failure x
+  Core.Abs.HRed cexp -> failure x
+  Core.Abs.IncrEval cexp -> failure x
 

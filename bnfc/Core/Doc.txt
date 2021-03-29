@@ -28,7 +28,9 @@ There are no reserved words in Core.
 The symbols used in Core are the following:
   | * | -> | [ | :
   | ] | = | ; | (
-  | ) |  |  |
+  | ) | :? | :help | :q
+  | :quit | :show-context | :rb | :hRed
+  | :incrEval |  |  |
 
 ===Comments===
 Single-line comments begin with --.Multiple-line comments are  enclosed with {- and -}.
@@ -52,8 +54,15 @@ All other symbols are terminals.
   | //CDecl// | -> | //Id// ``:`` //CExp//
   |  |  **|**  | //Id// ``:`` //CExp// ``=`` //CExp//
   | //[CDecl]// | -> | **eps**
-  |  |  **|**  | //CDecl//
   |  |  **|**  | //CDecl// ``;`` //[CDecl]//
   | //CExp3// | -> | ``(`` //CExp// ``)``
+  | //Cmd// | -> | ``:?``
+  |  |  **|**  | ``:help``
+  |  |  **|**  | ``:q``
+  |  |  **|**  | ``:quit``
+  |  |  **|**  | ``:show-context``
+  |  |  **|**  | ``:rb`` //CExp//
+  |  |  **|**  | ``:hRed`` //CExp//
+  |  |  **|**  | ``:incrEval`` //CExp//
 
 

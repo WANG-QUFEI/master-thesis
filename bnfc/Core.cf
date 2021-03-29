@@ -1,9 +1,6 @@
--- concrete syntax
 position token Id ((letter | '⊥' | '¬') (letter | digit | '_' | '\'')*);
 
-entrypoints Context;
-
-layout toplevel;
+entrypoints Context, Cmd;
 
 Ctx. Context ::= [CDecl];
 
@@ -17,10 +14,19 @@ CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
 CDec.    CDecl ::= Id ":" CExp;
 CDef.    CDecl ::= Id ":" CExp "=" CExp;
 
-separator CDecl ";";
+terminator CDecl ";";
 
 coercions CExp 3;
 
 comment "--";
 
 comment "{-" "-}";
+
+Help.     Cmd ::= ":?" ;
+Help.     Cmd ::= ":help" ;
+Exit.     Cmd ::= ":q" ;
+Exit.     Cmd ::= ":quit" ;
+ShowCtx.  Cmd ::= ":show-context";
+Rb.       Cmd ::= ":rb" CExp ;
+HRed.     Cmd ::= ":hRed" CExp ;
+IncrEval. Cmd ::= ":incrEval" CExp ;
