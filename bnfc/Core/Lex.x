@@ -19,7 +19,7 @@ $i = [$l $d _ ']     -- identifier character
 $u = [. \n]          -- universal: any character
 
 @rsyms =    -- symbols and non-identifier-like reserved words
-   \* | \- \> | \[ | \: | \] | \= | \; | \( | \) | \: \? | \: "help" | \: "q" | \: "quit" | \: "show" \- "context" | \: "rb" | \: "hRed" | \: "incrEval"
+   \* | \- \> | \[ | \: | \] | \= | \; | \( | \) | \: \? | \: "help" | \: "q" | \: "quit" | \: "show" \- "context" | \: "incr" \- "eval"
 
 :-
 
@@ -108,7 +108,7 @@ eitherResIdent tv s = treeFind resWords
                               | s == a = t
 
 resWords :: BTree
-resWords = b ":incrEval" 9 (b ":" 5 (b "*" 3 (b ")" 2 (b "(" 1 N N) N) (b "->" 4 N N)) (b ":hRed" 7 (b ":?" 6 N N) (b ":help" 8 N N))) (b ";" 14 (b ":rb" 12 (b ":quit" 11 (b ":q" 10 N N) N) (b ":show-context" 13 N N)) (b "[" 16 (b "=" 15 N N) (b "]" 17 N N)))
+resWords = b ":incr-eval" 8 (b "->" 4 (b ")" 2 (b "(" 1 N N) (b "*" 3 N N)) (b ":?" 6 (b ":" 5 N N) (b ":help" 7 N N))) (b ";" 12 (b ":quit" 10 (b ":q" 9 N N) (b ":show-context" 11 N N)) (b "[" 14 (b "=" 13 N N) (b "]" 15 N N)))
    where b s n = let bs = s
                  in  B bs (TS bs n)
 

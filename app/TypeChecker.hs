@@ -5,6 +5,7 @@ module TypeChecker (
   , runTypeCheckCtx
   , errorText
   , varsCont
+  , incrEval
   ) where
 
 import Data.Maybe
@@ -369,6 +370,21 @@ readBack _ _ = error "operation not supported"
 varsCont :: Cont -> [String]
 varsCont c = map fst (typeCont c)
 
--- | evaluate an expression in an incremental way 
-incrEval :: Cont -> Exp -> Exp
-incrEval c e = readBack (varsCont c) (headRed c e)
+-- | given a concrete context and its type-checked abstract context, a concrete expression,
+--   check the expression is well-typed under the context and apply the head-reduction operation on it
+incrEval :: Context -> Cont -> CExp -> Either TypeCheckError (Val, Exp)
+incrEval cc ac ce = let m = toMap cc in
+  case runG (absExp ce) m of
+    Left err -> Left err
+    Right e  -> case runG (checkInfer ac e) CNil of
+      Left err -> Left err
+      Right _  ->
+        let v  = headRed ac e
+            e' = readBack (varsCont ac) v
+        in Right (v, e')
+  where
+    toMap :: Context -> Map.Map String Id
+    toMap (Ctx ds) = Map.unions (map toMapD ds)
+    toMapD :: CDecl -> Map.Map String Id
+    toMapD (CDec id _) = Map.singleton (idStr id) id
+    toMapD (CDef id _ _) = Map.singleton (idStr id) id

@@ -7,6 +7,7 @@ import System.IO          ( stdout, hFlush )
 import Control.Monad      ( when )
 import Text.Regex.TDFA
 import Data.Char          ( isSpace )
+import Debug.Trace
   
 import Core.Lex    ( Token )
 import Core.Par    ( pContext, pCmd, myLexer )
@@ -56,10 +57,10 @@ usage = do
 putStrV :: Verbosity -> String -> IO ()
 putStrV v s = when (v > 1) $ putStrLn s
 
-loadFile :: (Print a, Show a) => Verbosity -> ParseFun a -> FilePath -> IO Cont
+loadFile :: (Print a, Show a) => Verbosity -> ParseFun a -> FilePath -> IO (Cont, Context)
 loadFile v p f = readFile f >>= load v p
 
-load :: (Print a, Show a) => Verbosity -> ParseFun a -> String -> IO Cont
+load :: (Print a, Show a) => Verbosity -> ParseFun a -> String -> IO (Cont, Context)
 load v p s = case p ts of
     Left s -> do
       putStrLn "\n\9889\9889\9889 PARSE FAILED \9889\9889\9889\n"
@@ -70,10 +71,10 @@ load v p s = case p ts of
     Right src -> do
       printSuccess "PARSING SUCCESS"
       printSource v src
-      let Right p = pContext ts
-      case runTypeCheckCtx p of
-        Left err -> printError err >> exitFailure
-        Right c  -> printSuccess "TYPE CHECK SUCCESS" >> return c
+      let Right ctx = pContext ts
+      case runTypeCheckCtx ctx of
+        Left err   -> printError err >> exitFailure
+        Right c  -> printSuccess "TYPE CHECK SUCCESS" >> return (c, ctx)
   where
   ts = myLexer s
 
@@ -101,14 +102,14 @@ printError err = do
 printSuccess :: String -> IO ()
 printSuccess s = putStrLn ("\n\9972 " ++ s ++ " \9972\n")
 
-repl :: REPL_State -> Cont -> IO ()
-repl 0 c = do
+repl :: REPL_State -> (Cont, Context) -> IO ()
+repl 0 (ac, cc) = do
   putStrLn "File loaded, entering the REPL mode, type ':?' for help, ':q' to quit"
-  repl 1 c
-repl 1 c = do
+  repl 1 (ac, cc)
+repl 1 (ac, cc) = do
   s <- prompt "\955> "
-  handle c s
-  repl 1 c
+  handle (ac, cc) s
+  repl 1 (ac, cc)
 
 blankStr :: String -> Bool
 blankStr s = all isSpace s
@@ -119,25 +120,21 @@ prompt s = do
   hFlush stdout
   getLine
 
-handle :: Cont -> String -> IO ()
-handle c s =
+handle :: (Cont, Context) -> String -> IO ()
+handle (ac, cc) s =
   if blankStr s
   then return ()
   else case pCmd (myLexer s) of
-    Left err  -> putStrLn $ "invalid command: " ++ err
+    Left _ -> putStrLn "invalid command"
     Right cmd -> case cmd of
       Help -> cmdUsage
-      Exit -> putStrLn "Bye~" >> exitSuccess
-      ShowCtx -> let vs = reverse (varsCont c) in
-        case vs of
-          []  -> putStrLn "current context is empty"
-          [x] -> putStrLn ("names declared in the context:\n" ++ x)
-          _   -> do
-            let vs' = (map (\v -> v ++ ", ") (init vs)) ++ [last vs]
-            putStrLn "names declared in the context: "
-            mapM_ putStr vs'
-            putStr "\n"
-      _    -> undefined -- ^ TODO: continue
+      Exit -> exitSuccess
+      ShowCtx -> putStrLn (printTree cc)
+      IncrEval e  -> case incrEval cc ac e of
+        Left err -> printError err
+        Right (v, e') -> do
+          putStrLn $ "head-reduction: " ++ show v
+          putStrLn $ "readback:       " ++ show e'
   
 
 cmdUsage :: IO ()
@@ -146,7 +143,5 @@ cmdUsage = putStrLn (unlines msg)
                "  :help, :?               display this list of commands",
                "  :quit, :q               exit REPL",
                "  :show context           show the current type-checking context resulted from loading the file",
-               "  :rb <val>               apply readback function on a value",
-               "  :hRed <exp>             aplly head-reduction on a well-typed expression",
-               "  :incrEval <exp>         shortcut for firstly applying head-reduction on the expression, then ",
+               "  :incr-eval <exp>        shortcut for firstly applying head-reduction on the expression, then ",
                "                          readback function on the result of the first operation"]

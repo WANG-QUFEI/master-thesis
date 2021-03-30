@@ -29,8 +29,7 @@ The symbols used in Core are the following:
   | * | -> | [ | :
   | ] | = | ; | (
   | ) | :? | :help | :q
-  | :quit | :show-context | :rb | :hRed
-  | :incrEval |  |  |
+  | :quit | :show-context | :incr-eval |
 
 ===Comments===
 Single-line comments begin with --.Multiple-line comments are  enclosed with {- and -}.
@@ -61,8 +60,6 @@ All other symbols are terminals.
   |  |  **|**  | ``:q``
   |  |  **|**  | ``:quit``
   |  |  **|**  | ``:show-context``
-  |  |  **|**  | ``:rb`` //CExp//
-  |  |  **|**  | ``:hRed`` //CExp//
-  |  |  **|**  | ``:incrEval`` //CExp//
+  |  |  **|**  | ``:incr-eval`` //CExp//
 
 

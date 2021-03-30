@@ -27,6 +27,4 @@ Help.     Cmd ::= ":help" ;
 Exit.     Cmd ::= ":q" ;
 Exit.     Cmd ::= ":quit" ;
 ShowCtx.  Cmd ::= ":show-context";
-Rb.       Cmd ::= ":rb" CExp ;
-HRed.     Cmd ::= ":hRed" CExp ;
-IncrEval. Cmd ::= ":incrEval" CExp ;
+IncrEval. Cmd ::= ":incr-eval" CExp ;
