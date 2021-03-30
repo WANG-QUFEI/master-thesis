@@ -10,3 +10,6 @@
    
   * Mar 8, 2021
     * converted the representation of the program using de bruijn index
+  
+  * Mar 30, 2021
+    * implement the REPL function, get the result of repeatedly applying the head-reduction on 'loop' (see 'bnfc/sample.smtt')

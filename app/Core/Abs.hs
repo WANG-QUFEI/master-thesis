@@ -24,6 +24,6 @@ data CExp
 data CDecl = CDec Id CExp | CDef Id CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Cmd = Help | Exit | ShowCtx | IncrEval CExp
+data Cmd = Help | Exit | ShowCtx | Eval CExp | Iter Integer CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 

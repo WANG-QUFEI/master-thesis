@@ -2,10 +2,12 @@
 module TypeChecker (
     TypeCheckError
   , Cont
+  , Exp
   , runTypeCheckCtx
   , errorText
   , varsCont
-  , incrEval
+  , headEvalCExp
+  , headEval
   ) where
 
 import Data.Maybe
@@ -27,15 +29,51 @@ data Exp = U
          | Abs    String Exp Exp
          | Where  String Exp Exp Exp
          | Clos   Exp Env
-         deriving (Show)
+         deriving (Eq)
+
+-- | constants used to control the 'show' behaviour
+p_bar, p_low, p_high :: Int
+p_bar  = 1
+p_low  = p_bar - 1
+p_high = p_bar + 1
+
+instance Show Exp where
+--  showsPrec p e = show p `trace` showParen (p > p0) sf
+  showsPrec p e = showParen (p > p_bar) se
+    where
+      se :: ShowS
+      se = case e of
+        U -> showString "*"
+        Var x -> showString x
+        App e1 e2 ->
+          let p1 = case e1 of
+                     U       -> p_low
+                     Var _   -> p_low
+                     App _ _ -> p_low
+                     _       -> p_high
+              p2 = case e2 of
+                     U     -> p_low
+                     Var _ -> p_low
+                     _     -> p_high
+          in showsPrec p1 e1 . showString " " . showsPrec p2 e2
+        Abs x a e -> case x of
+          "" -> showsPrec p_low a . showString " -> " . showsPrec p_low e
+          _  -> showString "[ " . showString (x ++ " : ") . showsPrec p_low a . showString " ] " . showsPrec p_low e
+        Where x a e e' ->
+          showString "[ " . showString (x ++ " : ") . showsPrec p_low a .
+            showString " = " . showsPrec p_low e . showString " ] " . showsPrec p_low e'
+        Clos e r -> showsPrec p_low e . showString " << " . showsPrec p_low r . showString " >> "
 
 -- | the syntax for 'Exp' is also used as value in this language
 type Val = Exp
 
 -- | abstract syntax for declarations
-data Decl = Dec String Exp
-          | Def String Exp Exp
-          deriving (Show)
+data Decl = Dec String Exp | Def String Exp Exp
+
+instance Show Decl where
+  showsPrec _ d = case d of
+    Dec x a   -> showString (x ++ " : ") . showsPrec p_bar a
+    Def x a e -> showString (x ++ " : ") . showsPrec p_bar a . showString " = " . showsPrec p_bar e
 
 -- | abstract context after the conversion of the concrete context
 type AbsCtx = [Decl]
@@ -44,8 +82,14 @@ type AbsCtx = [Decl]
 data Env = ENil
          | EConsVar Env String Val
          | EConsDef Env String Exp Exp
-         deriving (Show)
+         deriving (Eq)
 
+instance Show Env where
+  showsPrec _ r = showList (reverse . toList $ r)
+    where toList :: Env -> [Decl]
+          toList ENil = []
+          toList (EConsVar r x v) = (Dec x v) : (toList r)
+          toList (EConsDef r x a e) = (Def x a e) : (toList r)
 -- | A type-checking context related with an environment
 data Cont = CNil
           | CConsVar Cont String Exp
@@ -372,8 +416,8 @@ varsCont c = map fst (typeCont c)
 
 -- | given a concrete context and its type-checked abstract context, a concrete expression,
 --   check the expression is well-typed under the context and apply the head-reduction operation on it
-incrEval :: Context -> Cont -> CExp -> Either TypeCheckError (Val, Exp)
-incrEval cc ac ce = let m = toMap cc in
+headEvalCExp :: Context -> Cont -> CExp -> Either TypeCheckError Exp
+headEvalCExp cc ac ce = let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left err
     Right e  -> case runG (checkInfer ac e) CNil of
@@ -381,10 +425,13 @@ incrEval cc ac ce = let m = toMap cc in
       Right _  ->
         let v  = headRed ac e
             e' = readBack (varsCont ac) v
-        in Right (v, e')
+        in Right e'
   where
     toMap :: Context -> Map.Map String Id
     toMap (Ctx ds) = Map.unions (map toMapD ds)
     toMapD :: CDecl -> Map.Map String Id
     toMapD (CDec id _) = Map.singleton (idStr id) id
     toMapD (CDef id _ _) = Map.singleton (idStr id) id
+
+headEval :: Cont -> Exp -> Exp
+headEval c e = readBack (varsCont c) (headRed c e)

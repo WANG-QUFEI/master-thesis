@@ -33,5 +33,6 @@ transCmd x = case x of
   Core.Abs.Help -> failure x
   Core.Abs.Exit -> failure x
   Core.Abs.ShowCtx -> failure x
-  Core.Abs.IncrEval cexp -> failure x
+  Core.Abs.Eval cexp -> failure x
+  Core.Abs.Iter integer cexp -> failure x
 

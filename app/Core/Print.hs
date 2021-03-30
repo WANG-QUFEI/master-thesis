@@ -127,6 +127,7 @@ instance Print Core.Abs.Cmd where
   prt i e = case e of
     Core.Abs.Help -> prPrec i 0 (concatD [doc (showString ":?")])
     Core.Abs.Exit -> prPrec i 0 (concatD [doc (showString ":q")])
-    Core.Abs.ShowCtx -> prPrec i 0 (concatD [doc (showString ":show-context")])
-    Core.Abs.IncrEval cexp -> prPrec i 0 (concatD [doc (showString ":incr-eval"), prt 0 cexp])
+    Core.Abs.ShowCtx -> prPrec i 0 (concatD [doc (showString ":s")])
+    Core.Abs.Eval cexp -> prPrec i 0 (concatD [doc (showString ":e"), prt 0 cexp])
+    Core.Abs.Iter n cexp -> prPrec i 0 (concatD [doc (showString ":it"), prt 0 n, prt 0 cexp])
 

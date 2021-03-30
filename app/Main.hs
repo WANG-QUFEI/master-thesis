@@ -130,18 +130,36 @@ handle (ac, cc) s =
       Help -> cmdUsage
       Exit -> exitSuccess
       ShowCtx -> putStrLn (printTree cc)
-      IncrEval e  -> case incrEval cc ac e of
-        Left err -> printError err
-        Right (v, e') -> do
-          putStrLn $ "head-reduction: " ++ show v
-          putStrLn $ "readback:       " ++ show e'
-  
+      Eval e  -> checkAndEval id e >> return ()
+      Iter n e
+        | n <= 0 -> putStrLn "nothing to do"
+        | n == 1 -> checkAndEval id e >> return ()
+        | otherwise -> do
+            me <- checkAndEval (\x -> "1: " ++ x) e
+            case me of
+              Nothing -> return ()
+              Just ae -> iterEval 2 (n - 1) ae
+  where
+    checkAndEval :: ShowS -> CExp -> IO (Maybe Exp)
+    checkAndEval ss e = case headEvalCExp cc ac e of
+      Left err -> printError err >> return Nothing
+      Right e' -> putStrLn (ss (show e')) >> return (Just e')
+    iterEval :: Integer -> Integer -> Exp -> IO ()
+    iterEval nt nc e
+      | nc == 0 = return ()
+      | otherwise = do
+          let e' = headEval ac e
+          if e' == e
+            then putStrLn "== stop: evaluation converged =="
+            else putStrLn (show nt ++ ": " ++ show e') >> iterEval (nt + 1) (nc - 1) e'
+
 
 cmdUsage :: IO ()
 cmdUsage = putStrLn (unlines msg)
   where msg = ["Commands available from the prompt:",
                "  :help, :?               display this list of commands",
                "  :quit, :q               exit REPL",
-               "  :show context           show the current type-checking context resulted from loading the file",
-               "  :incr-eval <exp>        shortcut for firstly applying head-reduction on the expression, then ",
-               "                          readback function on the result of the first operation"]
+               "  :s                      show the current type-checking context resulted from loading the file",
+               "  :e <exp>                shortcut for firstly applying head-reduction on the expression, then ",
+               "                          readback function on the result of the first operation",
+               "  :it <num> <exp>         apply 'e' operation on the expression and its result iteratively for <num> times"]
