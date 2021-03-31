@@ -24,6 +24,13 @@ data CExp
 data CDecl = CDec Id CExp | CDef Id CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Cmd = Help | Exit | ShowCtx | Eval CExp | Iter Integer CExp
+data Cmd
+    = Help
+    | Exit
+    | ShowCtx
+    | Eval CExp
+    | Iter Integer CExp
+    | UnfoldV Id CExp
+    | UnfoldN CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 

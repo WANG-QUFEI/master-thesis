@@ -130,28 +130,30 @@ handle (ac, cc) s =
       Help -> cmdUsage
       Exit -> exitSuccess
       ShowCtx -> putStrLn (printTree cc)
-      Eval e  -> checkAndEval id e >> return ()
+      Eval e  -> case checkExpValidity cc ac e of
+        Left err -> printError err
+        Right ae -> let ae' = headEval ac ae in putStrLn (show ae')
+      UnfoldV (Id (_, s)) e -> case checkExpValidity cc ac e of
+        Left err -> printError err
+        Right ae -> let ae' = unfold ac s ae in putStrLn (show ae')
+      UnfoldN e -> case checkExpValidity cc ac e of
+        Left err -> printError err
+        Right ae -> let ae' = unfold ac "" ae in putStrLn (show ae')
       Iter n e
         | n <= 0 -> putStrLn "nothing to do"
-        | n == 1 -> checkAndEval id e >> return ()
-        | otherwise -> do
-            me <- checkAndEval (\x -> "1: " ++ x) e
-            case me of
-              Nothing -> return ()
-              Just ae -> iterEval 2 (n - 1) ae
+        | otherwise -> case checkExpValidity cc ac e of
+            Left err -> printError err
+            Right ae -> iterEval 1 n ae
   where
-    checkAndEval :: ShowS -> CExp -> IO (Maybe Exp)
-    checkAndEval ss e = case headEvalCExp cc ac e of
-      Left err -> printError err >> return Nothing
-      Right e' -> putStrLn (ss (show e')) >> return (Just e')
     iterEval :: Integer -> Integer -> Exp -> IO ()
     iterEval nt nc e
       | nc == 0 = return ()
       | otherwise = do
           let e' = headEval ac e
+          putStrLn (show nt ++ ": " ++ show e')
           if e' == e
             then putStrLn "== stop: evaluation converged =="
-            else putStrLn (show nt ++ ": " ++ show e') >> iterEval (nt + 1) (nc - 1) e'
+            else iterEval (nt + 1) (nc - 1) e'
 
 
 cmdUsage :: IO ()
@@ -160,6 +162,7 @@ cmdUsage = putStrLn (unlines msg)
                "  :help, :?               display this list of commands",
                "  :quit, :q               exit REPL",
                "  :s                      show the current type-checking context resulted from loading the file",
-               "  :e <exp>                shortcut for firstly applying head-reduction on the expression, then ",
-               "                          readback function on the result of the first operation",
+               "  :e <exp>                evaluate <exp> by head reduction ",
+               "  :u <name> <exp>         unfold the constant with <name> when evaluating <exp>,",
+               "                            leaving <name> empty will evaluate <exp> with all constants locked",
                "  :it <num> <exp>         apply 'e' operation on the expression and its result iteratively for <num> times"]

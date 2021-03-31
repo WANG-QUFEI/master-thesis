@@ -6,8 +6,9 @@ module TypeChecker (
   , runTypeCheckCtx
   , errorText
   , varsCont
-  , headEvalCExp
+  , checkExpValidity
   , headEval
+  , unfold
   ) where
 
 import Data.Maybe
@@ -414,24 +415,30 @@ readBack _ _ = error "operation not supported"
 varsCont :: Cont -> [String]
 varsCont c = map fst (typeCont c)
 
--- | given a concrete context and its type-checked abstract context, a concrete expression,
---   check the expression is well-typed under the context and apply the head-reduction operation on it
-headEvalCExp :: Context -> Cont -> CExp -> Either TypeCheckError Exp
-headEvalCExp cc ac ce = let m = toMap cc in
+checkExpValidity :: Context -> Cont -> CExp -> Either TypeCheckError Exp
+checkExpValidity cc ac ce = let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left err
     Right e  -> case runG (checkInfer ac e) CNil of
       Left err -> Left err
-      Right _  ->
-        let v  = headRed ac e
-            e' = readBack (varsCont ac) v
-        in Right e'
+      Right _  -> Right e
   where
     toMap :: Context -> Map.Map String Id
     toMap (Ctx ds) = Map.unions (map toMapD ds)
     toMapD :: CDecl -> Map.Map String Id
     toMapD (CDec id _) = Map.singleton (idStr id) id
     toMapD (CDef id _ _) = Map.singleton (idStr id) id
-
+    
 headEval :: Cont -> Exp -> Exp
 headEval c e = readBack (varsCont c) (headRed c e)
+
+-- | unfold a name in an expression
+unfold :: Cont -> String -> Exp -> Exp
+unfold c "" e = readBack (varsCont c) (eval e ENil)
+unfold c x e  = readBack (varsCont c) (eval e (envUnf x c))
+
+-- | get the environment related with a type-checking context
+envUnf :: String -> Cont -> Env
+envUnf y CNil = ENil
+envUnf y (CConsVar c x a) = envUnf y c
+envUnf y (CConsDef c x a e) = if y == x then EConsDef ENil x a e else envUnf y c

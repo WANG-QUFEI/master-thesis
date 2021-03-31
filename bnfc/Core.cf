@@ -28,4 +28,6 @@ Exit.     Cmd ::= ":q" ;
 Exit.     Cmd ::= ":quit" ;
 ShowCtx.  Cmd ::= ":s";
 Eval.     Cmd ::= ":e" CExp ;
-Iter.     Cmd ::= ":it" Integer CExp;
+Iter.     Cmd ::= ":it" Integer CExp ;
+UnfoldV.   Cmd ::= ":u" Id CExp ;
+UnfoldN.   Cmd ::= ":u" CExp ;

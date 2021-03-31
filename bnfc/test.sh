@@ -1,2 +1,2 @@
 #!/bin/zsh
-./Core/Test sample.smtt
+./Core/Test ../test/loop1.smtt
