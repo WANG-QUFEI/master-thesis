@@ -168,9 +168,6 @@ Give name to conversion    beta-eta-delta
 
  We then define   G |-xs D   for D = [x : A = M]  by  G |-xs A   and  G |-xs M : eval A r(G,xs)
 
-
-
-
   -write an interactive   evaluation function  with a readback function
 
 

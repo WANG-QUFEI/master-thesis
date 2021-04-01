@@ -1,0 +1,47 @@
+Pow : * -> * =
+  [X : *] X -> * ;
+
+T : * -> * =
+  [X : *] Pow (Pow X) ;
+
+
+⊥ : * ;
+
+funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
+  [X : *][Y : *][f : X -> Y][t : T X][g : Y -> *] t ([x : X] g (f x)) ;
+
+¬ : * -> * =
+  [X : *] X -> ⊥ ;
+
+U : * = [X : *] (T X -> X) -> X ;
+
+tau : T U -> U =
+  [t : T U][X : *][f : T X -> X] f ([g : Pow X] t ([z : U] g (z X f))) ;
+
+sigma : U -> T U =
+  [z : U]z (T U) ([t : T (T U)][g : U -> *] t ([x : T U] g (tau x))) ;
+
+Q : T U =
+  [p : U -> *][z : U] sigma z p -> p z ;
+
+B : Pow U =
+  [z : U] ¬ ([p : Pow U] sigma z p -> p (tau (sigma z))) ;
+
+C : U = tau Q ;
+
+lem1 : Q B
+  = [z : U] [k : sigma z B] [l : [p : Pow U] sigma z p -> p (tau (sigma z))] l B k ([p : Pow U] l ([z1 : U] p (tau (sigma z1)))) ;
+
+A : * = [p : Pow U] Q p -> p C ;
+
+lem2 : ¬ A
+  = [h : A] h B lem1 ([p : Pow U] h ([z : U] p (tau (sigma z)))) ;
+
+lem3 : A
+  = [p : Pow U] [h : Q p] h C ([x : U] h (tau (sigma x))) ;
+
+loop : ⊥
+   = lem2 lem3 ;
+
+{-
+-}
