@@ -6,19 +6,18 @@ Portability     : POSIX
 -}
 module TypeChecker where
 
-import Debug.Trace
 
-import Data.Maybe
-import Data.List
+import           Data.List
 import qualified Data.Map as Map
+import           Data.Maybe
+import           Control.Monad.Except
+import           Control.Monad.State
+import           Debug.Trace
 
-import Control.Monad.State
-import Control.Monad.Except
-
-import Core.Abs
-import Core.Print ( printTree )
-import Base
-import TransUtil
+import           Base
+import           Core.Abs
+import           Core.Print ( printTree )
+import           TransUtil
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a

@@ -1,6 +1,6 @@
 position token Id ((letter | '⊥' | '¬') (letter | digit | '_' | '\'')*);
 
-entrypoints Context, Cmd;
+entrypoints Context, CExp, CDecl;
 
 Ctx. Context ::= [CDecl];
 
@@ -21,13 +21,3 @@ coercions CExp 3;
 comment "--";
 
 comment "{-" "-}";
-
-Help.     Cmd ::= ":?" ;
-Help.     Cmd ::= ":help" ;
-Exit.     Cmd ::= ":q" ;
-Exit.     Cmd ::= ":quit" ;
-ShowCtx.  Cmd ::= ":s";
-Eval.     Cmd ::= ":e" CExp ;
-Iter.     Cmd ::= ":it" Integer CExp ;
-UnfoldV.   Cmd ::= ":u" Id CExp ;
-UnfoldN.   Cmd ::= ":u" CExp ;

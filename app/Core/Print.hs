@@ -123,13 +123,3 @@ instance Print Core.Abs.CDecl where
 instance Print [Core.Abs.CDecl] where
   prt = prtList
 
-instance Print Core.Abs.Cmd where
-  prt i e = case e of
-    Core.Abs.Help -> prPrec i 0 (concatD [doc (showString ":?")])
-    Core.Abs.Exit -> prPrec i 0 (concatD [doc (showString ":q")])
-    Core.Abs.ShowCtx -> prPrec i 0 (concatD [doc (showString ":s")])
-    Core.Abs.Eval cexp -> prPrec i 0 (concatD [doc (showString ":e"), prt 0 cexp])
-    Core.Abs.Iter n cexp -> prPrec i 0 (concatD [doc (showString ":it"), prt 0 n, prt 0 cexp])
-    Core.Abs.UnfoldV id cexp -> prPrec i 0 (concatD [doc (showString ":u"), prt 0 id, prt 0 cexp])
-    Core.Abs.UnfoldN cexp -> prPrec i 0 (concatD [doc (showString ":u"), prt 0 cexp])
-

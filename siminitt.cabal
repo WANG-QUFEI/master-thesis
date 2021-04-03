@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 661485acfe16250312e8d2f7e38124ba11b4108ad1729ca1d6c3f631a45e5a39
+-- hash: 278076c0576b6b49e22442640304239af176a8f95eace9bd76a17327354b1bf2
 
 name:           siminitt
 version:        0.1.0.0
@@ -31,6 +31,7 @@ executable siminitt
   main-is: Main.hs
   other-modules:
       Base
+      CmdUtil
       Core.Abs
       Core.ErrM
       Core.Layout
@@ -38,7 +39,7 @@ executable siminitt
       Core.Par
       Core.Print
       Core.Skel
-      REPL
+      MessageHelper
       TransUtil
       TypeChecker
       Paths_siminitt
@@ -46,11 +47,11 @@ executable siminitt
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      ansi-terminal >=0.10.1
-    , array >=0.5.4
+      array >=0.5.4
     , base >=4.7 && <5
     , containers >=0.6.2
     , directory >=1.3.6.0
+    , haskeline >=0.8.1.0
     , mtl >=2.2
-    , regex-tdfa >=1.3.1.0 && <1.4
+    , split >=0.2.3.4 && <0.3
   default-language: Haskell2010

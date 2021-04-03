@@ -6,12 +6,12 @@ Portability     : POSIX
 -}
 module TransUtil where
 
-import Control.Monad.State
-import Control.Monad.Except
+import           Control.Monad.Except
+import           Control.Monad.State
 import qualified Data.Map as Map
 
-import Base
-import Core.Abs
+import           Base
+import           Core.Abs
 
 -- | monad for converting 
 type ConvertM a = G TypeCheckError (Map.Map String Id) a

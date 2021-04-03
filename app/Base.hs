@@ -7,11 +7,11 @@ Portability     : POSIX
 -}
 module Base where
 
-import Control.Monad.State
-import Control.Monad.Except
+import           Control.Monad.Except
+import           Control.Monad.State
 import qualified Data.Map as Map
 
-import Core.Abs
+import           Core.Abs
 
 -- | abstract syntax for expressions, extended with closure as values
 data Exp = U
