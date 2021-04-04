@@ -1,0 +1,1025 @@
+
+./docs/references/MiniTT_Src/Main.hs,1752
+module Main Main60,61
+type Name Name77,78
+data Val Val79,80
+     Lam Lam80,81
+  |  Pair Pair81,82
+  |  Con Con82,83
+  |  UnitUnit83,84
+  |  SetSet84,85
+  |  Pi Pi85,86
+  |  Sig Sig86,87
+  |  OneOne87,88
+  |  Fun Fun88,89
+  |  Data Data89,90
+  |  Nt Nt90,91
+data Neut Neut93,94
+data Neut = Gen Gen93,94
+          | App App94,95
+          | Fst Fst95,96
+          | Snd Snd96,97
+          | NtFun NtFun97,98
+type SClos SClos100,101
+type   Nf Nf101,102
+type TVal TVal102,103
+data Clos Clos109,110
+data Clos = Cl Cl109,110
+data Clos = Cl Patt Exp Rho | ClCmp ClCmp109,110
+(*(*)112,113
+(C(Clperho)113,114
+(C(ClCmpfc)114,115
+mkCl mkCl116,117
+clCmp clCmp119,120
+type Pos Pos143,144
+app app146,147
+vfst vfst154,155
+vsnd vsnd159,160
+data Rho Rho168,169
+data Rho = RNil RNil168,169
+data Rho = RNil | UpVar UpVar168,169
+data Rho = RNil | UpVar Rho Patt Val | UpDec UpDec168,169
+getRho getRho170,171
+getRho (UpVar rho p v) x | x `inPat`inPat171,172
+getRho getRho178,179
+inPat inPat180,181
+patProj patProj185,186
+patProj (PPair p1 p2) x v | x `inPat`inPat187,188
+patProj patProj189,190
+lRho lRho191,192
+eval eval197,198
+eVar eVar222,223
+rbV rbV225,226
+rbN rbN241,242
+rbRho rbRho250,251
+type ErrorMessage ErrorMessage259,260
+type G G260,261
+type Gamma Gamma266,267
+lookupG lookupG268,269
+upG upG273,274
+genV genV284,285
+checkD checkD287,288
+checkT checkT288,289
+check check289,290
+checkI checkI290,291
+checkD checkD292,293
+checkT checkT311,312
+check check321,322
+checkI checkI356,357
+checkMain checkMain383,384
+checkStr checkStr387,388
+checkFile checkFile397,398
+main main401,402
+debug debug409,410
+showVal showVal412,413
+
+./docs/references/MiniTT_Src/Core/Abs.hs,949
+module Core.Abs Core.Abs5,6
+newtype Ident Ident11,12
+newtype CaseTk CaseTk14,15
+newtype DataTk DataTk17,18
+data ExpExp20,21
+    = ELam ELam21,22
+    | ESetESet22,23
+    | EPi EPi23,24
+    | ESig ESig24,25
+    | EOneEOne25,26
+    | EunitEunit26,27
+    | EPair EPair27,28
+    | ECon ECon28,29
+    | EData EData29,30
+    | ECase ECase30,31
+    | EFst EFst31,32
+    | ESnd ESnd32,33
+    | EApp EApp33,34
+    | EVar EVar34,35
+    | EVoidEVoid35,36
+    | EDec EDec36,37
+    | EPNEPN37,38
+data Decl Decl40,41
+data Decl = Def Def40,41
+data Decl = Def Patt Exp Exp | Drec Drec40,41
+data Patt Patt43,44
+data Patt = PPair PPair43,44
+data Patt = PPair Patt Patt | Punit Punit43,44
+data Patt = PPair Patt Patt | Punit | PVar PVar43,44
+data Summand Summand46,47
+data Summand = Summand Summand46,47
+data Branch Branch49,50
+data Branch = Branch Branch49,50
+eArrow eArrow52,53
+eTimes eTimes55,56
+
+./docs/references/MiniTT_Src/Core/Lex.hs,2177
+module Core.Lex Core.Lex6,7
+alex_tab_size alex_tab_size28,29
+alex_base alex_base30,31
+alex_table alex_table34,35
+alex_check alex_check38,39
+alex_deflt alex_deflt42,43
+alex_accept alex_accept46,47
+alex_actions alex_actions85,86
+tok tok100,101
+data Tok Tok103,104
+   TS TS104,105
+ | TL TL105,106
+ | TI TI106,107
+ | TV TV107,108
+ | TD TD108,109
+ | TC TC109,110
+ | T_CaseTk T_CaseTk110,111
+ | T_DataTk T_DataTk111,112
+data Token Token115,116
+   PT PT116,117
+ | Err Err117,118
+printPosn printPosn120,121
+tokenPos tokenPos123,124
+tokenPosn tokenPosn127,128
+tokenLineCol tokenLineCol131,132
+posLineCol posLineCol134,135
+mkPosToken mkPosToken137,138
+tokenText tokenText140,141
+prToken prToken152,153
+data BTree BTree155,156
+data BTree = N N155,156
+data BTree = N | B B155,156
+eitherResIdent eitherResIdent157,158
+resWords resWords165,166
+unescapeInitTail unescapeInitTail170,171
+data Posn Posn188,189
+data Posn = Pn Pn188,189
+alexStartPos alexStartPos191,192
+alexMove alexMove194,195
+type Byte Byte199,200
+type AlexInput AlexInput201,202
+tokens tokens206,207
+alexGetByte alexGetByte217,218
+alexInputPrevChar alexInputPrevChar227,228
+utf8Encode utf8Encode231,232
+alex_action_3 alex_action_3251,252
+alex_action_4 alex_action_4252,253
+alex_action_5 alex_action_5253,254
+alex_action_6 alex_action_6254,255
+data AlexAddr AlexAddr309,310
+data AlexAddr = AlexA# AlexA#309,310
+uncheckedShiftL# uncheckedShiftL#312,313
+alexIndexInt16OffAddr alexIndexInt16OffAddr316,317
+alexIndexInt32OffAddr alexIndexInt32OffAddr337,338
+quickIndex quickIndex363,364
+data AlexReturn AlexReturn375,376
+  = AlexEOFAlexEOF376,377
+  | AlexError AlexError377,378
+  | AlexSkip AlexSkip378,379
+  | AlexToken AlexToken379,380
+alexScan alexScan382,383
+alexScanUser alexScanUser385,386
+alex_scan_tkn alex_scan_tkn416,417
+data AlexLastAccAlexLastAcc463,464
+  = AlexNoneAlexNone464,465
+  | AlexLastAcc AlexLastAcc465,466
+  | AlexLastSkip AlexLastSkip466,467
+data AlexAcc AlexAcc468,469
+  = AlexAccNoneAlexAccNone469,470
+  | AlexAcc AlexAcc470,471
+  | AlexAccSkipAlexAccSkip471,472
+
+./docs/references/MiniTT_Src/Core/Test.hs,251
+module Main Main2,3
+type Err Err14,15
+type ParseFun ParseFun15,16
+myLLexer myLLexer17,18
+type Verbosity Verbosity19,20
+putStrV putStrV21,22
+runFile runFile24,25
+run run27,28
+showTree showTree44,45
+usage usage50,51
+main main61,62
+
+./docs/references/MiniTT_Src/Core/ErrM.hs,890
+module Core.ErrM Core.ErrM18,19
+type Err Err24,25
+pattern Bad Bad26,27
+pattern Bad msg msg26,27
+pattern Ok Ok27,28
+pattern Ok  a a27,28
+instance MonadFail MonadFail Err30,31
+  fail fail31,32
+instance Alternative Alternative Err34,35
+  empty empty35,36
+  (<(<|>)36,37
+instance MonadPlus MonadPlus Err39,40
+  mzero mzero40,41
+  mplus mplus41,42
+module Core.ErrM Core.ErrM52,53
+data Err Err59,60
+data Err a = Ok Ok59,60
+data Err a = Ok a | Bad Bad59,60
+instance Monad Monad Err62,63
+  return return63,64
+  Ok Ok64,65
+  Bad Bad65,66
+instance Applicative Applicative Err67,68
+  pure pure68,69
+  (B(Bads)69,70
+  (O(Okf)70,71
+instance Functor Functor Err72,73
+  fmap fmap73,74
+instance MonadPlus MonadPlus Err75,76
+  mzero mzero76,77
+  mplus mplus77,78
+instance Alternative Alternative Err80,81
+  empty empty81,82
+  (<(<|>)82,83
+
+./docs/references/MiniTT_Src/Core/Par.hs,8013
+module Core.ParCore.Par6,7
+newtype HappyAbsSyn HappyAbsSyn32,33
+type HappyAny HappyAny34,35
+newtype HappyWrap15 HappyWrap1538,39
+happyIn15 happyIn1539,40
+happyOut15 happyOut1542,43
+newtype HappyWrap16 HappyWrap1645,46
+happyIn16 happyIn1646,47
+happyOut16 happyOut1649,50
+newtype HappyWrap17 HappyWrap1752,53
+happyIn17 happyIn1753,54
+happyOut17 happyOut1756,57
+newtype HappyWrap18 HappyWrap1859,60
+happyIn18 happyIn1860,61
+happyOut18 happyOut1863,64
+newtype HappyWrap19 HappyWrap1966,67
+happyIn19 happyIn1967,68
+happyOut19 happyOut1970,71
+newtype HappyWrap20 HappyWrap2073,74
+happyIn20 happyIn2074,75
+happyOut20 happyOut2077,78
+newtype HappyWrap21 HappyWrap2180,81
+happyIn21 happyIn2181,82
+happyOut21 happyOut2184,85
+newtype HappyWrap22 HappyWrap2287,88
+happyIn22 happyIn2288,89
+happyOut22 happyOut2291,92
+newtype HappyWrap23 HappyWrap2394,95
+happyIn23 happyIn2395,96
+happyOut23 happyOut2398,99
+newtype HappyWrap24 HappyWrap24101,102
+happyIn24 happyIn24102,103
+happyOut24 happyOut24105,106
+newtype HappyWrap25 HappyWrap25108,109
+happyIn25 happyIn25109,110
+happyOut25 happyOut25112,113
+newtype HappyWrap26 HappyWrap26115,116
+happyIn26 happyIn26116,117
+happyOut26 happyOut26119,120
+newtype HappyWrap27 HappyWrap27122,123
+happyIn27 happyIn27123,124
+happyOut27 happyOut27126,127
+newtype HappyWrap28 HappyWrap28129,130
+happyIn28 happyIn28130,131
+happyOut28 happyOut28133,134
+newtype HappyWrap29 HappyWrap29136,137
+happyIn29 happyIn29137,138
+happyOut29 happyOut29140,141
+happyInTok happyInTok143,144
+happyOutTok happyOutTok146,147
+happyExpList happyExpList151,152
+happyExpListPerState happyExpListPerState155,156
+happyActOffsets happyActOffsets167,168
+happyGotoOffsets happyGotoOffsets170,171
+happyAdjustOffset happyAdjustOffset173,174
+happyDefActions happyDefActions176,177
+happyCheck happyCheck179,180
+happyTable happyTable182,183
+happyReduceArr happyReduceArr185,186
+happy_n_terms happy_n_terms231,232
+happy_n_nonterms happy_n_nonterms232,233
+happyReduce_12 happyReduce_12234,235
+happyReduction_12 happyReduction_12235,236
+happyReduce_13 happyReduce_13241,242
+happyReduction_13 happyReduction_13242,243
+happyReduce_14 happyReduce_14248,249
+happyReduction_14 happyReduction_14249,250
+happyReduce_15 happyReduce_15255,256
+happyReduction_15 (happy_x_4 `HappyStk`HappyStk256,257
+happyReduce_16 happyReduce_16267,268
+happyReduction_16 (happy_x_6 `HappyStk`HappyStk268,269
+happyReduce_17 happyReduce_17282,283
+happyReduction_17 (happy_x_6 `HappyStk`HappyStk283,284
+happyReduce_18 happyReduce_18297,298
+happyReduction_18 (happy_x_4 `HappyStk`HappyStk298,299
+happyReduce_19 happyReduce_19309,310
+happyReduction_19 (happy_x_4 `HappyStk`HappyStk310,311
+happyReduce_20 happyReduce_20321,322
+happyReduction_20 happyReduction_20322,323
+happyReduce_21 happyReduce_21331,332
+happyReduction_21 happyReduction_21332,333
+happyReduce_22 happyReduce_22341,342
+happyReduction_22 happyReduction_22342,343
+happyReduce_23 happyReduce_23351,352
+happyReduction_23 happyReduction_23352,353
+happyReduce_24 happyReduce_24358,359
+happyReduction_24 happyReduction_24359,360
+happyReduce_25 happyReduce_25364,365
+happyReduction_25 happyReduction_25365,366
+happyReduce_26 happyReduce_26370,371
+happyReduction_26 happyReduction_26371,372
+happyReduce_27 happyReduce_27376,377
+happyReduction_27 happyReduction_27377,378
+happyReduce_28 happyReduce_28384,385
+happyReduction_28 happyReduction_28385,386
+happyReduce_29 happyReduce_29392,393
+happyReduction_29 happyReduction_29393,394
+happyReduce_30 happyReduce_30399,400
+happyReduction_30 happyReduction_30400,401
+happyReduce_31 happyReduce_31405,406
+happyReduction_31 happyReduction_31406,407
+happyReduce_32 happyReduce_32411,412
+happyReduction_32 happyReduction_32412,413
+happyReduce_33 happyReduce_33420,421
+happyReduction_33 happyReduction_33421,422
+happyReduce_34 happyReduce_34430,431
+happyReduction_34 happyReduction_34431,432
+happyReduce_35 happyReduce_35437,438
+happyReduction_35 happyReduction_35438,439
+happyReduce_36 happyReduce_36447,448
+happyReduction_36 happyReduction_36448,449
+happyReduce_37 happyReduce_37456,457
+happyReduction_37 happyReduction_37457,458
+happyReduce_38 happyReduce_38463,464
+happyReduction_38 (happy_x_6 `HappyStk`HappyStk464,465
+happyReduce_39 happyReduce_39478,479
+happyReduction_39 (happy_x_6 `HappyStk`HappyStk479,480
+happyReduce_40 happyReduce_40493,494
+happyReduction_40 happyReduction_40494,495
+happyReduce_41 happyReduce_41503,504
+happyReduction_41 happyReduction_41504,505
+happyReduce_42 happyReduce_42510,511
+happyReduction_42 happyReduction_42511,512
+happyReduce_43 happyReduce_43516,517
+happyReduction_43 happyReduction_43517,518
+happyReduce_44 happyReduce_44523,524
+happyReduction_44 happyReduction_44524,525
+happyReduce_45 happyReduce_45532,533
+happyReduction_45 happyReduction_45533,534
+happyReduce_46 happyReduce_46541,542
+happyReduction_46 happyReduction_46542,543
+happyReduce_47 happyReduce_47546,547
+happyReduction_47 happyReduction_47547,548
+happyReduce_48 happyReduce_48553,554
+happyReduction_48 happyReduction_48554,555
+happyReduce_49 happyReduce_49563,564
+happyReduction_49 happyReduction_49564,565
+happyReduce_50 happyReduce_50573,574
+happyReduction_50 happyReduction_50574,575
+happyReduce_51 happyReduce_51578,579
+happyReduction_51 happyReduction_51579,580
+happyReduce_52 happyReduce_52585,586
+happyReduction_52 happyReduction_52586,587
+happyReduce_53 happyReduce_53595,596
+happyReduction_53 happyReduction_53596,597
+happyReduce_54 happyReduce_54602,603
+happyReduction_54 happyReduction_54603,604
+happyNewToken happyNewToken611,612
+happyError_ happyError_647,648
+happyThen happyThen650,651
+happyReturn happyReturn652,653
+happyThen1 happyThen1654,655
+happyReturn1 happyReturn1655,656
+happyError' happyError'657,658
+pExp1 pExp1659,660
+pExp3 pExp3662,663
+pExp pExp665,666
+pExp2 pExp2668,669
+pDecl pDecl671,672
+pPatt pPatt674,675
+pPatt1 pPatt1677,678
+pSummand pSummand680,681
+pListSummand pListSummand683,684
+pBranch pBranch686,687
+pListBranch pListBranch689,690
+pListIdent pListIdent692,693
+happySeq happySeq695,696
+happyError happyError698,699
+myLexer myLexer706,707
+data Happy_IntList Happy_IntList751,752
+data Happy_IntList = HappyCons HappyCons751,752
+infixr 9 `HappyStk`HappyStk792,793
+happyParse happyParse798,799
+happyAccept 0# tk st sts (_ `HappyStk`HappyStk806,807
+happyAccept happyAccept808,809
+happyDoAction happyDoAction816,817
+indexShortOffAddr indexShortOffAddr841,842
+happyLt happyLt853,854
+readArrayBit readArrayBit856,857
+data HappyAddr HappyAddr865,866
+data HappyAddr = HappyA# HappyA#865,866
+happyShift new_state 0# tk st sts stk@(x `HappyStk`HappyStk886,887
+happyShift happyShift891,892
+happySpecReduce_0 happySpecReduce_0896,897
+happySpecReduce_1 happySpecReduce_1901,902
+happySpecReduce_1 nt fn j tk _ sts@((HappyCons (st@(action)) (_))) (v1`HappyStk`HappyStk903,904
+happySpecReduce_2 happySpecReduce_2907,908
+happySpecReduce_2 nt fn j tk _ (HappyCons (_) (sts@((HappyCons (st@(action)) (_))))) (v1`HappyStk`HappyStk909,910
+happySpecReduce_3 happySpecReduce_3913,914
+happySpecReduce_3 nt fn j tk _ (HappyCons (_) ((HappyCons (_) (sts@((HappyCons (st@(action)) (_))))))) (v1`HappyStk`HappyStk915,916
+happyReduce happyReduce919,920
+happyMonadReduce happyMonadReduce927,928
+happyMonad2Reduce happyMonad2Reduce935,936
+happyDrop happyDrop952,953
+happyDropStk happyDropStk955,956
+happyDropStk n (x `HappyStk`HappyStk956,957
+happyGoto happyGoto962,963
+happyFail explist 0# tk old_st _ stk@(x `HappyStk`HappyStk976,977
+happyFail happyFail994,995
+notHappyAtAll notHappyAtAll1000,1001
+happyTcHack happyTcHack1007,1008
+happyDoSeq, happyDontSeq happyDontSeq1018,1019
+happyDoSeq,happyDoSeq1018,1019
+happyDontSeq happyDontSeq1020,1021
+
+./docs/references/MiniTT_Src/Core/Print.hs,1379
+module Core.Print Core.Print10,11
+printTree printTree17,18
+type Doc Doc20,21
+doc doc22,23
+render render25,26
+parenth parenth56,57
+concatS concatS59,60
+concatD concatD62,63
+replicateS replicateS65,66
+class Print Print70,71
+  prt prt71,72
+  prtList prtList72,73
+instance {-# OVERLAPPABLE #-} Print Print a => Print [a]75,76
+  prt prt76,77
+instance Print Print Char78,79
+  prt prt79,80
+  prtList prtList80,81
+mkEsc mkEsc82,83
+prPrec prPrec90,91
+instance Print Print Integer93,94
+  prt prt94,95
+instance Print Print Double96,97
+  prt prt97,98
+instance Print Print Core-Abs-Ident99,100
+  prt prt100,101
+  prtList prtList101,102
+instance Print Print Core-Abs-CaseTk104,105
+  prt prt105,106
+instance Print Print Core-Abs-DataTk107,108
+  prt prt108,109
+instance Print Print Core-Abs-Exp110,111
+  prt prt111,112
+instance Print Print Core-Abs-Decl130,131
+  prt prt131,132
+instance Print Print Core-Abs-Patt135,136
+  prt prt136,137
+instance Print Print Core-Abs-Summand141,142
+  prt prt142,143
+  prtList prtList144,145
+instance Print Print [Core-Abs-Summand]148,149
+  prt prt149,150
+instance Print Print Core-Abs-Branch151,152
+  prt prt152,153
+  prtList prtList154,155
+instance Print Print [Core-Abs-Branch]158,159
+  prt prt159,160
+instance Print Print [Core-Abs-Ident]161,162
+  prt prt162,163
+
+./docs/references/MiniTT_Src/Core/Skel.hs,330
+module Core.Skel Core.Skel2,3
+type Err Err6,7
+type Result Result7,8
+failure failure9,10
+transIdent transIdent12,13
+transCaseTk transCaseTk15,16
+transDataTk transDataTk18,19
+transExp transExp21,22
+transDecl transDecl40,41
+transPatt transPatt44,45
+transSummand transSummand49,50
+transBranch transBranch52,53
+
+./docs/references/code_1.hs,931
+type Id Id0,1
+data Exp Exp2,3
+data Exp = Var Var2,3
+data Exp = Var Id | App App2,3
+data Exp = Var Id | App Exp Exp | Type Type2,3
+data Exp = Var Id | App Exp Exp | Type | Abs Abs2,3
+data Exp = Var Id | App Exp Exp | Type | Abs Id Exp | Pi Pi2,3
+data Exp = Var Id | App Exp Exp | Type | Abs Id Exp | Pi Id Exp Exp | Let Let2,3
+data Val Val4,5
+data Val = VGen VGen4,5
+data Val = VGen Int | VApp VApp4,5
+data Val = VGen Int | VApp Val Val | VType VType4,5
+data Val = VGen Int | VApp Val Val | VType | VAbs VAbs4,5
+data Val = VGen Int | VApp Val Val | VType | VAbs FVal | VPi VPi4,5
+type FVal FVal6,7
+type Env Env8,9
+update update10,11
+lookUp lookUp13,14
+fapp fapp21,22
+app app22,23
+eval eval23,24
+fapp fapp25,26
+app app27,28
+eval eval30,31
+eqVal eqVal41,42
+checkExp checkExp57,58
+inferExp inferExp58,59
+checkType checkType59,60
+checkExp checkExp64,65
+inferExp inferExp79,80
+
+./docs/references/MTT.hs,1352
+module MTT MTT2,3
+type Brc Brc4,5
+type Lb Lb6,7
+data Exp Exp8,9
+   Comp Comp9,10
+ | App App10,11
+ | Pi Pi11,12
+ | Lam Lam12,13
+ | Def Def13,14
+ | Var Var14,15
+ | Ref Ref15,16
+ | UU16,17
+ | Con Con17,18
+ | Fun Fun18,19
+ | Sum Sum19,20
+ | TopTop20,21
+data Env Env23,24
+data Env = Nil Nil23,24
+data Env = Nil | Pair Pair23,24
+data Env = Nil | Pair Env Exp | PDef PDef23,24
+upds upds26,27
+eval eval29,30
+evals evals39,40
+app app42,43
+getE getE47,48
+data G G51,52
+data G a = Success Success51,52
+data G a = Success a | Fail Fail51,52
+instance  Monad Monad G53,54
+    (S(Successx)54,55
+    Fail Fail55,56
+    return return56,57
+    fail fail57,58
+eqG eqG59,60
+check check62,63
+checkT checkT63,64
+checkI checkI64,65
+checkD checkD65,66
+checkTs checkTs67,68
+checkTUs checkTUs75,76
+checkD checkD81,82
+checkT checkT86,87
+fix fix95,96
+check check101,102
+vars vars123,124
+addC addC126,127
+checkI checkI130,131
+extPi extPi144,145
+extSG extSG147,148
+get get153,154
+getG getG157,158
+checks checks161,162
+data VExp VExp172,173
+   VGen VGen173,174
+ | VApp VApp174,175
+ | VPi VPi175,176
+ | VLam VLam176,177
+ | VCon VCon177,178
+ | VFun VFun178,179
+ | VSum VSum179,180
+ | VUVU180,181
+ | VTopVTop181,182
+reify reify184,185
+reifEnv reifEnv200,201
+
+./app/TypeChecker.hs,422
+module TypeChecker TypeChecker6,7
+type TypeCheckM TypeCheckM22,23
+checkInfer checkInfer25,26
+checkT checkT27,28
+checkConvert checkConvert29,30
+checkDef checkDef31,32
+checkDec checkDec33,34
+checkInfer checkInfer35,36
+checkT checkT55,56
+checkConvert checkConvert81,82
+checkDef checkDef98,99
+checkDec checkDec103,104
+runTypeCheckCtx runTypeCheckCtx107,108
+checkExpValidity checkExpValidity132,133
+
+./app/TransUtil.hs,127
+module TransUtil TransUtil6,7
+type ConvertM ConvertM16,17
+absCtx absCtx20,21
+absDecl absDecl24,25
+absExp absExp44,45
+
+./app/CmdUtil.hs,310
+module CmdUtilCmdUtil6,7
+data Cmd Cmd13,14
+data Cmd = Help Help13,14
+data Cmd = Help | Exit Exit13,14
+data Cmd = Help | Exit | ShowCtx ShowCtx13,14
+data Cmd = Help | Exit | ShowCtx | HeadEval HeadEval13,14
+data Cmd = Help | Exit | ShowCtx | HeadEval Exp | Unfold Unfold13,14
+getCmd getCmd16,17
+
+./app/Main.hs,73
+module Main Main6,7
+main main14,15
+repl repl17,18
+loop loop22,23
+
+./app/Core/Abs.hs,362
+module Core.Abs Core.Abs3,4
+newtype Id Id8,9
+data Context Context11,12
+data Context = Ctx Ctx11,12
+data CExpCExp14,15
+    = CUCU15,16
+    | CVar CVar16,17
+    | CApp CApp17,18
+    | CArr CArr18,19
+    | CPi CPi19,20
+    | CWhere CWhere20,21
+data CDecl CDecl23,24
+data CDecl = CDec CDec23,24
+data CDecl = CDec Id CExp | CDef CDef23,24
+
+./app/Core/Lex.hs,2085
+module Core.Lex Core.Lex6,7
+alex_tab_size alex_tab_size28,29
+alex_base alex_base30,31
+alex_table alex_table34,35
+alex_check alex_check38,39
+alex_deflt alex_deflt42,43
+alex_accept alex_accept46,47
+alex_actions alex_actions81,82
+tok tok89,90
+data Tok Tok92,93
+   TS TS93,94
+ | TL TL94,95
+ | TI TI95,96
+ | TV TV96,97
+ | TD TD97,98
+ | TC TC98,99
+ | T_Id T_Id99,100
+data Token Token103,104
+   PT PT104,105
+ | Err Err105,106
+printPosn printPosn108,109
+tokenPos tokenPos111,112
+tokenPosn tokenPosn115,116
+tokenLineCol tokenLineCol119,120
+posLineCol posLineCol122,123
+mkPosToken mkPosToken125,126
+tokenText tokenText128,129
+prToken prToken139,140
+data BTree BTree142,143
+data BTree = N N142,143
+data BTree = N | B B142,143
+eitherResIdent eitherResIdent144,145
+resWords resWords152,153
+unescapeInitTail unescapeInitTail157,158
+data Posn Posn175,176
+data Posn = Pn Pn175,176
+alexStartPos alexStartPos178,179
+alexMove alexMove181,182
+type Byte Byte186,187
+type AlexInput AlexInput188,189
+tokens tokens193,194
+alexGetByte alexGetByte204,205
+alexInputPrevChar alexInputPrevChar214,215
+utf8Encode utf8Encode218,219
+alex_action_3 alex_action_3238,239
+alex_action_4 alex_action_4239,240
+alex_action_5 alex_action_5240,241
+data AlexAddr AlexAddr295,296
+data AlexAddr = AlexA# AlexA#295,296
+uncheckedShiftL# uncheckedShiftL#298,299
+alexIndexInt16OffAddr alexIndexInt16OffAddr302,303
+alexIndexInt32OffAddr alexIndexInt32OffAddr323,324
+quickIndex quickIndex349,350
+data AlexReturn AlexReturn361,362
+  = AlexEOFAlexEOF362,363
+  | AlexError AlexError363,364
+  | AlexSkip AlexSkip364,365
+  | AlexToken AlexToken365,366
+alexScan alexScan368,369
+alexScanUser alexScanUser371,372
+alex_scan_tkn alex_scan_tkn402,403
+data AlexLastAccAlexLastAcc449,450
+  = AlexNoneAlexNone450,451
+  | AlexLastAcc AlexLastAcc451,452
+  | AlexLastSkip AlexLastSkip452,453
+data AlexAcc AlexAcc454,455
+  = AlexAccNoneAlexAccNone455,456
+  | AlexAcc AlexAcc456,457
+  | AlexAccSkipAlexAccSkip457,458
+
+./app/Core/ErrM.hs,890
+module Core.ErrM Core.ErrM18,19
+type Err Err24,25
+pattern Bad Bad26,27
+pattern Bad msg msg26,27
+pattern Ok Ok27,28
+pattern Ok  a a27,28
+instance MonadFail MonadFail Err30,31
+  fail fail31,32
+instance Alternative Alternative Err34,35
+  empty empty35,36
+  (<(<|>)36,37
+instance MonadPlus MonadPlus Err39,40
+  mzero mzero40,41
+  mplus mplus41,42
+module Core.ErrM Core.ErrM52,53
+data Err Err59,60
+data Err a = Ok Ok59,60
+data Err a = Ok a | Bad Bad59,60
+instance Monad Monad Err62,63
+  return return63,64
+  Ok Ok64,65
+  Bad Bad65,66
+instance Applicative Applicative Err67,68
+  pure pure68,69
+  (B(Bads)69,70
+  (O(Okf)70,71
+instance Functor Functor Err72,73
+  fmap fmap73,74
+instance MonadPlus MonadPlus Err75,76
+  mzero mzero76,77
+  mplus mplus77,78
+instance Alternative Alternative Err80,81
+  empty empty81,82
+  (<(<|>)82,83
+
+./app/Core/Par.hs,4699
+module Core.ParCore.Par6,7
+newtype HappyAbsSyn HappyAbsSyn23,24
+type HappyAny HappyAny25,26
+newtype HappyWrap6 HappyWrap629,30
+happyIn6 happyIn630,31
+happyOut6 happyOut633,34
+newtype HappyWrap7 HappyWrap736,37
+happyIn7 happyIn737,38
+happyOut7 happyOut740,41
+newtype HappyWrap8 HappyWrap843,44
+happyIn8 happyIn844,45
+happyOut8 happyOut847,48
+newtype HappyWrap9 HappyWrap950,51
+happyIn9 happyIn951,52
+happyOut9 happyOut954,55
+newtype HappyWrap10 HappyWrap1057,58
+happyIn10 happyIn1058,59
+happyOut10 happyOut1061,62
+newtype HappyWrap11 HappyWrap1164,65
+happyIn11 happyIn1165,66
+happyOut11 happyOut1168,69
+newtype HappyWrap12 HappyWrap1271,72
+happyIn12 happyIn1272,73
+happyOut12 happyOut1275,76
+newtype HappyWrap13 HappyWrap1378,79
+happyIn13 happyIn1379,80
+happyOut13 happyOut1382,83
+happyInTok happyInTok85,86
+happyOutTok happyOutTok88,89
+happyExpList happyExpList93,94
+happyExpListPerState happyExpListPerState97,98
+happyActOffsets happyActOffsets109,110
+happyGotoOffsets happyGotoOffsets112,113
+happyAdjustOffset happyAdjustOffset115,116
+happyDefActions happyDefActions118,119
+happyCheck happyCheck121,122
+happyTable happyTable124,125
+happyReduceArr happyReduceArr127,128
+happy_n_terms happy_n_terms146,147
+happy_n_nonterms happy_n_nonterms147,148
+happyReduce_3 happyReduce_3149,150
+happyReduction_3 happyReduction_3150,151
+happyReduce_4 happyReduce_4156,157
+happyReduction_4 happyReduction_4157,158
+happyReduce_5 happyReduce_5163,164
+happyReduction_5 happyReduction_5164,165
+happyReduce_6 happyReduce_6169,170
+happyReduction_6 happyReduction_6170,171
+happyReduce_7 happyReduce_7176,177
+happyReduction_7 happyReduction_7177,178
+happyReduce_8 happyReduce_8183,184
+happyReduction_8 happyReduction_8184,185
+happyReduce_9 happyReduce_9192,193
+happyReduction_9 happyReduction_9193,194
+happyReduce_10 happyReduce_10199,200
+happyReduction_10 happyReduction_10200,201
+happyReduce_11 happyReduce_11209,210
+happyReduction_11 (happy_x_6 `HappyStk`HappyStk210,211
+happyReduce_12 happyReduce_12224,225
+happyReduction_12 (happy_x_8 `HappyStk`HappyStk225,226
+happyReduce_13 happyReduce_13242,243
+happyReduction_13 happyReduction_13243,244
+happyReduce_14 happyReduce_14249,250
+happyReduction_14 happyReduction_14250,251
+happyReduce_15 happyReduce_15259,260
+happyReduction_15 (happy_x_5 `HappyStk`HappyStk260,261
+happyReduce_16 happyReduce_16273,274
+happyReduction_16 happyReduction_16274,275
+happyReduce_17 happyReduce_17278,279
+happyReduction_17 happyReduction_17279,280
+happyReduce_18 happyReduce_18288,289
+happyReduction_18 happyReduction_18289,290
+happyNewToken happyNewToken297,298
+happyError_ happyError_316,317
+happyThen happyThen319,320
+happyReturn happyReturn321,322
+happyThen1 happyThen1323,324
+happyReturn1 happyReturn1324,325
+happyError' happyError'326,327
+pContext pContext328,329
+pCExp pCExp331,332
+pCDecl pCDecl334,335
+happySeq happySeq337,338
+happyError happyError340,341
+myLexer myLexer348,349
+data Happy_IntList Happy_IntList393,394
+data Happy_IntList = HappyCons HappyCons393,394
+infixr 9 `HappyStk`HappyStk434,435
+happyParse happyParse440,441
+happyAccept 0# tk st sts (_ `HappyStk`HappyStk448,449
+happyAccept happyAccept450,451
+happyDoAction happyDoAction458,459
+indexShortOffAddr indexShortOffAddr483,484
+happyLt happyLt495,496
+readArrayBit readArrayBit498,499
+data HappyAddr HappyAddr507,508
+data HappyAddr = HappyA# HappyA#507,508
+happyShift new_state 0# tk st sts stk@(x `HappyStk`HappyStk528,529
+happyShift happyShift533,534
+happySpecReduce_0 happySpecReduce_0538,539
+happySpecReduce_1 happySpecReduce_1543,544
+happySpecReduce_1 nt fn j tk _ sts@((HappyCons (st@(action)) (_))) (v1`HappyStk`HappyStk545,546
+happySpecReduce_2 happySpecReduce_2549,550
+happySpecReduce_2 nt fn j tk _ (HappyCons (_) (sts@((HappyCons (st@(action)) (_))))) (v1`HappyStk`HappyStk551,552
+happySpecReduce_3 happySpecReduce_3555,556
+happySpecReduce_3 nt fn j tk _ (HappyCons (_) ((HappyCons (_) (sts@((HappyCons (st@(action)) (_))))))) (v1`HappyStk`HappyStk557,558
+happyReduce happyReduce561,562
+happyMonadReduce happyMonadReduce569,570
+happyMonad2Reduce happyMonad2Reduce577,578
+happyDrop happyDrop594,595
+happyDropStk happyDropStk597,598
+happyDropStk n (x `HappyStk`HappyStk598,599
+happyGoto happyGoto604,605
+happyFail explist 0# tk old_st _ stk@(x `HappyStk`HappyStk618,619
+happyFail happyFail636,637
+notHappyAtAll notHappyAtAll642,643
+happyTcHack happyTcHack649,650
+happyDoSeq, happyDontSeq happyDontSeq660,661
+happyDoSeq,happyDoSeq660,661
+happyDontSeq happyDontSeq662,663
+
+./app/Core/Print.hs,931
+module Core.Print Core.Print10,11
+printTree printTree17,18
+type Doc Doc20,21
+doc doc22,23
+render render25,26
+parenth parenth56,57
+concatS concatS59,60
+concatD concatD62,63
+replicateS replicateS65,66
+class Print Print70,71
+  prt prt71,72
+  prtList prtList72,73
+instance {-# OVERLAPPABLE #-} Print Print a => Print [a]75,76
+  prt prt76,77
+instance Print Print Char78,79
+  prt prt79,80
+  prtList prtList80,81
+mkEsc mkEsc82,83
+prPrec prPrec90,91
+instance Print Print Integer93,94
+  prt prt94,95
+instance Print Print Double96,97
+  prt prt97,98
+instance Print Print Core-Abs-Id99,100
+  prt prt100,101
+instance Print Print Core-Abs-Context102,103
+  prt prt103,104
+instance Print Print Core-Abs-CExp106,107
+  prt prt107,108
+instance Print Print Core-Abs-CDecl115,116
+  prt prt116,117
+  prtList prtList119,120
+instance Print Print [Core-Abs-CDecl]122,123
+  prt prt123,124
+
+./app/Core/Layout.hs,1003
+module Core.Layout Core.Layout0,1
+topLayout topLayout12,13
+layoutWords, layoutStopWords layoutStopWords15,16
+layoutWords,layoutWords15,16
+layoutStopWords layoutStopWords17,18
+layoutOpen, layoutClose, layoutSep layoutSep22,23
+layoutOpen, layoutClose,layoutClose22,23
+layoutOpen,layoutOpen22,23
+layoutClose layoutClose24,25
+layoutSep layoutSep25,26
+resolveLayout resolveLayout28,29
+data BlockBlock157,158
+   = Implicit Implicit158,159
+   | ExplicitExplicit159,160
+indentation indentation163,164
+isImplicit isImplicit168,169
+type Position Position172,173
+addTokens addTokens175,176
+addToken addToken183,184
+afterPrev afterPrev192,193
+nextPos nextPos196,197
+incrGlobal incrGlobal204,205
+sToken sToken214,215
+position position235,236
+line line241,242
+column column245,246
+isTokenIn isTokenIn249,250
+isLayout isLayout255,256
+isStop isStop259,260
+isLayoutOpen isLayoutOpen263,264
+isLayoutClose isLayoutClose267,268
+tokenLength tokenLength271,272
+
+./app/Core/Skel.hs,208
+module Core.Skel Core.Skel2,3
+type Err Err6,7
+type Result Result7,8
+failure failure9,10
+transId transId12,13
+transContext transContext15,16
+transCExp transCExp18,19
+transCDecl transCDecl26,27
+
+./app/Base.hs,1639
+module Base Base7,8
+data Exp Exp16,17
+data Exp = UU16,17
+         | Var Var17,18
+         | App App18,19
+         | Abs Abs19,20
+         | Where Where20,21
+         | Clos Clos21,22
+p_bar, p_low, p_high p_high25,26
+p_bar, p_low,p_low25,26
+p_bar,p_bar25,26
+p_low p_low27,28
+p_high p_high28,29
+instance Show Show Exp30,31
+  showsPrec showsPrec32,33
+type Val Val58,59
+data Decl Decl61,62
+data Decl = Dec Dec61,62
+data Decl = Dec String Exp | Def Def61,62
+instance Show Show Decl63,64
+  showsPrec showsPrec64,65
+type AbsCtx AbsCtx69,70
+data Env Env72,73
+data Env = ENilENil72,73
+         | EConsVar EConsVar73,74
+         | EConsDef EConsDef74,75
+instance Show Show Env77,78
+  showsPrec showsPrec78,79
+data Cont Cont84,85
+data Cont = CNilCNil84,85
+          | CConsVar CConsVar85,86
+          | CConsDef CConsDef86,87
+data TypeCheckError TypeCheckError89,90
+data TypeCheckError = InvalidApp InvalidApp89,90
+                    | DupDecl DupDecl90,91
+                    | VarNotbound VarNotbound91,92
+                    | TypeInferErr TypeInferErr92,93
+                    | NotConvertible NotConvertible93,94
+                    | ExtendedErr ExtendedErr94,95
+newtype G G98,99
+newtype G e s a = G {mkg mkg98,99
+runG runG102,103
+idStr idStr106,107
+idPos idPos110,111
+type ErrorText ErrorText113,114
+errorText errorText116,117
+consEVar consEVar127,128
+consCVar consCVar132,133
+eval eval137,138
+appVal appVal147,148
+envCont envCont153,154
+getVal getVal159,160
+getType getType169,170
+varsCont varsCont179,180
+freshVar freshVar185,186
+
+./Setup.hs,15
+main main1,2

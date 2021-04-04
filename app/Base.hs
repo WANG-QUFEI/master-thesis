@@ -9,7 +9,7 @@ module Base where
 
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.Map as Map
+import qualified Data.Map             as Map
 
 import           Core.Abs
 
@@ -47,9 +47,11 @@ instance Show Exp where
                      Var _ -> p_low
                      _     -> p_high
           in showsPrec p1 e1 . showString " " . showsPrec p2 e2
-        Abs x a e -> case x of
-          "" -> showsPrec p_low a . showString " -> " . showsPrec p_low e
-          _  -> showString "[ " . showString (x ++ " : ") . showsPrec p_low a . showString " ] " . showsPrec p_low e
+        Abs "" U e -> showString "* -> " . showsPrec p_low e
+        Abs "" (Var x) e -> showString x . showString " -> " . showsPrec p_low e
+        Abs "" a@(App _ _) e -> showsPrec p_low a . showString " -> " . showsPrec p_low e
+        Abs "" a b -> showsPrec p_high a . showString " -> " . showsPrec p_low b
+        Abs x a e -> showString "[ " . showString (x ++ " : ") . showsPrec p_low a . showString " ] " . showsPrec p_low e
         Where x a e e' ->
           showString "[ " . showString (x ++ " : ") . showsPrec p_low a .
             showString " = " . showsPrec p_low e . showString " ] " . showsPrec p_low e'
@@ -78,8 +80,8 @@ data Env = ENil
 instance Show Env where
   showsPrec _ r = showList (reverse . toList $ r)
     where toList :: Env -> [Decl]
-          toList ENil = []
-          toList (EConsVar r x v) = (Dec x v) : (toList r)
+          toList ENil               = []
+          toList (EConsVar r x v)   = (Dec x v) : (toList r)
           toList (EConsDef r x a e) = (Def x a e) : (toList r)
 -- | A type-checking context related with an environment
 data Cont = CNil
@@ -127,33 +129,33 @@ errorText err = case err of
 -- | extend an environment with a variable and its value
 consEVar :: Env -> String -> Val -> Env
 consEVar r "" v = r
-consEVar r x v = EConsVar r x v
+consEVar r x v  = EConsVar r x v
 
 -- | extend a type-checking context with a variable and its type
 consCVar :: Cont -> String -> Exp -> Cont
 consCVar c "" _ = c
-consCVar c x a = CConsVar c x a
+consCVar c x a  = CConsVar c x a
 
 -- | semantics about how an expression should be evaluated
 eval :: Exp -> Env -> Val
 eval e r = case e of
-  U               -> U
-  Var x           -> getVal x r
-  App e1 e2       -> appVal (eval e1 r) (eval e2 r)
-  Abs _ _ _       -> Clos e r
-  Where x a e e'  -> eval e' (EConsDef r x a e)
-  Clos _ _        -> e
+  U              -> U
+  Var x          -> getVal x r
+  App e1 e2      -> appVal (eval e1 r) (eval e2 r)
+  Abs _ _ _      -> Clos e r
+  Where x a e e' -> eval e' (EConsDef r x a e)
+  Clos _ _       -> e
 
 -- | application operation on values
 appVal :: Val -> Val -> Val
 appVal v1 v2 = case v1 of
   Clos (Abs x a e) r -> eval e (consEVar r x v2)
-  _ -> App v1 v2
+  _                  -> App v1 v2
 
 -- | get the environment related with a type-checking context
 envCont :: Cont -> Env
-envCont CNil = ENil
-envCont (CConsVar c x a) = envCont c
+envCont CNil               = ENil
+envCont (CConsVar c x a)   = envCont c
 envCont (CConsDef c x a e) = EConsDef (envCont c) x a e
 
 -- | get variable value
@@ -178,8 +180,8 @@ getType (CConsDef c x' a _) x
 
 -- | get all the variables of a context
 varsCont :: Cont -> [String]
-varsCont CNil = []
-varsCont (CConsVar c x _) = x : (varsCont c)
+varsCont CNil               = []
+varsCont (CConsVar c x _)   = x : (varsCont c)
 varsCont (CConsDef c x _ _) = x : (varsCont c)
 
 -- | generate a fresh name based on a list of names
