@@ -22,7 +22,7 @@ main = runInputT defaultSettings repl
 repl :: InputT IO ()
 repl = do
   outputStrLn "~ welcome, type command ':?' for the usage of this program, ':q' to quit"
-  loop (Ctx []) CNil U
+  loop (Ctx []) [] U
 
 loop :: Context -> Cont -> Exp -> InputT IO ()
 loop cc ac e = do
@@ -67,8 +67,16 @@ loop cc ac e = do
         Right e' -> do
           outputStrLn (okayMsg "expression type checked!")
           loop cc ac e'
-      Right HeadEval -> do
-        let e' = headEval ac e
+      Right (GetType ce) -> case checkExpValidity cc ac ce of
+        Left tce -> do
+          outputStr (typeCheckErrMsg tce)
+          loop cc ac e
+        Right e' -> do
+          let e1 = typeOf ac e'
+          outputStrLn $ infoMsg (show e1)
+          loop cc ac e
+      Right HeadRed -> do
+        let e' = headRed ac e
         outputStrLn $ infoMsg (show e')
         loop cc ac e'
       Right (Unfold xs) -> do
@@ -91,6 +99,7 @@ usage = let msg = [ " Commands available from the prompt:"
                   , "   :u(nfold) [<variable>]    evaluate the expression in the context with the list of variables("
                   , "                               definitions) unlocked, make the reuslt be the new expression of the"
                   , "                               REPL context"
+                  , "   :t <exp>                  get the type of an expression"
                   ]
         in outputStr (unlines msg)
 

@@ -15,11 +15,10 @@ import           Core.Abs
 
 -- | abstract syntax for expressions, extended with closure as values
 data Exp = U
-         | Var    String
-         | App    Exp Exp
-         | Abs    String Exp Exp
-         | Where  String Exp Exp Exp
-         | Clos   Exp Env
+         | Var String
+         | App Exp Exp
+         | Abs Decl Exp
+         | Clos Exp Env
          deriving (Eq)
 
 -- | constants used to control the 'show' behaviour
@@ -47,29 +46,27 @@ instance Show Exp where
                      Var _ -> p_low
                      _     -> p_high
           in showsPrec p1 e1 . showString " " . showsPrec p2 e2
-        Abs "" U e -> showString "* -> " . showsPrec p_low e
-        Abs "" (Var x) e -> showString x . showString " -> " . showsPrec p_low e
-        Abs "" a@(App _ _) e -> showsPrec p_low a . showString " -> " . showsPrec p_low e
-        Abs "" a b -> showsPrec p_high a . showString " -> " . showsPrec p_low b
-        Abs x a e -> showString "[ " . showString (x ++ " : ") . showsPrec p_low a . showString " ] " . showsPrec p_low e
-        Where x a e e' ->
-          showString "[ " . showString (x ++ " : ") . showsPrec p_low a .
-            showString " = " . showsPrec p_low e . showString " ] " . showsPrec p_low e'
-        Clos e r -> showsPrec p_low e . showString " << " . showsPrec p_low r . showString " >> "
+        Abs (Dec "" a) e -> case a of
+                              Abs _ _ -> showsPrec p_high a . showString " -> " . showsPrec p_low e
+                              _       -> showsPrec p_low a . showString " -> " . showsPrec p_low e
+        Abs d@(Dec x _) e  -> showString "[ " . showsPrec p_bar d . showString " ] " . showsPrec p_low e
+        Abs d@(Def _ _ _) e -> showString "[ " . showsPrec p_bar d . showString " ] " . showsPrec p_low e
+        Clos e r -> showsPrec p_low e . showString " { " . showsPrec p_low r . showString " } "
 
 -- | the syntax for 'Exp' is also used as value in this language
 type Val = Exp
 
 -- | abstract syntax for declarations
-data Decl = Dec String Exp | Def String Exp Exp
+data Decl = Dec String Exp | Def String Exp Exp deriving (Eq)
 
 instance Show Decl where
   showsPrec _ d = case d of
+    Dec "" a  -> showsPrec p_bar a
     Dec x a   -> showString (x ++ " : ") . showsPrec p_bar a
     Def x a e -> showString (x ++ " : ") . showsPrec p_bar a . showString " = " . showsPrec p_bar e
 
--- | abstract context after the conversion of the concrete context
-type AbsCtx = [Decl]
+-- | A type-checking context related with an environment
+type Cont = [Decl]
 
 -- | environment
 data Env = ENil
@@ -83,11 +80,6 @@ instance Show Env where
           toList ENil               = []
           toList (EConsVar r x v)   = (Dec x v) : (toList r)
           toList (EConsDef r x a e) = (Def x a e) : (toList r)
--- | A type-checking context related with an environment
-data Cont = CNil
-          | CConsVar Cont String Exp
-          | CConsDef Cont String Exp Exp
-          deriving (Show)
 
 data TypeCheckError = InvalidApp     Exp
                     | DupDecl        Id Id
@@ -134,29 +126,29 @@ consEVar r x v  = EConsVar r x v
 -- | extend a type-checking context with a variable and its type
 consCVar :: Cont -> String -> Exp -> Cont
 consCVar c "" _ = c
-consCVar c x a  = CConsVar c x a
+consCVar c x a  = (Dec x a) : c
 
 -- | semantics about how an expression should be evaluated
 eval :: Exp -> Env -> Val
 eval e r = case e of
-  U              -> U
-  Var x          -> getVal x r
-  App e1 e2      -> appVal (eval e1 r) (eval e2 r)
-  Abs _ _ _      -> Clos e r
-  Where x a e e' -> eval e' (EConsDef r x a e)
-  Clos _ _       -> e
+  U                  -> U
+  Var x              -> getVal x r
+  App e1 e2          -> appVal (eval e1 r) (eval e2 r)
+  Abs (Dec _ _) _    -> Clos e r
+  Abs (Def x a e) e' -> eval e' (EConsDef r x a e)
+  Clos _ _           -> e
 
 -- | application operation on values
 appVal :: Val -> Val -> Val
 appVal v1 v2 = case v1 of
-  Clos (Abs x a e) r -> eval e (consEVar r x v2)
-  _                  -> App v1 v2
+  Clos (Abs (Dec x _) e) r -> eval e (consEVar r x v2)
+  _                        -> App v1 v2
 
 -- | get the environment related with a type-checking context
 envCont :: Cont -> Env
-envCont CNil               = ENil
-envCont (CConsVar c x a)   = envCont c
-envCont (CConsDef c x a e) = EConsDef (envCont c) x a e
+envCont []                = ENil
+envCont ((Dec _ _) : c)   = envCont c
+envCont ((Def x a e) : c) = EConsDef (envCont c) x a e
 
 -- | get variable value
 getVal :: String -> Env -> Val
@@ -170,19 +162,20 @@ getVal x (EConsDef r x' a e)
 
 -- | get the type of a variable in a given context
 getType :: Cont -> String -> Maybe Val
-getType CNil _ = Nothing
-getType (CConsVar c x' a) x
+getType [] _ = Nothing
+getType ((Dec x' a) : c) x
   | x' == x = Just $ eval a (envCont c)
   | otherwise = getType c x
-getType (CConsDef c x' a _) x
+getType ((Def x' a _) : c) x
   | x' == x = Just $ eval a (envCont c)
   | otherwise = getType c x
 
 -- | get all the variables of a context
 varsCont :: Cont -> [String]
-varsCont CNil               = []
-varsCont (CConsVar c x _)   = x : (varsCont c)
-varsCont (CConsDef c x _ _) = x : (varsCont c)
+varsCont c = map f c
+  where f :: Decl -> String
+        f (Dec x _)    = x
+        f (Def x _ _ ) = x
 
 -- | generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String

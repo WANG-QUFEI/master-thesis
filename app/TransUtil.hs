@@ -8,17 +8,17 @@ module TransUtil where
 
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.Map as Map
+import qualified Data.Map             as Map
 
 import           Base
 import           Core.Abs
 
--- | monad for converting 
+-- | monad for converting
 type ConvertM a = G TypeCheckError (Map.Map String Id) a
 
 -- |transform a concrete context into its abstract context,
 -- check proper declaration and reference of variables at the same time
-absCtx :: Context -> ConvertM AbsCtx
+absCtx :: Context -> ConvertM [Decl]
 absCtx (Ctx xs) = mapM absDecl xs
 
 -- |transform a concrete declaration (or definition) into its abstract form
@@ -57,7 +57,7 @@ absExp e = case e of
   CArr e1 e2 -> do
     e1' <- absExp e1
     e2' <- absExp e2
-    return $ Abs "" e1' e2'
+    return $ Abs (Dec "" e1') e2'
   CPi id e1 e2 -> do
     m <- get
     case Map.lookup (idStr id) m of
@@ -67,7 +67,7 @@ absExp e = case e of
         put (Map.insert (idStr id) id m)
         e2' <- absExp e2
         put m
-        return $ Abs (idStr id) e1' e2'
+        return $ Abs (Dec (idStr id) e1') e2'
   CWhere id e1 e2 e3 -> do
     m <- get
     case Map.lookup (idStr id) m of
@@ -78,5 +78,5 @@ absExp e = case e of
         e2' <- absExp e2
         e3' <- absExp e3
         put m
-        return $ Where (idStr id) e1' e2' e3'
+        return $ Abs (Def (idStr id) e1' e2') e3'
 
