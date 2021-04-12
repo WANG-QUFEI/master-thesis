@@ -2,6 +2,5 @@
 
 ### Usage
   * To build the program, run command 'stack build' under the root directory
-  * After a successful building, run 'stack exec -- siminitt --help' to view the usage information
-  * As an example of running the program, run command 'stack exec -- siminitt bnfc/sample.smtt' at the base directory
-    * or use './run.sh'
+  * After a successful building, use the command 'stack exec -- siminitt' or the script 'run.sh' to run the application
+  * A sample file of this language is 'test/loop4.smtt'. After launching the program, use ':l test/loop4.smtt' to load this file and experiment with the evaluation operations.
