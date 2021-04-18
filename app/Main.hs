@@ -79,6 +79,9 @@ loop cc ac e = do
         let e' = headRed ac e
         outputStrLn $ infoMsg (show e')
         loop cc ac e'
+      Right ExpEval -> do
+        let v = totalEval ac e
+        outputStrLn $ infoMsg (show v)
       Right (Unfold xs) -> do
         let e' = unfold ac xs e
         outputStrLn $ infoMsg ("evaluate the current expression with the following definitions unlocked: " ++ show xs)
@@ -94,8 +97,9 @@ usage = let msg = [ " Commands available from the prompt:"
                   , "                               context of the REPL context when successful"
                   , "   :c(heck) <exp>            type check an expression, let it be the new expression of the"
                   , "                               REPL context when successful"
-                  , "   :e(val)                   apply head reduction on the expression of the REPL context, make"
-                  , "                               the result be the new expression in of the REPL context"
+                  , "   :hred                     apply head reduction on the expression of the REPL context, make"
+                  , "                               the result to be the new expression in of the REPL context"
+                  , "   :eval                     evaluate the current expression with all constants available"
                   , "   :u(nfold) [<variable>]    evaluate the expression in the context with the list of variables("
                   , "                               definitions) unlocked, make the reuslt be the new expression of the"
                   , "                               REPL context"

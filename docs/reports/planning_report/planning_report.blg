@@ -1,0 +1,46 @@
+This is BibTeX, Version 0.99d (TeX Live 2020/Arch Linux)
+Capacity: max_strings=100000, hash_size=100000, hash_prime=85009
+The top-level auxiliary file: planning_report.aux
+The style file: ieeetr.bst
+Database file #1: my_bib.bib
+You've used 6 entries,
+            1876 wiz_defined-function locations,
+            515 strings with 4505 characters,
+and the built_in function-call counts, 1939 in all, are:
+= -- 196
+> -- 61
+< -- 0
++ -- 23
+- -- 17
+* -- 133
+:= -- 263
+add.period$ -- 6
+call.type$ -- 6
+change.case$ -- 6
+chr.to.int$ -- 0
+cite$ -- 6
+duplicate$ -- 105
+empty$ -- 191
+format.name$ -- 17
+if$ -- 476
+int.to.chr$ -- 0
+int.to.str$ -- 6
+missing$ -- 6
+newline$ -- 21
+num.names$ -- 6
+pop$ -- 24
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 74
+stack$ -- 0
+substring$ -- 160
+swap$ -- 46
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 0
+while$ -- 21
+width$ -- 7
+write$ -- 61

@@ -1,0 +1,30 @@
+\begin{thebibliography}{1}
+
+\bibitem{huet1997coq}
+G.~Huet, G.~Kahn, and C.~Paulin-Mohring, ``The coq proof assistant a
+  tutorial,'' {\em Rapport Technique}, vol.~178, 1997.
+
+\bibitem{norell2008dependently}
+U.~Norell, ``Dependently typed programming in agda,'' in {\em International
+  school on advanced functional programming}, pp.~230--266, Springer, 2008.
+
+\bibitem{de2015lean}
+L.~de~Moura, S.~Kong, J.~Avigad, F.~Van~Doorn, and J.~von Raumer, ``The lean
+  theorem prover (system description),'' in {\em International Conference on
+  Automated Deduction}, pp.~378--388, Springer, 2015.
+
+\bibitem{brady2013idris}
+E.~Brady, ``Idris, a general-purpose dependently typed programming language:
+  Design and implementation.,'' {\em J. Funct. Program.}, vol.~23, no.~5,
+  pp.~552--593, 2013.
+
+\bibitem{berger1998normalization}
+U.~Berger, M.~Eberl, and H.~Schwichtenberg, ``Normalization by evaluation,'' in
+  {\em Prospects for Hardware Foundations}, pp.~117--137, Springer, 1998.
+
+\bibitem{coquand2009simple}
+T.~Coquand, Y.~Kinoshita, B.~Nordstr{\"o}m, and M.~Takeyama, ``A simple
+  type-theoretic language: Mini-tt,'' {\em From Semantics to Computer Science;
+  Essays in Honour of Gilles Kahn}, pp.~139--164, 2009.
+
+\end{thebibliography}

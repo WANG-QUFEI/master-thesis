@@ -1,0 +1,60 @@
+
+ Lambda Delta
+
+ extension of lambda-calculus with definitions
+
+
+   in Haskell
+     simple type lambda calculus
+     one can explain -definitions- in term of abstraction and application
+     
+   with dependent types this is not possible
+
+ ([x : Nat ] f x) 0   --->   f 0
+
+     let x : Nat = 0
+     in f x 
+
+ [x : Nat = 0] f x    ----> f 0
+
+
+-----------------
+
+ If  P : Nat -> U and  g : P 0 -> P 0
+
+ [x : Nat = 0] [y : P x] g y    is typed correct
+
+ ([x : Nat] [y : P x] g y) 0     is -not- typed correct since
+
+ [x : Nat = 0] [y : P x] g y     is not typed correct
+
+
+
+--------------------
+
+      [ x : Nat] [ y : Nat ] [x : Bool] ... x....
+
+
+
+ G =  [x : Nat] [y : Nat = x] [z: Bool]
+
+ G context
+
+ in this context   y reduces to x
+
+
+ G' =  [x : Nat] [y : Nat = x] [x : Bool]
+
+ we cannot write y reduces to  x   delta-reduction
+ since x  in G' only means the x of type Bool and y is of type Nat
+
+
+ So we should not allow G'
+
+ But we should allow   [x : Nat] [f : Nat -> Nat = [z:Nat]z]  [z:Bool]
+
+ The z inside the definition of y  is bound
+
+
+
+ Definitions + Dependent types

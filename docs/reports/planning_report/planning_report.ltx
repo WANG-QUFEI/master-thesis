@@ -1,0 +1,128 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{parskip}
+\setlength{\parskip}{10pt}
+
+\begin{document}
+\title{Planning Report}
+\author{Qufei Wang}
+\maketitle
+
+\section{Introduction}
+\subsection{Background}
+Dependent type theory is widely used in proof-assistant systems (e.g. Coq \cite{huet1997coq}, Agda \cite{norell2008dependently}, Lean \cite{de2015lean}, Idris \cite{brady2013idris}, etc.) and contributed much to their success. In any typed system, deciding whether one type is equal to another is important. In a simple type system where no type polymorphism or dependent type is used, this is done by simply checking the syntactic identity of the symbols of the types, whereas in dependently typed systems the problem becomes more complicate, since a type may contain any value as its component, making it unavoidable to do computations on types.
+
+One common approach to deciding equality of terms in dependent type theory is \textit{normalization by evaluation} (NbE) \cite{berger1998normalization}, which reduces terms to the canonical representations for comparison. This method, however, does not scale to large theories for various reasons, among which:
+\begin{itemize}
+\item Producing the normal form may require more reduction steps than necessary. For example, in proving $(1 + 1) ^ {10} = 2 ^{(5 + 5)}$, it is easier if we can prove $1 + 1 == 2$ and $5 + 5 == 10$ instead of having to reduce both sides to 1024.
+\item As the number of definitions using previous definitions grows, the size of terms by expanding definitions can grow very quickly. For example, the inductive definition $x_n := (x_{n-1}, x_{n-1})$ makes the normal form of $x_{n}$ grow exponentially.
+\end{itemize}
+In this project, we shall focus on the first issue, that is, how to perform as few constant expansions as possible when deciding the convertibility of two terms in a dependently typed system. We hope to find a common reduct before going into expensive reductions, and in the light of this, we find that a proper study of a \emph{locking/unlocking} mechanism on the \emph{definitions} of a dependent type system may provide us hints to the solution of the problem. Here, a \emph{definition} has the conceptual form $c : A = M$, which means that a \emph{constant} $c$ has type $A$ and is defined as $M$, $A$ and $M$ are just common terms of the target language. A constant is \emph{locked} when we explicitly hide its definition from the context, making only the type information accessible. It becomes \emph{unlocked} when we bring its definition back into the context again.
+
+\subsection{Aim}
+The aim of this project is to find a mechanism where \emph{definitions} in a dependently typed system could be handled more efficiently. What this means is that, we aim to develop a \emph{locking/unlocking} mechanism into a simple dependent type language, which allows us to do computations on terms with the ability to lock/unlock some of the \emph{constants}, with the hope that a proper design of the mechanism could make the type checking process (in particular, deciding the convertibility of two terms) more efficient. The target language is a simplified version of Mini-TT \cite{coquand2009simple}, whose syntax and semantics will be described in the following sections. On top of that, we may wish to extend the language with one or two language features, such as a module system or implicit argument handling, to make it more practical.
+
+\subsection{Limitations}
+We will not try to establish a universal mechanism that is applicable in different dependent type systems. Instead, we will only focus on the system introduced by the simple language with its specific syntax and semantics. Also, there's no guarantee that a rigorously describable mechanism could be found, and what we finally establish may only work under certain preconditions. However, just by studying the problem and giving suggestions to the possible directions to a better solution may also deemed as a valuable work.
+
+\section{Current Progress}
+Currently there has been a Haskell implementation of the language, with a basic locking/unlocking mechanism. We give a detailed description of the language here, with regard to its syntax, semantics, evaluation operations and type checking algorithms. We also present the locking/unlocking mechanism in a brief manner.
+
+\subsection{Syntax of the Language}
+Terms in the language consist of \textbf{expressions}($Exp$), \textbf{declarations}($Decl$) and \textbf{values}($Val$). An expression has the following form:
+\begin{itemize}
+\item The type of a universe of small types: $U$
+\item Variables(constants) with names: $x, y, z$
+\item Application: $E_1\, E_2$
+\item Abstraction: $[Decl]\, Exp$
+\end{itemize}
+\emph{Expressions} can be evaluated (or reduced) into \emph{values}. In the implementation, we did not differentiate in syntax between \emph{expressions} and \emph{values} since the language is simple and we can use the same syntax for both. But here, for clarity, we give the form of \emph{values} explicitly as follows:
+\begin{itemize}
+\item $U$: which has $U$ as its type.
+\item $x, y, z$: which represent  uninterpreted variables (used when a variable is \textbf{locked}).
+\item $u\,v$: application of values.
+\item $\langle e, \rho \rangle$: a closure where $e$ is an abstraction, $\rho$ is the environment relating variables to their values.
+\end{itemize}
+A \emph{declaration} has two form:
+\begin{itemize}
+\item $x : A$ : constant $x$ has type $A$.
+\item $x : A = B$ : constant $x$ has type $A$ and is defined as $B$.
+\end{itemize}
+An abstraction of the form $[x : A]\,B$ can be used to represent both dependent product type: $\Pi\,x:A\,.\,B$, meaning that for any element $x \in A$, there's a type $B$ which may depend on $x$, and $\lambda$ abstraction: $\lambda\,(x : A) \to B$. A non-dependent implication type $A \to B$ is desugared as $[\_ : A]\, B$.
+
+An abstraction of the form $[x : A = B] M$ can be seen as a \textit{let} or \textit{where} clause, like \textit{let $x : A = B$ in $M$} or \textit{$M$ where $x : A = B$}.
+
+Another two important concepts that are used widely in expression evaluation and type checking are environment ($Env,\,\rho$) and context ($Cont,\,\Gamma$). An environment relates variables to their values and a context relates variables to their types. An environment is defined as
+\[
+\rho ::= ()\,|\,\rho,\,x = v\,|\,\rho,\,x : A = B
+\]
+and a context is defined as
+\[
+  \Gamma ::= ()\,|\,\Gamma,\,x : v\,|\,\Gamma,\,x : A = B
+\]
+
+\subsection{Operational Semantics}
+We give the semantics of the language by equations of the form $[\![M]\!]\rho = v$, meaning that the expression $M$ evaluates to the value $v$ in the environment $\rho$.
+\begin{align*}
+  [\![U]\!]\rho \quad &= \quad U \\
+  [\![x]\!]\rho \quad &= \quad \rho(x) \\
+  [\![M_1 \; M_2]\!]\rho \quad &= \quad \text{appVal} \; ([\![M_1]\!]\rho) \; ([\![M_2]\!]\rho) \\
+  [\![[x : A]\,B]\!]\rho \quad &= \quad \langle[x : A]\,B, \rho\rangle \\
+  [\![[x : A = B]\,M]\!]\rho \quad &= \quad [\![M]\!](\rho, x : A = B) \\
+  [\![\langle e, \rho'\rangle]\!]\rho \quad &= \quad \langle e, \rho' \rangle \\
+\end{align*}
+The operation \textit{appVal} is defined as follows:
+\begin{align*}
+  \text{appVal} \quad \langle [x : A]\,B, \rho \rangle \quad v \quad &= \quad [\![B]\!](\rho, x = v) \\
+  \intertext{otherwise}
+  \text{appVal} \quad v1 \quad v2 \quad &= \quad v1\;v2
+\end{align*}
+We also define lookup operations on environment and context
+\begin{itemize}
+\item $\rho(x)$: find the value of variable $x$ in the environment $\rho$.
+\item $\Gamma(x)$: find the type of variable $x$ in the context $\Gamma$.
+\end{itemize}
+with
+\begin{align*}
+  ()(x) \quad &= \quad x \\
+  (\rho, x = v)(x) \quad &= \quad v \\
+  (\rho, y = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
+  (\rho, x : \_ = e)(x) \quad &= \quad [\![e]\!]\rho \\
+  (\rho, y : \_ = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
+\end{align*}
+and
+\begin{align*}
+  ()(x) \quad &= \quad \text{error: variable not declared} \\
+  (\Gamma, x : v)(x) \quad &= \quad v \\
+  (\Gamma, y = v)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+  (\Gamma, x : A = \_)(x) \quad &= \quad [\![A]\!](\text{envCont}\;\Gamma) \\
+  (\Gamma, y : A = B)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+\end{align*}
+Note that the type check algorithm ensures that each variable is bound with a type, such that the error condition never happens.
+
+We can get an environment out of a context by using the function \textit{envCont}
+\begin{align*}
+  \text{envCont} \quad () \quad &= \quad () \\
+  \text{envCont} \quad (\Gamma, x : v) \quad &= \quad \text{envCont}\;\Gamma \\
+  \text{envCont} \quad (\Gamma, x : A = B) \quad &= \quad (\text{envCont}\;\Gamma,\, x : A = B)
+\end{align*}
+
+\subsection{Typing Rules}
+Type checking algorithm is implemented as a state monad in Haskell, where the state is a context($\Gamma$) starting from an empty context and getting updated by checking each declarations from the source file. There are five forms of judgments:
+\begin{enumerate}
+\item checkDec - $\Gamma \vdash x : A \Rightarrow \Gamma'$, meaning that $x : A$ is a correct declaration and extends $\Gamma$ to $\Gamma'$
+\item checkDef - $\Gamma \vdash x : A = B \Rightarrow \Gamma'$, meaning that $x : A = B$ is a correct definition and extends $\Gamma$ to $\Gamma'$
+\item checkT - $\Gamma \vdash M \Leftarrow t $, meaning that $M$ is a correct expression given type $t$
+\item checkI - $\Gamma \vdash M \Rightarrow t$, meaning that $M$ is a correct expression and its type is inferred to be $t$
+\item checkC - $\Gamma \vdash u,\; v$, meaning that $u, v$ are convertible values
+\end{enumerate}
+
+
+
+\bibliographystyle{ieeetr}
+\bibliography{my_bib.bib}
+
+\end{document}

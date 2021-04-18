@@ -23,46 +23,46 @@ import           TransUtil
 type TypeCheckM a = G TypeCheckError Cont a
 
 -- | given a type-checking context, infer the type of an expression
-checkInfer   :: Cont -> Exp -> TypeCheckM Val
+checkI       :: Cont -> Exp -> TypeCheckM Val
 -- | given a type-checking context, check that an expression has given type
 checkT       :: Cont -> Exp -> Val -> TypeCheckM ()
 -- | check the convertibility of two values
-checkConvert :: Cont -> Val -> Val -> TypeCheckM ()
+checkC       :: Cont -> Val -> Val -> TypeCheckM ()
 -- | given a type-checking context, check that a definition is valid
 checkDef     :: Cont -> String -> Exp -> Exp -> TypeCheckM Cont
 -- | given a type-checking context, check taht a declaration is valid
 checkDec     :: Cont -> String -> Exp -> TypeCheckM Cont
 
-checkInfer c U = return U
-checkInfer c (Var x) = case getType c x of
+checkI c U = return U
+checkI c (Var x) = case getType c x of
   Just v -> return v
-checkInfer c (App e1 e2) = do
-  v <- checkInfer c e1
+checkI c (App e1 e2) = do
+  v <- checkI c e1
   case v of
     Clos (Abs (Dec x a) b) r -> do
       checkT c e2 (eval a r)
       let v' = eval e2 (envCont c)
       return $ eval b (consEVar r x v')
     _ -> throwError $ InvalidApp e1
-checkInfer c (Abs (Def x a e1) e) = do
+checkI c (Abs (Def x a e1) e) = do
   c' <- checkDef c x a e1
-  checkInfer c' e
-checkInfer c e@(Abs (Dec _ _) _) = do
+  checkI c' e
+checkI c e@(Abs (Dec _ _) _) = do
   checkT c e U
   return U
-checkInfer _ e = throwError $ TypeInferErr e
+checkI _ e = throwError $ TypeInferErr e
 
 checkT c U U = return ()
 checkT c (Var x) v = case getType c x of
-  Just v' -> checkConvert c v' v
+  Just v' -> checkC c v' v
 checkT c (App e1 e2) v = do
-  v1 <- checkInfer c e1
+  v1 <- checkI c e1
   case v1 of
     Clos (Abs (Dec x a) b) r -> do
       checkT c e2 (eval a r)
       let v2 = eval e2 (envCont c)
           v' = eval b (consEVar r x v2)
-      checkConvert c v v'
+      checkC c v v'
     _ -> throwError $ InvalidApp e1
 checkT c (Abs (Dec x a) b) U = do
   checkT c a U
@@ -71,28 +71,28 @@ checkT c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
   checkT c a U
   let v  = eval a (envCont c)
       v' = eval a' r
-  checkConvert c v v'
+  checkC c v v'
   checkT (consCVar c x a) e (eval e' (consEVar r x' (Var x)))
 checkT c (Abs (Def x a e1) e) v = do
   c' <- checkDef c x a e1
   checkT c' e v
 
-checkConvert _ U U = return ()
-checkConvert _ (Var x) (Var x') =
+checkC _ U U = return ()
+checkC _ (Var x) (Var x') =
   if x == x'
   then return ()
   else throwError $ NotConvertible (Var x) (Var x')
-checkConvert c (App e1 e2) (App e1' e2') = do
-  checkConvert c e1 e1'
-  checkConvert c e2 e2'
-checkConvert c (Clos (Abs (Dec x a) e) r) (Clos (Abs (Dec x' a') e') r') = do
+checkC c (App e1 e2) (App e1' e2') = do
+  checkC c e1 e1'
+  checkC c e2 e2'
+checkC c (Clos (Abs (Dec x a) e) r) (Clos (Abs (Dec x' a') e') r') = do
   let v  = eval a r
       v' = eval a' r'
-  checkConvert c v v'
+  checkC c v v'
   let y  = freshVar x (varsCont c)
       vy = Var y
-  checkConvert (consCVar c y v) (eval e (consEVar r x vy)) (eval e' (consEVar r' x' vy))
-checkConvert _ v v' = throwError $ NotConvertible v v'
+  checkC (consCVar c y v) (eval e (consEVar r x vy)) (eval e' (consEVar r' x' vy))
+checkC _ v v' = throwError $ NotConvertible v v'
 
 checkDef c x a e = do
   checkT c a U
@@ -131,7 +131,7 @@ checkExpValidity :: Context -> Cont -> CExp -> Either TypeCheckError Exp
 checkExpValidity cc ac ce = let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left err
-    Right e  -> case runG (checkInfer ac e) [] of
+    Right e  -> case runG (checkI ac e) [] of
       Left err -> Left err
       Right _  -> Right e
   where

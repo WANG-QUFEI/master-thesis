@@ -11,6 +11,7 @@ module CmdUtil
   , checkExpValidity
   , headRed
   , unfold
+  , totalEval
   , typeOf
   , typeCheckErrMsg
   , okayMsg
@@ -37,6 +38,7 @@ data Cmd = Quit
          | Load FilePath
          | Check CExp
          | HeadRed
+         | ExpEval
          | Unfold [String]
          | GetType CExp
          deriving (Show)
@@ -58,8 +60,8 @@ getCmd s = case blankStr s of
       ":load"   -> getLoad ws
       ":c"      -> getCheck ws
       ":check"  -> getCheck ws
-      ":e"      -> Right HeadRed
-      ":eval"   -> Right HeadRed
+      ":hred"   -> Right HeadRed
+      ":eval"   -> Right ExpEval
       ":u"      -> Right (Unfold (tail ws))
       ":unfold" -> Right (Unfold (tail ws))
       ":t"      -> getExpType ws
@@ -100,6 +102,9 @@ parseCheckFile text = case pContext (myLexer text) of
 headRed :: Cont -> Exp -> Exp
 headRed c (Abs d e) = let e' = headRed (d : c) e in Abs d e'
 headRed c e         = readBack (varsCont c) (headRedV c e)
+
+totalEval :: Cont -> Exp -> Val
+totalEval c e = eval e (envCont c)
 
 -- | given a type checking context, evaluate an expression with a list of constants unlocked
 unfold :: Cont -> [String] -> Exp -> Exp
