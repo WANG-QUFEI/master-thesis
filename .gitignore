@@ -5,3 +5,8 @@
 *.bak
 *.y
 *~
+*.aux
+*.bbl
+*.blg
+*.el
+*.log

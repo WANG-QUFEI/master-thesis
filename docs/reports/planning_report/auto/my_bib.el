@@ -8,6 +8,7 @@
     "norell2008dependently"
     "brady2013idris"
     "de2015lean"
-    "coquand2009simple"))
+    "coquand2009simple"
+    "automath"))
  :bibtex)
 

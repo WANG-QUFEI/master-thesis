@@ -14,7 +14,13 @@
     "inputenc"
     "babel"
     "amsmath"
-    "parskip")
+    "parskip"
+    "array"
+    "pgfgantt"
+    "float")
+   (LaTeX-add-labels
+    "fig:task_schedule"
+    "tab:task_names")
    (LaTeX-add-bibliographies
     "my_bib.bib"))
  :latex)

@@ -5,6 +5,9 @@
 \usepackage{amsmath}
 \usepackage{parskip}
 \setlength{\parskip}{10pt}
+\usepackage{array}
+\usepackage{pgfgantt}
+\usepackage{float}
 
 \begin{document}
 \title{Planning Report}
@@ -23,104 +26,79 @@ One common approach to deciding equality of terms in dependent type theory is \t
 In this project, we shall focus on the first issue, that is, how to perform as few constant expansions as possible when deciding the convertibility of two terms in a dependently typed system. We hope to find a common reduct before going into expensive reductions, and in the light of this, we find that a proper study of a \emph{locking/unlocking} mechanism on the \emph{definitions} of a dependent type system may provide us hints to the solution of the problem. Here, a \emph{definition} has the conceptual form $c : A = M$, which means that a \emph{constant} $c$ has type $A$ and is defined as $M$, $A$ and $M$ are just common terms of the target language. A constant is \emph{locked} when we explicitly hide its definition from the context, making only the type information accessible. It becomes \emph{unlocked} when we bring its definition back into the context again.
 
 \subsection{Aim}
-The aim of this project is to find a mechanism where \emph{definitions} in a dependently typed system could be handled more efficiently. What this means is that, we aim to develop a \emph{locking/unlocking} mechanism into a simple dependent type language, which allows us to do computations on terms with the ability to lock/unlock some of the \emph{constants}, with the hope that a proper design of the mechanism could make the type checking process (in particular, deciding the convertibility of two terms) more efficient. The target language is a simplified version of Mini-TT \cite{coquand2009simple}, whose syntax and semantics will be described in the following sections. On top of that, we may wish to extend the language with one or two language features, such as a module system or implicit argument handling, to make it more practical.
+The aim of this project is to find a mechanism where \emph{definitions} in a dependently typed system could be handled more efficiently. What this means is that, we aim to develop a \emph{locking/unlocking} mechanism into a simple dependent type language, which allows us to do computations on terms with the ability to lock/unlock some of the \emph{constants}, with the hope that a proper design of the mechanism could make the type checking process (in particular, deciding the convertibility of two terms) more efficient. The target language is a simplified version of Mini-TT \cite{coquand2009simple}. On top of that, we wish to extend the language with a module system, which is based on the concept of `segment' borrowed form AutoMath \cite{automath}. The outcome of the work should be an implementation of type checker in Haskell, that illustrates the concepts above.
 
 \subsection{Limitations}
 We will not try to establish a universal mechanism that is applicable in different dependent type systems. Instead, we will only focus on the system introduced by the simple language with its specific syntax and semantics. Also, there's no guarantee that a rigorously describable mechanism could be found, and what we finally establish may only work under certain preconditions. However, just by studying the problem and giving suggestions to the possible directions to a better solution may also deemed as a valuable work.
 
-\section{Current Progress}
-Currently there has been a Haskell implementation of the language, with a basic locking/unlocking mechanism. We give a detailed description of the language here, with regard to its syntax, semantics, evaluation operations and type checking algorithms. We also present the locking/unlocking mechanism in a brief manner.
-
-\subsection{Syntax of the Language}
-Terms in the language consist of \textbf{expressions}($Exp$), \textbf{declarations}($Decl$) and \textbf{values}($Val$). An expression has the following form:
+\subsection{Specification of Issue under Investigation}
+These are the questions that we'd like to address with regard to the aim we claimed.
 \begin{itemize}
-\item The type of a universe of small types: $U$
-\item Variables(constants) with names: $x, y, z$
-\item Application: $E_1\, E_2$
-\item Abstraction: $[Decl]\, Exp$
+\item How to design the type checking algorithm in the presence of locked variables ?
+\item How to find the minimum set of constants to be unlocked in a non-exhaustive way, for a term to be checked as valid ?
+\item Is there a way to use the knowledge about the minimum set of constants needed for each constant in the context, to make type checking a new term more efficient ?
 \end{itemize}
-\emph{Expressions} can be evaluated (or reduced) into \emph{values}. In the implementation, we did not differentiate in syntax between \emph{expressions} and \emph{values} since the language is simple and we can use the same syntax for both. But here, for clarity, we give the form of \emph{values} explicitly as follows:
-\begin{itemize}
-\item $U$: which has $U$ as its type.
-\item $x, y, z$: which represent  uninterpreted variables (used when a variable is \textbf{locked}).
-\item $u\,v$: application of values.
-\item $\langle e, \rho \rangle$: a closure where $e$ is an abstraction, $\rho$ is the environment relating variables to their values.
-\end{itemize}
-A \emph{declaration} has two form:
-\begin{itemize}
-\item $x : A$ : constant $x$ has type $A$.
-\item $x : A = B$ : constant $x$ has type $A$ and is defined as $B$.
-\end{itemize}
-An abstraction of the form $[x : A]\,B$ can be used to represent both dependent product type: $\Pi\,x:A\,.\,B$, meaning that for any element $x \in A$, there's a type $B$ which may depend on $x$, and $\lambda$ abstraction: $\lambda\,(x : A) \to B$. A non-dependent implication type $A \to B$ is desugared as $[\_ : A]\, B$.
 
-An abstraction of the form $[x : A = B] M$ can be seen as a \textit{let} or \textit{where} clause, like \textit{let $x : A = B$ in $M$} or \textit{$M$ where $x : A = B$}.
+\section{Methodology}
+In the work already done so far, we've implemented an evaluation operation on terms with the ability to hide some constants. In an unpublished draft (which we will refer to as ``transparency'' and will be submitted together with this report as a reference), the author proposed a mechanism with transparency/opacity configuration which may provide us some inspiration on a further development of our locking/unlocking mechanism.
 
-Another two important concepts that are used widely in expression evaluation and type checking are environment ($Env,\,\rho$) and context ($Cont,\,\Gamma$). An environment relates variables to their values and a context relates variables to their types. An environment is defined as
-\[
-\rho ::= ()\,|\,\rho,\,x = v\,|\,\rho,\,x : A = B
-\]
-and a context is defined as
-\[
-  \Gamma ::= ()\,|\,\Gamma,\,x : v\,|\,\Gamma,\,x : A = B
-\]
-
-\subsection{Operational Semantics}
-We give the semantics of the language by equations of the form $[\![M]\!]\rho = v$, meaning that the expression $M$ evaluates to the value $v$ in the environment $\rho$.
+Also, since the problem of \emph{definition} has close relation with \emph{evaluation}, and the evaluation mechanism in a dependent type language has its root in typed $\lambda$-calculus, a familiarity with the literatures in this field may also be helpful. For example, consider the simple problem of checking the convertibility of two terms $id\; A\; M$ and $M$, where
 \begin{align*}
-  [\![U]\!]\rho \quad &= \quad U \\
-  [\![x]\!]\rho \quad &= \quad \rho(x) \\
-  [\![M_1 \; M_2]\!]\rho \quad &= \quad \text{appVal} \; ([\![M_1]\!]\rho) \; ([\![M_2]\!]\rho) \\
-  [\![[x : A]\,B]\!]\rho \quad &= \quad \langle[x : A]\,B, \rho\rangle \\
-  [\![[x : A = B]\,M]\!]\rho \quad &= \quad [\![M]\!](\rho, x : A = B) \\
-  [\![\langle e, \rho'\rangle]\!]\rho \quad &= \quad \langle e, \rho' \rangle \\
+  id : [A : U] \, A \to A &= [A : U]\,[x : A]\, x \\
+  M : A &= \alpha
 \end{align*}
-The operation \textit{appVal} is defined as follows:
-\begin{align*}
-  \text{appVal} \quad \langle [x : A]\,B, \rho \rangle \quad v \quad &= \quad [\![B]\!](\rho, x = v) \\
-  \intertext{otherwise}
-  \text{appVal} \quad v1 \quad v2 \quad &= \quad v1\;v2
-\end{align*}
-We also define lookup operations on environment and context
-\begin{itemize}
-\item $\rho(x)$: find the value of variable $x$ in the environment $\rho$.
-\item $\Gamma(x)$: find the type of variable $x$ in the context $\Gamma$.
-\end{itemize}
-with
-\begin{align*}
-  ()(x) \quad &= \quad x \\
-  (\rho, x = v)(x) \quad &= \quad v \\
-  (\rho, y = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
-  (\rho, x : \_ = e)(x) \quad &= \quad [\![e]\!]\rho \\
-  (\rho, y : \_ = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
-\end{align*}
-and
-\begin{align*}
-  ()(x) \quad &= \quad \text{error: variable not declared} \\
-  (\Gamma, x : v)(x) \quad &= \quad v \\
-  (\Gamma, y = v)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
-  (\Gamma, x : A = \_)(x) \quad &= \quad [\![A]\!](\text{envCont}\;\Gamma) \\
-  (\Gamma, y : A = B)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
-\end{align*}
-Note that the type check algorithm ensures that each variable is bound with a type, such that the error condition never happens.
+Suppose $M$ is type correct and $\alpha$ is a constant whose value requires enormous computation. Without going into the details of $\alpha$, we can instantly know that these two terms are equal. However, an evaluation mechanism may go as far as computing the value of $M$, which makes the problem unnecessarily complicate (or even undecidable!).
 
-We can get an environment out of a context by using the function \textit{envCont}
-\begin{align*}
-  \text{envCont} \quad () \quad &= \quad () \\
-  \text{envCont} \quad (\Gamma, x : v) \quad &= \quad \text{envCont}\;\Gamma \\
-  \text{envCont} \quad (\Gamma, x : A = B) \quad &= \quad (\text{envCont}\;\Gamma,\, x : A = B)
-\end{align*}
+\emph{Laziness}, as a strategy of evaluation used in Haskell, can help to avoid the over-computed situation. Another way to think about this is if we allow the user to specify certain algebraic properties of the constants (e.g. $\forall A \in U, x \in A \Rightarrow \; id\; A\; x = x$) and suggest the properties to the type checker, then the problem could be solved more efficiently (just like in Agda, one can prove properties of data types and use the properties as functions for further proof). The ideal solution would be that the type checker can deduce the properties itself and choose the properties intelligently from the context for the further reasoning.
 
-\subsection{Typing Rules}
-Type checking algorithm is implemented as a state monad in Haskell, where the state is a context($\Gamma$) starting from an empty context and getting updated by checking each declarations from the source file. There are five forms of judgments:
-\begin{enumerate}
-\item checkDec - $\Gamma \vdash x : A \Rightarrow \Gamma'$, meaning that $x : A$ is a correct declaration and extends $\Gamma$ to $\Gamma'$
-\item checkDef - $\Gamma \vdash x : A = B \Rightarrow \Gamma'$, meaning that $x : A = B$ is a correct definition and extends $\Gamma$ to $\Gamma'$
-\item checkT - $\Gamma \vdash M \Leftarrow t $, meaning that $M$ is a correct expression given type $t$
-\item checkI - $\Gamma \vdash M \Rightarrow t$, meaning that $M$ is a correct expression and its type is inferred to be $t$
-\item checkC - $\Gamma \vdash u,\; v$, meaning that $u, v$ are convertible values
-\end{enumerate}
+\section{Schedule}
+The schedule of the remaining work is shown in figure \ref{fig:task_schedule}. The details of each task is shown in table \ref{tab:task_names}. The schedule covers time from April 19, 2021 to September 12, 2021, in a total of 20 weeks (when taking into consideration the extension).
+\begin{figure}[H]
+\begin{center}
+\begin{ganttchart}[y unit title=.45cm,
+y unit chart=.45cm,
+vgrid]{1}{20}
+  \gantttitle{Apr.}{2}
+  \gantttitle{May}{4}
+  \gantttitle{June}{4}
+  \gantttitle{July}{4}
+  \gantttitle{Aug.}{4}
+  \gantttitle{Sept.}{2} \\
+  \gantttitle{Weeks}{20} \\
+  \gantttitlelist{1,...,20}{1} \\
+  \ganttbar [bar/.append style={fill=red}]{Task-1}{1}{1} \\
+  \ganttbar [bar/.append style={fill=green}]{Task-2}{2}{5} \\
+  \ganttbar [bar/.append style={fill=red}] {Task-3}{3}{6} \\
+  \ganttbar [bar/.append style={fill=blue}] {Task-4}{7}{8} \\
+  \ganttbar [bar/.append style={fill=yellow}] {Task-5}{7}{9} \\
+  \ganttbar [bar/.append style={fill=green}] {Task-6}{9}{11} \\
+  \ganttbar [bar/.append style={fill=red}] {Task-7}{11}{14} \\
+  \ganttbar [bar/.append style={fill=yellow}]{Task-8}{17}{20} \\
+  \ganttbar [bar/.append style={fill=blue}] {Task-9}{15}{20} \\
+  %\ganttlink{elem1}{elem4}
+\end{ganttchart}
+\end{center}
+\caption{Task Schedule}
+\label{fig:task_schedule}
+\end{figure}
 
-
+\begin{table}[h]
+  \centering
+  \begin{tabular}{| c | m{50mm} | c | c | c |} \hline
+    & Tasks & Duration(weeks) & Start Date & End Date \\ \hline
+    1 & \textbf{Coding} \newline $\eta$-conversion & 1 & Apr. 19 & Apr. 25 \\ \hline
+    2 & \textbf{Literature Study} \newline evaluation mechanism in typed $\lambda$-calculus & 4 & Apr. 26  & May 23 \\ \hline
+    3 & \textbf{Coding} \newline development on the \emph{definition} mechanism & 4 & May 3 & May 30 \\ \hline
+    4 & \textbf{Writing} \newline Half-time report & 2 & May 31 & June 13 \\ \hline
+    5 & \textbf{Presentation} \newline attend opposition presentation & 3 & May 31 & June 20 \\ \hline
+    6 & \textbf{Literature Study} \newline AUTOMATH system & 3 & June 14 & July 4 \\ \hline
+    7 & \textbf{Coding} \newline a module mechanism based on the notion `segment' from AUTOMATH & 4 & June 28 & July 25 \\ \hline
+    8 & \textbf{Presentation} \newline final presentation & 4 & Aug. 16 & Sep. 12 \\ \hline
+    9 & \textbf{Writing} \newline Final report & 6 & July 26 & Sep. 12 \\ \hline
+  \end{tabular}
+  \caption{Task Detail}
+  \label{tab:task_names}
+\end{table}
 
 \bibliographystyle{ieeetr}
 \bibliography{my_bib.bib}

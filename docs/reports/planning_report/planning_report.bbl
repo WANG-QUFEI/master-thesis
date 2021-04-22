@@ -27,4 +27,9 @@ T.~Coquand, Y.~Kinoshita, B.~Nordstr{\"o}m, and M.~Takeyama, ``A simple
   type-theoretic language: Mini-tt,'' {\em From Semantics to Computer Science;
   Essays in Honour of Gilles Kahn}, pp.~139--164, 2009.
 
+\bibitem{automath}
+N.~G. de~Bruijn, ``Generalizing automath by means of a lambda-typed lambda
+  calculus,'' {\em Mathematicallogic and theoretical computer science},
+  pp.~71--92, 1987.
+
 \end{thebibliography}
