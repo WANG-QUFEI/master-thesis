@@ -181,4 +181,6 @@ varsCont c = map f c
 freshVar :: String -> [String] -> String
 freshVar x xs = if x `elem` xs
                 then freshVar (x ++ "'") xs
-                else x
+                else if x == ""
+                     then freshVar "t_var" xs
+                     else x

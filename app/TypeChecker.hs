@@ -93,7 +93,11 @@ checkCI c (App m1 n1) (App m2 n2) = do
       let t2 = eval a r
       checkCT c n1 n2 t2
       return (eval b (consEVar r x n1))
-    _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
+    _ -> trace (show c ++ "\nm1:" ++ show m1 ++ "\nm2:" ++ show m2 ++ "\nn1:" ++ show n1 ++ "\nn2: " ++ show n2) throwError $ NotConvertible (App m1 n1) (App m2 n2)
+checkCI c v1@(Clos (Abs (Dec x a) e) r) v2@(Clos (Abs (Dec x' a') e') r') = do
+  checkCT c v1 v2 U
+  return U
+checkCI _ v v' = throwError $ NotConvertible v v'
 
 checkCT c v1 v2 (Clos (Abs (Dec z a) b) r) = do
   let t1 = eval a r
@@ -134,24 +138,24 @@ runTypeCheckCtx :: Context -> Either TypeCheckError Cont
 runTypeCheckCtx ctx@(Ctx cs) =
   case runG (absCtx ctx) Map.empty of
     Left err -> Left err
-    Right ds -> runG (typeCheckCtx (zip ds [0, 1 ..])) []
+    Right ds -> runG (typeCheckCtx ds) []
   where
-    typeCheckCtx :: [(Decl, Int)] -> TypeCheckM Cont
+    typeCheckCtx :: [Decl] -> TypeCheckM Cont
     typeCheckCtx ds = do
       mapM_ checkDecl ds
       get
-    checkDecl :: (Decl, Int) -> TypeCheckM ()
-    checkDecl (d@(Dec x a), n) = do {
+    checkDecl :: Decl -> TypeCheckM ()
+    checkDecl d@(Dec x a) = do {
       c  <- get ;
       c' <- checkDec c x a ;
-      put c' } `catchError` (errhandler d n)
-    checkDecl (d@(Def x a e), n) = do {
+      put c' } `catchError` (errhandler d)
+    checkDecl d@(Def x a e) = do {
       c  <- get ;
       c' <- checkDef c x a e ;
-      put c' } `catchError` (errhandler d n)
-    errhandler :: Decl -> Int -> TypeCheckError -> TypeCheckM ()
-    errhandler d n err = do
-      let ss = ["when checking: " ++ (printTree (cs !! n)), "         decl: " ++ show d]
+      put c' } `catchError` (errhandler d)
+    errhandler :: Decl -> TypeCheckError -> TypeCheckM ()
+    errhandler d err = do
+      let ss = ["when checking decl: " ++ show d]
       throwError $ ExtendedErr err ss
 
 checkExpValidity :: Context -> Cont -> CExp -> Either TypeCheckError Exp
