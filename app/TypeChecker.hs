@@ -38,6 +38,7 @@ checkDec     :: Cont -> String -> Exp -> TypeCheckM Cont
 checkI c U = return U
 checkI c (Var x) = case getType c x of
   Just v -> return v
+  Nothing -> error ("variable " ++ show x ++ " is not bound")
 checkI c (App e1 e2) = do
   v <- checkI c e1
   case v of
@@ -85,15 +86,19 @@ checkCI c (Var x) (Var x') =
   if x == x'
   then case getType c x of
          Just v -> return v
+         Nothing -> error ("variable: " ++ show x ++ " is not bound")
   else throwError $ NotConvertible (Var x) (Var x')
 checkCI c (App m1 n1) (App m2 n2) = do
   t1 <- checkCI c m1 m2
   case t1 of
     Clos (Abs (Dec x a) b) r -> do
       let t2 = eval a r
+          v  = eval n1 (envCont c)
       checkCT c n1 n2 t2
-      return (eval b (consEVar r x n1))
-    _ -> trace (show c ++ "\nm1:" ++ show m1 ++ "\nm2:" ++ show m2 ++ "\nn1:" ++ show n1 ++ "\nn2: " ++ show n2) throwError $ NotConvertible (App m1 n1) (App m2 n2)
+      return (eval b (consEVar r x v))
+    _ -> trace ("t1: " ++ show t1 ++ "\nm1:" ++ show m1 ++
+                 "\nm2:" ++ show m2 ++ "\nn1:" ++ show n1 ++
+                 "\nn2:" ++ show n2 ++ "\nContext:" ++ show c) throwError $ NotConvertible (App m1 n1) (App m2 n2)
 checkCI c v1@(Clos (Abs (Dec x a) e) r) v2@(Clos (Abs (Dec x' a') e') r') = do
   checkCT c v1 v2 U
   return U
@@ -106,10 +111,9 @@ checkCT c v1 v2 (Clos (Abs (Dec z a) b) r) = do
       c1 = consCVar c sx t1
       r1 = consEVar r z vx
       t2 = eval b r1
-      v1' = eval (App v1 vx) r
-      v2' = eval (App v2 vx) r
+      v1' = eval (App v1 vx) (envCont c)
+      v2' = eval (App v2 vx) (envCont c)
   checkCT c1 v1' v2' t2
-checkCT _ v1 v2 (Clos _ _) = throwError $ NotConvertible v1 v2
 checkCT c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
   let t1 = eval a1 r1
       t2 = eval a2 r2
@@ -128,17 +132,17 @@ checkCT c v1 v2 t = do
 checkDef c x a e = do
   checkT c a U
   checkT c e (eval a (envCont c))
-  return $ (Def x a e) : c
+  return (CConsDef c x a e)
 
 checkDec c x a = do
   checkT c a U
-  return $ (Dec x a) : c
+  return (consCVar c x a)
 
 runTypeCheckCtx :: Context -> Either TypeCheckError Cont
 runTypeCheckCtx ctx@(Ctx cs) =
   case runG (absCtx ctx) Map.empty of
     Left err -> Left err
-    Right ds -> runG (typeCheckCtx ds) []
+    Right ds -> runG (typeCheckCtx ds) CNil
   where
     typeCheckCtx :: [Decl] -> TypeCheckM Cont
     typeCheckCtx ds = do
@@ -162,7 +166,7 @@ checkExpValidity :: Context -> Cont -> CExp -> Either TypeCheckError Exp
 checkExpValidity cc ac ce = let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left err
-    Right e  -> case runG (checkI ac e) [] of
+    Right e  -> case runG (checkI ac e) CNil of
       Left err -> Left err
       Right _  -> Right e
   where

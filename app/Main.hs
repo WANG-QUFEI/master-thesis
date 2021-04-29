@@ -22,7 +22,7 @@ main = runInputT defaultSettings repl
 repl :: InputT IO ()
 repl = do
   outputStrLn "~ welcome, type command ':?' for the usage of this program, ':q' to quit"
-  loop (Ctx []) [] U
+  loop (Ctx []) CNil U
 
 loop :: Context -> Cont -> Exp -> InputT IO ()
 loop cc ac e = do

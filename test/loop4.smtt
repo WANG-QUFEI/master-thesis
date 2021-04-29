@@ -4,7 +4,7 @@ Pow : * -> * =
 T : * -> * =
   [X : *] Pow (Pow X) ;
 
-⊥ : *;
+⊥ : * = [X : *] X ;
 
 funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
   [X : *][Y : *][f : X -> Y][t : T X][g : Y -> *] t ([x : X] g (f x)) ;

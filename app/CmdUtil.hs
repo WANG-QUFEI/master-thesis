@@ -98,18 +98,28 @@ parseCheckFile text = case pContext (myLexer text) of
                  Left tce -> Left (typeCheckErrMsg tce)
                  Right ac -> Right (ctx, ac)
 
--- | given a type checking context, head evaluation on an expression
-headRed :: Cont -> Exp -> Exp
-headRed c (Abs d e) = let e' = headRed (d : c) e in Abs d e'
-headRed c e         = readBack (varsCont c) (headRedV c e)
-
+-- | evaluate an expression with all variables available
 totalEval :: Cont -> Exp -> Val
 totalEval c e = eval e (envCont c)
 
--- | given a type checking context, evaluate an expression with a list of constants unlocked
-unfold :: Cont -> [String] -> Exp -> Exp
-unfold c [] e = readBack (varsCont c) (eval e ENil)
-unfold c ss e = readBack (varsCont c) (eval e (envContLock ss c))
+-- | given a type checking context, head evaluation on an expression
+headRed :: Cont -> Exp -> Exp
+headRed c (Abs d e) =
+  case d of
+    Dec x a ->
+      let v = eval a (envCont c)
+          a' = headRed c a
+          e' = headRed (consCVar c x v) e
+      in Abs (Dec x a') e'
+    Def x a b ->
+      let e' = headRed (CConsDef c x a b) e
+      in Abs d e'
+headRed c e = readBack (varsCont c) (headRedV c e)
+
+headRedV :: Cont -> Exp -> Val
+headRedV c (Var x)     = eval (defCont x c) ENil
+headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
+headRedV c e           = eval e ENil
 
 -- | turn a value into an expression, remove the closure of a value
 readBack :: [String] -> Val -> Exp
@@ -120,38 +130,48 @@ readBack ns (Clos (Abs (Dec "" a) e) r) = Abs (Dec "" (readBack ns (eval a r))) 
 readBack ns (Clos (Abs (Dec x a) e) r) =
   let z  = freshVar x ns
       a' = readBack ns (eval a r)
-      e' = readBack (z : ns) (eval e (EConsVar r x (Var z)))
+      e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
   in Abs (Dec z a') e'
 readBack _ _ = error "operation not supported"
 
-headRedV :: Cont -> Exp -> Val
-headRedV c (Var x)     = eval (defCont x c) ENil
-headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
-headRedV c e           = eval e ENil
-
 -- | get the environment related with a context by giving a list of unlocked definitions
 envContLock :: [String] -> Cont -> Env
-envContLock _ [] = ENil
-envContLock xs ((Dec _ _) : c) = envContLock xs c
-envContLock xs ((Def x a e) : c) =
+envContLock _ CNil = ENil
+envContLock xs (CConsVar c _ _) = envContLock xs c
+envContLock xs (CConsDef c x a e) =
   let r = envContLock xs c
   in if x `elem` xs
      then EConsDef r x a e
      else r
 
+-- | given a type checking context, evaluate an expression with a list of constants unlocked
+unfold :: Cont -> [String] -> Exp -> Exp
+unfold c [] e = readBack (varsCont c) (eval e ENil)
+unfold c ss e = readBack (varsCont c) (eval e (envContLock ss c))
+
 -- | given a type checking context, get the definition of a variable
 defCont :: String -> Cont -> Exp
-defCont x [] = Var x
-defCont x ((Dec x' a) : c)
+defCont x CNil = Var x
+defCont x (CConsVar c x' _)
   | x == x'   = Var x
   | otherwise = defCont x c
-defCont x ((Def x' a e) : c)
+defCont x (CConsDef c x' a e)
   | x == x'   = e
   | otherwise = defCont x c
 
 typeOf :: Cont -> Exp -> Exp
-typeOf c (Abs d e) = let b = typeOf (d : c) e in Abs d b
-typeOf c e         = readBack (varsCont c) (typeOfV c e)
+typeOf c (Abs d e) =
+  case d of
+    Dec x a ->
+      let a' = typeOf c a
+          v  = eval a (envCont c)
+          c' = consCVar c x v
+          e' = typeOf c' e
+      in Abs (Dec x a') e'
+    Def x a b ->
+      let e' = typeOf (CConsDef c x a b) e
+      in Abs d e'
+typeOf c e = readBack (varsCont c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> Val
 typeOfV c (Var x)     = let Just v = getType c x in v

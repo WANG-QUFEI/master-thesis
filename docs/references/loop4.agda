@@ -8,11 +8,11 @@ Pow X = X -> Set
 T : Set -> Set
 T X = Pow (Pow X)
 
-funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
-funT X Y f t g = t (λ x -> g (f x))
-
 ⊥ : Set
 ⊥ = (X : Set) -> X
+
+funT : (X Y : Set) -> (X -> Y) -> T X -> T Y
+funT X Y f t g = t (λ x -> g (f x))
 
 ¬ : Set -> Set
 ¬ X = X -> ⊥
@@ -41,8 +41,11 @@ B z = ¬ ((p : Pow U) -> sigma z p -> p (delta z))
 C : U
 C = tau Q
 
-lem1 : Q B 
-lem1 z k l = l B k (λ p -> l (cDelta p)) 
+lem1 : Q B
+lem1 z k l = l B k (λ p -> l (λ z1 -> p (delta z1)))
+
+-- lem1 : Q B 
+-- lem1 z k l = l B k (λ p -> l (cDelta p)) 
 
 A : Set
 A = (p : Pow U) -> Q p -> p C
@@ -58,31 +61,3 @@ loop = lem2 lem3
 
 delta2 : U -> U
 delta2 z = delta (delta z)
-
-{-
-
- λ z X f →
-  f
-  (λ g →
-     z ((((X₁ : Set) → (((X₁ → Set) → Set) → X₁) → X₁) → Set) → Set)
-     (λ t g₁ →
-        t (λ x → g₁ (λ X₁ f₁ → f₁ (λ g₂ → x (λ x₁ → g₂ (x₁ X₁ f₁))))))
-     (λ x → g (x X f)))
-
-λ z X f →
-  f
-  (λ g →
-     z ((((X₁ : Set) → (((X₁ → Set) → Set) → X₁) → X₁) → Set) → Set)
-     (λ t g₁ →
-        t (λ x → g₁ (λ X₁ f₁ → f₁ (λ g₂ → x (λ x₁ → g₂ (x₁ X₁ f₁))))))
-     (λ x →
-        g
-        (f
-         (λ g₁ →
-            x ((((X₁ : Set) → (((X₁ → Set) → Set) → X₁) → X₁) → Set) → Set)
-            (λ t g₂ →
-               t (λ x₁ → g₂ (λ X₁ f₁ → f₁ (λ g₃ → x₁ (λ x₂ → g₃ (x₂ X₁ f₁))))))
-            (λ x₁ → g₁ (x₁ X f))))))
-
-
--}

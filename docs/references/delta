@@ -34,10 +34,10 @@ Give name to conversion    beta-eta-delta
  (it is also possible but less elegant in Haskell to have a separate
   type of "values";  I will write V, W, ... for terms that are values)
 
-                This introduction of "values" is not really necessary for this simple language
-		but it will be when we add data types and functions defined by cases
+This introduction of "values" is not really necessary for this simple language
+but it will be when we add data types and functions defined by cases
 
- environment
+environment
 
   r ::=   ()   |   (r, x=V)   |   D r
 
@@ -63,18 +63,16 @@ Give name to conversion    beta-eta-delta
  get x ()    = x
  
 -----------------
-
-  Without lock/unlock
+Without lock/unlock
   
- We can then define type checking    G context, M term, V a value
+We can then define type checking: G context, M term, V a value
 
- r(G) is the following env    r() = ()    r(G[x:A]) = r(G)     r(G D) = D r(G)
+r(G) is the following env: r() = ()    r(G[x:A]) = r(G)     r(G D) = D r(G)
 
-              --so this is like the list of definitions in G
-	      --the idea is that (r,x=x)   and r  are indistinguishable     
-	      
+ --so this is like the list of definitions in G
+ --the idea is that (r,x=x)   and r  are indistinguishable     
 
- T(G) will be needed for eta-conversion  it records the -type- of the variables declared in G
+T(G) will be needed for eta-conversion  it records the -type- of the variables declared in G
 
   G |- M : V
 
@@ -107,7 +105,7 @@ Give name to conversion    beta-eta-delta
    T(G[x:A])   = T(G), x : eval A r(G)
    T(G[x:A=M]) = T(G), x : eval A r(G)
 
-  and what is left is definition of  equality of types T(G) |-  V1 = V2 
+ and what is left is definition of  equality of types T(G) |-  V1 = V2 
 
  First we define  beta-conversion    T(G) |- V1 = V2
 
@@ -126,11 +124,11 @@ Give name to conversion    beta-eta-delta
    this is actually simple: we check   T(G) |- V1 = V2 : V   and   T(G) |- V1 = V2 -> V
 
            T(G) |- x = x -> getType x T(G)
-	   T(G) |- M1 N1 = M2 N2 -> eval B (r,x=N1)
+	   T(G) |- M1 N1 = M2 N2 -> eval B (r,x = eval r(G) N1)
 	        if  T(G) |- M1 = M2 -> ([x:A]B)r  and T(G) |- N1 = N2 : eval A r
 
 
-           T(G) |- V1 = V2 : ([z:A]B)r   if    T(G), x : eval A r |- V1 x = V2 x : B(r,z=x)       x fresh variable
+           T(G) |- V1 = V2 : ([z:A]B)r   if    T(G), x : eval A r |- eval (V1 x) r(G) = eval (V2 x) r(G) : eval B (r,z=x), x fresh variable
 	   T(G) |- ([x1:A1]B1)r1 = ([x2:A2]B2)r2 : U
 	          if  T(G) |- eval A1 r1 = eval A2 r2  and T(G), x : eval A1 r1 |- B1(r1,x1=x) = B2(r2,x2=x)
 	   T(G) |- V1 = V2 : W            W not closure if  T(G) |- V1 = V2 -> W'  for some W'
@@ -147,7 +145,7 @@ Give name to conversion    beta-eta-delta
 
 
 
-   -add the lock/unlock  mechanism
+ -add the lock/unlock  mechanism
 
  The question is:  should locking/unlocking annotations be applied to -definitions- or to -expressions-??
 
@@ -168,18 +166,16 @@ Give name to conversion    beta-eta-delta
 
  We then define   G |-xs D   for D = [x : A = M]  by  G |-xs A   and  G |-xs M : eval A r(G,xs)
 
-  -write an interactive   evaluation function  with a readback function
+ -write an interactive evaluation function  with a readback function
+
+ In a context G  we have a value V can be  eval M r(G,xs)   for some xs
+
+ We want to readback V and produces an expression M'  which would be the evaluation of
+ M with unlocked constants in xs
 
 
-    In a context G    we have a value V     can be  eval M r(G,xs)   for some xs
-
-    We want to readback V and produces an expression M'  which would be the evaluation of
-    M with unlocked constants in xs
-
-
-    This is as follows let ns = names declared in G (or names specified as unlocked ?)
-
-     R(ns,U) = U
-     R(ns,x) = x
-     R(ns,V1 V2) = R(ns,V1) R(ns,V2)
-     R(ns,([x:A]B)r) =  [z:R(ns, eval A r)] R(z:ns,eval B (r, x=z))      with z = fresh ns
+ This is as follows let ns = names declared in G (or names specified as unlocked ?)
+   R(ns,U) = U
+   R(ns,x) = x
+   R(ns,V1 V2) = R(ns,V1) R(ns,V2)
+   R(ns,([x:A]B)r) =  [z:R(ns, eval A r)] R(z:ns,eval B (r, x=z))      with z = fresh ns

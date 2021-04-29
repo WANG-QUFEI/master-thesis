@@ -51,10 +51,7 @@ instance Show Exp where
                               _       -> showsPrec p_low a . showString " -> " . showsPrec p_low e
         Abs d@(Dec x _) e  -> showString "[ " . showsPrec p_bar d . showString " ] " . showsPrec p_low e
         Abs d@(Def _ _ _) e -> showString "[ " . showsPrec p_bar d . showString " ] " . showsPrec p_low e
-        Clos e r -> showsPrec p_low e . showString " { " . showsPrec p_low r . showString " } "
-
--- | the syntax for 'Exp' is also used as value in this language
-type Val = Exp
+        Clos e r -> showsPrec p_low e . showString " @env " . showsPrec p_low r
 
 -- | abstract syntax for declarations
 data Decl = Dec String Exp | Def String Exp Exp deriving (Eq)
@@ -65,22 +62,46 @@ instance Show Decl where
     Dec x a   -> showString (x ++ " : ") . showsPrec p_bar a
     Def x a e -> showString (x ++ " : ") . showsPrec p_bar a . showString " = " . showsPrec p_bar e
 
--- | A type-checking context related with an environment
-type Cont = [Decl]
+-- | an abstract context for a loaded source file
+type AbsContext = [Decl]
 
--- | environment
+-- | the syntax for 'Exp' is also used as value in this language
+type Val = Exp
+
+-- | a datatype defined for the ease of printing Env and Cont
+data PrintPair = PrintPair Bool String Val
+
+instance Show PrintPair where
+  showsPrec _ (PrintPair True s v) = showString s . showString " = " . showsPrec p_low v
+  showsPrec _ (PrintPair False s v) = showString s . showString " : " . showsPrec p_low v
+
+-- | environment that relates a variable to a value
 data Env = ENil
          | EConsVar Env String Val
          | EConsDef Env String Exp Exp
          deriving (Eq)
 
 instance Show Env where
-  showsPrec _ r = showList (reverse . toList $ r)
-    where toList :: Env -> [Decl]
-          toList ENil               = []
-          toList (EConsVar r x v)   = (Dec x v) : (toList r)
-          toList (EConsDef r x a e) = (Def x a e) : (toList r)
+  showsPrec _ r = showList (reverse . convert $ r)
+    where convert :: Env -> [PrintPair]
+          convert ENil = []
+          convert (EConsVar r' s v) = (PrintPair True s v) : (convert r')
+          convert (EConsDef r' s _ v) = (PrintPair True s v) : (convert r')
+          
+-- | context that relates a variable to a type
+data Cont = CNil
+          | CConsVar Cont String Val
+          | CConsDef Cont String Exp Exp
+          deriving (Eq)
 
+instance Show Cont where
+  showsPrec _ c = showList (reverse . convert $ c)
+    where convert :: Cont -> [PrintPair]
+          convert CNil = []
+          convert (CConsVar c' s t) = (PrintPair False s t) : (convert c')
+          convert (CConsDef c' s t _) = (PrintPair False s t) : (convert c')
+
+-- | a datatype used as exception in an ExceptT monad
 data TypeCheckError = InvalidApp     Exp
                     | DupDecl        Id Id
                     | VarNotbound    Id
@@ -88,6 +109,8 @@ data TypeCheckError = InvalidApp     Exp
                     | NotConvertible Val Val
                     | ExtendedErr    TypeCheckError [ErrorText]
                     deriving (Show)
+
+type ErrorText = String
 
 -- | a composite monad which contains a state monad and an exception monad
 newtype G e s a = G {mkg :: ExceptT e (State s) a}
@@ -105,8 +128,6 @@ idStr (Id (_, id)) = id
 idPos :: Id -> (Int, Int)
 idPos (Id (pos, _)) = pos
 
-type ErrorText = String
-
 -- | turn a TypeCheckError to a list of string for display
 errorText :: TypeCheckError -> [ErrorText]
 errorText err = case err of
@@ -118,17 +139,7 @@ errorText err = case err of
   NotConvertible v v'         -> ["Values not convertible", "v1: " ++ show v, "v2: " ++ show v']
   ExtendedErr err ss          -> (errorText err) ++ ss
 
--- | extend an environment with a variable and its value
-consEVar :: Env -> String -> Val -> Env
-consEVar r "" v = r
-consEVar r x v  = EConsVar r x v
-
--- | extend a type-checking context with a variable and its type
-consCVar :: Cont -> String -> Exp -> Cont
-consCVar c "" _ = c
-consCVar c x a  = (Dec x a) : c
-
--- | semantics about how an expression should be evaluated
+-- | evaluate an expression in a given environment
 eval :: Exp -> Env -> Val
 eval e r = case e of
   U                  -> U
@@ -138,6 +149,16 @@ eval e r = case e of
   Abs (Def x a e) e' -> eval e' (EConsDef r x a e)
   Clos _ _           -> e
 
+-- | extend an environment with a variable and its value
+consEVar :: Env -> String -> Val -> Env
+consEVar r "" _ = r
+consEVar r x v  = EConsVar r x v
+
+-- | extend a type-checking context with a variable and its type
+consCVar :: Cont -> String -> Val -> Cont
+consCVar c "" _ = c
+consCVar c x t  = CConsVar c x t
+
 -- | application operation on values
 appVal :: Val -> Val -> Val
 appVal v1 v2 = case v1 of
@@ -146,11 +167,11 @@ appVal v1 v2 = case v1 of
 
 -- | get the environment related with a type-checking context
 envCont :: Cont -> Env
-envCont []                = ENil
-envCont ((Dec _ _) : c)   = envCont c
-envCont ((Def x a e) : c) = EConsDef (envCont c) x a e
+envCont CNil = ENil
+envCont (CConsVar c _ _) = envCont c
+envCont (CConsDef c x a e) = EConsDef (envCont c) x a e
 
--- | get variable value
+-- | get the value of a variable from an environment
 getVal :: String -> Env -> Val
 getVal x ENil = Var x
 getVal x (EConsVar r x' v)
@@ -162,25 +183,24 @@ getVal x (EConsDef r x' a e)
 
 -- | get the type of a variable in a given context
 getType :: Cont -> String -> Maybe Val
-getType [] _ = Nothing
-getType ((Dec x' a) : c) x
+getType CNil _ = Nothing
+getType (CConsVar c x' a) x
   | x' == x = Just $ eval a (envCont c)
   | otherwise = getType c x
-getType ((Def x' a _) : c) x
+getType (CConsDef c x' a _) x
   | x' == x = Just $ eval a (envCont c)
   | otherwise = getType c x
 
 -- | get all the variables of a context
 varsCont :: Cont -> [String]
-varsCont c = map f c
-  where f :: Decl -> String
-        f (Dec x _)    = x
-        f (Def x _ _ ) = x
+varsCont CNil = []
+varsCont (CConsVar c x _) = reverse (x : (varsCont c))
+varsCont (CConsDef c x _ _) = reverse (x : (varsCont c))
 
 -- | generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String
 freshVar x xs = if x `elem` xs
                 then freshVar (x ++ "'") xs
                 else if x == ""
-                     then freshVar "t_var" xs
+                     then freshVar "var" xs
                      else x
