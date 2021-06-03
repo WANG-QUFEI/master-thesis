@@ -173,7 +173,6 @@ T(G) will be needed for eta-conversion  it records the -type- of the variables d
  We want to readback V and produces an expression M'  which would be the evaluation of
  M with unlocked constants in xs
 
-
  This is as follows let ns = names declared in G (or names specified as unlocked ?)
    R(ns,U) = U
    R(ns,x) = x

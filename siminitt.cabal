@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 278076c0576b6b49e22442640304239af176a8f95eace9bd76a17327354b1bf2
+-- hash: 0ebe822a9fb4b6cb5fcc99d577023ce9a5f828623a4d29aebc7efb5d625bb75c
 
 name:           siminitt
 version:        0.1.0.0
@@ -30,8 +30,8 @@ source-repository head
 executable siminitt
   main-is: Main.hs
   other-modules:
-      Base
       CmdUtil
+      Convertor
       Core.Abs
       Core.ErrM
       Core.Layout
@@ -39,8 +39,10 @@ executable siminitt
       Core.Par
       Core.Print
       Core.Skel
+      Lang
+      Monads
+      Classes
       MessageHelper
-      TransUtil
       TypeChecker
       Paths_siminitt
   hs-source-dirs:

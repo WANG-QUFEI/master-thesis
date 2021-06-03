@@ -25,7 +25,7 @@ import           System.Directory (doesFileExist)
 
 import           Base
 import           Core.Abs
-import           Core.Par         (myLexer, pCExp, pContext)
+import           Core.Par         (myLexer, pCDecl, pCExp, pContext)
 import           MessageHelper
 import           TypeChecker
 
@@ -37,6 +37,7 @@ data Cmd = Quit
          | ShowFile
          | Load FilePath
          | Check CExp
+         | CheckD CDecl
          | HeadRed
          | ExpEval
          | Unfold [String]
@@ -45,27 +46,28 @@ data Cmd = Quit
 
 -- | given an input string, return a valid command or an error message if the input is not valid
 getCmd :: String -> Either String Cmd
-getCmd s = case blankStr s of
-  True -> Right None
-  _    -> let ws = words s in
-    case head ws of
-      ":?"      -> Right Help
-      ":h"      -> Right Help
-      ":help"   -> Right Help
-      ":q"      -> Right Quit
-      ":quit"   -> Right Quit
-      ":s"      -> Right ShowFile
-      ":show"   -> Right ShowFile
-      ":l"      -> getLoad ws
-      ":load"   -> getLoad ws
-      ":c"      -> getCheck ws
-      ":check"  -> getCheck ws
-      ":hred"   -> Right HeadRed
-      ":eval"   -> Right ExpEval
-      ":u"      -> Right (Unfold (tail ws))
-      ":unfold" -> Right (Unfold (tail ws))
-      ":t"      -> getExpType ws
-      _         -> Left $ errorMsg "unknown command"
+getCmd s = if blankStr s
+           then Right None
+           else let ws = words s in
+                  case head ws of
+                    ":?"         -> Right Help
+                    ":h"         -> Right Help
+                    ":help"      -> Right Help
+                    ":q"         -> Right Quit
+                    ":quit"      -> Right Quit
+                    ":s"         -> Right ShowFile
+                    ":show"      -> Right ShowFile
+                    ":l"         -> getLoad ws
+                    ":load"      -> getLoad ws
+                    ":c"         -> getCheck ws
+                    ":check"     -> getCheck ws
+                    ":checkDecl" -> getCheckDecl ws
+                    ":hred"      -> Right HeadRed
+                    ":eval"      -> Right ExpEval
+                    ":u"         -> Right (Unfold (tail ws))
+                    ":unfold"    -> Right (Unfold (tail ws))
+                    ":t"         -> getExpType ws
+                    _            -> Left $ errorMsg "unknown command"
   where
     blankStr :: String -> Bool
     blankStr s = all isSpace s
@@ -81,6 +83,13 @@ getCmd s = case blankStr s of
                    ws' -> case pCExp (myLexer (unwords ws')) of
                             Left _   -> Left $ errorMsg "syntax error, bad expression"
                             Right ce -> Right (Check ce)
+
+    getCheckDecl :: [String] -> Either String Cmd
+    getCheckDecl ws = case tail ws of
+                        [] -> Left $ errorMsg "missing declarations/definitions"
+                        ws' -> case pCDecl (myLexer (unwords ws')) of
+                                 Left _ -> Left $ errorMsg "syntax error, bad declaration/definition"
+                                 Right cd -> Right (CheckD cd)
 
     getExpType :: [String] -> Either String Cmd
     getExpType ws = case tail ws of
@@ -121,6 +130,16 @@ headRedV c (Var x)     = eval (defCont x c) ENil
 headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
 headRedV c e           = eval e ENil
 
+-- | given a type checking context, get the definition of a variable
+defCont :: String -> Cont -> Exp
+defCont x CNil = Var x
+defCont x (CConsVar c x' _)
+  | x == x'   = Var x
+  | otherwise = defCont x c
+defCont x (CConsDef c x' a e)
+  | x == x'   = e
+  | otherwise = defCont x c
+
 -- | turn a value into an expression, remove the closure of a value
 readBack :: [String] -> Val -> Exp
 readBack _ U = U
@@ -148,16 +167,6 @@ envContLock xs (CConsDef c x a e) =
 unfold :: Cont -> [String] -> Exp -> Exp
 unfold c [] e = readBack (varsCont c) (eval e ENil)
 unfold c ss e = readBack (varsCont c) (eval e (envContLock ss c))
-
--- | given a type checking context, get the definition of a variable
-defCont :: String -> Cont -> Exp
-defCont x CNil = Var x
-defCont x (CConsVar c x' _)
-  | x == x'   = Var x
-  | otherwise = defCont x c
-defCont x (CConsDef c x' a e)
-  | x == x'   = e
-  | otherwise = defCont x c
 
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Abs d e) =

@@ -1,23 +1,38 @@
 {-|
 Module          : TransUtil
-Description     : providing the transforming function from the concrete syntax to the abstract syntax
+Description     : Provides functions to convert the concret syntax to abstract syntax
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
-module TransUtil where
+module Convertor where
 
 import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.Map             as Map
 
-import           Base
+import           Classes
 import           Core.Abs
+import           Lang
+import           Monads
 
 -- | monad for converting
-type ConvertM a = G TypeCheckError (Map.Map String Id) a
+type ConvertM a = G ConversionError (Map.Map String Id) a
 
--- |transform a concrete context into its abstract context,
--- check proper declaration and reference of variables at the same time
+data ConversionError
+  = DupDecl Id Id
+  | VarNotbound Id
+  deriving (Show)
+
+instance InformativeError ConversionError where
+  explain (DupDecl id1 id2) =
+    [ "Duplicated declaration of variable",
+      idStr id1 ++ " is first declared at " ++ show (idPos id1),
+      "Find duplication at " ++ show (idPos id2)]
+  explain (VarNotbound (Id (pos, id))) =
+    ["Find unbound variable " ++ id ++ ", at " ++ show pos]
+
+-- | Transform a concrete context into the corresponding abstract context,
+--   and check the proper declaration and reference of variables during the conversion
 absCtx :: Context -> ConvertM [Decl]
 absCtx (Ctx xs) = mapM absDecl xs
 
@@ -29,7 +44,7 @@ absDecl (CDec id e) = do
     Just id' -> throwError $ DupDecl id' id
     _        -> do
       e' <- absExp e
-      modify (\s -> Map.insert (idStr id) id s)
+      modify (Map.insert (idStr id) id)
       return $ Dec (idStr id) e'
 absDecl (CDef id e1 e2) = do
   r <- gets (Map.lookup (idStr id))
@@ -38,7 +53,7 @@ absDecl (CDef id e1 e2) = do
     _        -> do
       e1' <- absExp e1
       e2' <- absExp e2
-      modify (\s -> Map.insert (idStr id) id s)
+      modify (Map.insert (idStr id) id)
       return $ Def (idStr id) e1' e2'
 
 -- |transform a concrete expression into its abstract form
@@ -79,4 +94,3 @@ absExp e = case e of
         e3' <- absExp e3
         put m
         return $ Abs (Def (idStr id) e1' e2') e3'
-

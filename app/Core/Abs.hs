@@ -3,13 +3,13 @@
 
 module Core.Abs where
 
-import Prelude (Char, Double, Int, Integer, String)
-import qualified Prelude as C (Eq, Ord, Show, Read)
+import           Prelude (Char, Double, Int, Integer, String)
+import qualified Prelude as C (Eq, Ord, Read, Show)
 
 newtype Id = Id ((Int, Int), String)
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Context = Ctx [CDecl]
+newtype Context = Ctx [CDecl]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 data CExp

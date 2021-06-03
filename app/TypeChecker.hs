@@ -1,12 +1,13 @@
 {-|
 Module          : TypeChecker
-Description     : providing functions that type check a transformed context
+Description     : providing functions that type check the abstract syntax
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
 module TypeChecker where
 
 
+import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
 import           Data.List
@@ -14,30 +15,45 @@ import qualified Data.Map             as Map
 import           Data.Maybe
 import           Debug.Trace
 
-import           Base
+import           Classes
+import           Convertor
 import           Core.Abs
 import           Core.Print           (printTree)
-import           TransUtil
+import           Lang
+import           Monads
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
 
--- | given a type-checking context, infer the type of an expression
-checkI       :: Cont -> Exp -> TypeCheckM Val
--- | given a type-checking context, check that an expression has given type
-checkT       :: Cont -> Exp -> Val -> TypeCheckM ()
--- | check convertibility with eta-conversion, return inferred type
-checkCI      :: Cont -> Val -> Val -> TypeCheckM Val
--- | check convertibility with eta-conversion, under a given type
-checkCT      :: Cont -> Val -> Val -> Val -> TypeCheckM ()
--- | given a type-checking context, check that a definition is valid
-checkDef     :: Cont -> String -> Exp -> Exp -> TypeCheckM Cont
--- | given a type-checking context, check taht a declaration is valid
-checkDec     :: Cont -> String -> Exp -> TypeCheckM Cont
+-- | a datatype used as exception in an ExceptT monad
+data TypeCheckError
+  = InvalidApp Exp
+  | TypeInferErr Exp
+  | NotConvertible Val Val
+  deriving (Show)
+
+instance InformativeError TypeCheckError where
+  explain (InvalidApp e) = ["Invalid application on: " ++ show e]
+  explain (TypeInferErr e) = ["Can not infer type for: " ++ show e]
+  explain (NotConvertible v1 v2) = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
+
+-- | all the checking functions below run in the context of 'TypeCheckM' monad
+-- | infer the type of an expression
+checkI       :: Exp -> TypeCheckM Val
+-- | check an expression has certain value as its type
+checkT       :: Exp -> Val -> TypeCheckM ()
+-- | check that two values are equal and infer their type
+checkCI      :: Val -> Val -> TypeCheckM Val
+-- | check that two values are equal and has the given type
+checkCT      :: Val -> Val -> Val -> TypeCheckM ()
+-- | check that a definition is valid
+checkDef     :: String -> Exp -> Exp -> TypeCheckM Cont
+-- | check taht a declaration is valid
+checkDec     :: String -> Exp -> TypeCheckM Cont
 
 checkI c U = return U
 checkI c (Var x) = case getType c x of
-  Just v -> return v
+  Just v  -> return v
   Nothing -> error ("variable " ++ show x ++ " is not bound")
 checkI c (App e1 e2) = do
   v <- checkI c e1
@@ -50,24 +66,17 @@ checkI c (App e1 e2) = do
 checkI c (Abs (Def x a e1) e) = do
   c' <- checkDef c x a e1
   checkI c' e
-checkI c e@(Abs (Dec _ _) _) = do
+checkI c e@(Abs Dec {} _) = do
   checkT c e U
   return U
 checkI _ e = throwError $ TypeInferErr e
 
 checkT c U U = return ()
 checkT c (Var x) v = case getType c x of
-  Just v' -> checkCI c v' v >> return ()
-checkT c (App e1 e2) v = do
-  v1 <- checkI c e1
-  case v1 of
-    Clos (Abs (Dec x a) b) r -> do
-      checkT c e2 (eval a r)
-      let v2 = eval e2 (envCont c)
-          v' = eval b (consEVar r x v2)
-      checkCI c v v'
-      return ()
-    _ -> throwError $ InvalidApp e1
+  Just v' -> void (checkCI c v' v)
+checkT c e@App {} v = do
+  v' <- checkI c e
+  void (checkCI c v v')
 checkT c (Abs (Dec x a) b) U = do
   checkT c a U
   checkT (consCVar c x a) b U
@@ -85,7 +94,7 @@ checkCI _ U U = return U
 checkCI c (Var x) (Var x') =
   if x == x'
   then case getType c x of
-         Just v -> return v
+         Just v  -> return v
          Nothing -> error ("variable: " ++ show x ++ " is not bound")
   else throwError $ NotConvertible (Var x) (Var x')
 checkCI c (App m1 n1) (App m2 n2) = do
@@ -96,9 +105,7 @@ checkCI c (App m1 n1) (App m2 n2) = do
           v  = eval n1 (envCont c)
       checkCT c n1 n2 t2
       return (eval b (consEVar r x v))
-    _ -> trace ("t1: " ++ show t1 ++ "\nm1:" ++ show m1 ++
-                 "\nm2:" ++ show m2 ++ "\nn1:" ++ show n1 ++
-                 "\nn2:" ++ show n2 ++ "\nContext:" ++ show c) throwError $ NotConvertible (App m1 n1) (App m2 n2)
+    _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
 checkCI c v1@(Clos (Abs (Dec x a) e) r) v2@(Clos (Abs (Dec x' a') e') r') = do
   checkCT c v1 v2 U
   return U
@@ -152,11 +159,11 @@ runTypeCheckCtx ctx@(Ctx cs) =
     checkDecl d@(Dec x a) = do {
       c  <- get ;
       c' <- checkDec c x a ;
-      put c' } `catchError` (errhandler d)
+      put c' } `catchError` errhandler d
     checkDecl d@(Def x a e) = do {
       c  <- get ;
       c' <- checkDef c x a e ;
-      put c' } `catchError` (errhandler d)
+      put c' } `catchError` errhandler d
     errhandler :: Decl -> TypeCheckError -> TypeCheckM ()
     errhandler d err = do
       let ss = ["when checking decl: " ++ show d]
@@ -169,9 +176,20 @@ checkExpValidity cc ac ce = let m = toMap cc in
     Right e  -> case runG (checkI ac e) CNil of
       Left err -> Left err
       Right _  -> Right e
-  where
-    toMap :: Context -> Map.Map String Id
-    toMap (Ctx ds) = Map.unions (map toMapD ds)
-    toMapD :: CDecl -> Map.Map String Id
-    toMapD (CDec id _)   = Map.singleton (idStr id) id
-    toMapD (CDef id _ _) = Map.singleton (idStr id) id
+
+checkDeclValidity :: Context -> Cont -> CDecl -> Either TypeCheckError Decl
+checkDeclValidity cc ac cd =
+  let m = toMap cc
+  in case runG (absDecl cd) m of
+       Left err -> Left err
+       Right d -> case d of
+         Dec x a -> case runG (checkDec ac x a) of
+           Left err -> Left err
+
+
+toMap :: Context -> Map.Map String Id
+toMap (Ctx ds) = Map.unions (map toMapD ds)
+
+toMapD :: CDecl -> Map.Map String Id
+toMapD (CDec id _)   = Map.singleton (idStr id) id
+toMapD (CDef id _ _) = Map.singleton (idStr id) id

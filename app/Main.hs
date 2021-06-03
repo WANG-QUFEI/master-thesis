@@ -6,13 +6,19 @@ Portability     : POSIX
 -}
 module Main (main) where
 
-import           Control.Monad.IO.Class
-import           System.Console.Haskeline
-import           System.Directory
+import           Control.Monad.IO.Class   (MonadIO (liftIO))
+import           System.Console.Haskeline (InputT, defaultSettings,
+                                           getInputLine, outputStr, outputStrLn,
+                                           runInputT)
+import           System.Directory         (doesFileExist)
 
-import           Base
-import           CmdUtil
-import           Core.Abs
+import           Lang                     (Cont (CNil), Exp (U))
+import           CmdUtil                  (Cmd (Check, ExpEval, GetType, HeadRed, Help, Load, None, Quit, ShowFile, Unfold),
+                                           checkExpValidity, errorMsg, getCmd,
+                                           headRed, infoMsg, okayMsg,
+                                           parseCheckFile, totalEval,
+                                           typeCheckErrMsg, typeOf, unfold)
+import           Core.Abs                 (Context (..))
 import           Core.Print               (printTree)
 
 main :: IO ()
@@ -21,7 +27,7 @@ main = runInputT defaultSettings repl
 -----------------------------------------------------
 repl :: InputT IO ()
 repl = do
-  outputStrLn "~ welcome, type command ':?' for the usage of this program, ':q' to quit"
+  outputStrLn "~ welcome, type ':?' for the usage of this program, ':q' to quit"
   loop (Ctx []) CNil U
 
 loop :: Context -> Cont -> Exp -> InputT IO ()
@@ -47,19 +53,17 @@ loop cc ac e = do
           loop cc ac e
       Right (Load fp) -> do
         fb <- liftIO (doesFileExist fp)
-        case fb of
-          True -> do
-            r <- liftIO (loadFile fp)
-            case r of
-              Left err -> do
-                outputStr err
-                loop cc ac e
-              Right (cc', ac') -> do
-                outputStrLn $ okayMsg "file loaded!"
-                loop cc' ac' e
-          _    -> do
-            outputStrLn $ errorMsg "file does not exist"
-            loop cc ac e
+        if fb then (do
+          r <- liftIO (loadFile fp)
+          case r of
+            Left err -> do
+              outputStr err
+              loop cc ac e
+            Right (cc', ac') -> do
+              outputStrLn $ okayMsg "file loaded!"
+              loop cc' ac' e) else (do
+          outputStrLn $ errorMsg "file does not exist"
+          loop cc ac e)
       Right (Check ce) -> case checkExpValidity cc ac ce of
         Left tce -> do
           outputStr (typeCheckErrMsg tce)
@@ -67,6 +71,7 @@ loop cc ac e = do
         Right e' -> do
           outputStrLn (okayMsg "expression type checked!")
           loop cc ac e'
+      Right (CheckD cd) -> 
       Right (GetType ce) -> case checkExpValidity cc ac ce of
         Left tce -> do
           outputStr (typeCheckErrMsg tce)
