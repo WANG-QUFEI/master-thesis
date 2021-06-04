@@ -127,13 +127,13 @@ getVal (EConsDef r x' a e) x
   | otherwise = getVal r x
 
 -- | get the type of a variable in a given context
-getType :: Cont -> String -> Maybe Val
+getType :: Cont -> String -> Maybe Exp
 getType CNil _ = Nothing
 getType (CConsVar c x' a) x
-  | x' == x = Just $ eval a (envCont c)
+  | x' == x = Just a
   | otherwise = getType c x
 getType (CConsDef c x' a _) x
-  | x' == x = Just $ eval a (envCont c)
+  | x' == x = Just a
   | otherwise = getType c x
 
 -- | application operation on values
@@ -152,13 +152,6 @@ consCVar :: Cont -> String -> Val -> Cont
 consCVar c "" _ = c
 consCVar c x t  = CConsVar c x t
 
--- | get the environment related with a type-checking context
-envCont :: Cont -> Env
-envCont CNil               = ENil
-envCont (CConsVar c _ _)   = envCont c
-envCont (CConsDef c x a e) = EConsDef (envCont c) x a e
-
--- | get all the variables of a context
 varsCont :: Cont -> [String]
 varsCont CNil               = []
 varsCont (CConsVar c x _)   = reverse (x : varsCont c)

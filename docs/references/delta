@@ -18,8 +18,6 @@ Give name to conversion    beta-eta-delta
  Thus   N[x1:A1=M1][x2:A2=M2]    means   let x2:A2 = M2 in (let x1:A1 = M1 in N)
 
 
-
-
  A file  will be  a list of declarations   D1 ... Dn  
 
  The result will be a -context- as defined below
@@ -151,7 +149,7 @@ T(G) will be needed for eta-conversion  it records the -type- of the variables d
 
  If we apply it to definitions, here is what one can do
 
-    we introduce a new judgement    G |-xs   M : V
+ we introduce a new judgement  G |-xs   M : V
 
  where xs is a list of unlocked names
 

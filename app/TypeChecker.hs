@@ -6,7 +6,6 @@ Portability     : POSIX
 -}
 module TypeChecker where
 
-
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
@@ -33,159 +32,165 @@ data TypeCheckError
   deriving (Show)
 
 instance InformativeError TypeCheckError where
-  explain (InvalidApp e) = ["Invalid application on: " ++ show e]
-  explain (TypeInferErr e) = ["Can not infer type for: " ++ show e]
+  explain (InvalidApp e) = ["Invalid application: " ++ show e]
+  explain (TypeInferErr e) = ["Cannot infer type for expression: " ++ show e]
   explain (NotConvertible v1 v2) = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
 
--- | all the checking functions below run in the context of 'TypeCheckM' monad
--- | infer the type of an expression
-checkI       :: Exp -> TypeCheckM Val
--- | check an expression has certain value as its type
-checkT       :: Exp -> Val -> TypeCheckM ()
+-- | check an expression is well typed and infer its type
+checkI    :: EnvStrategy s => s -> Cont -> Exp -> TypeCheckM Val
+-- | check an expression is well typed given a certain type
+checkT    :: EnvStrategy s => s -> Cont -> Exp -> Val -> TypeCheckM ()
 -- | check that two values are equal and infer their type
-checkCI      :: Val -> Val -> TypeCheckM Val
--- | check that two values are equal and has the given type
-checkCT      :: Val -> Val -> Val -> TypeCheckM ()
--- | check that a definition is valid
-checkDef     :: String -> Exp -> Exp -> TypeCheckM Cont
--- | check taht a declaration is valid
-checkDec     :: String -> Exp -> TypeCheckM Cont
+checkCI   :: EnvStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
+-- | check that two values are equal under a given type
+checkCT   :: EnvStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
+-- | check that a declaration/definition is valid
+checkDecl :: EnvStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
 
-checkI c U = return U
-checkI c (Var x) = case getType c x of
-  Just v  -> return v
-  Nothing -> error ("variable " ++ show x ++ " is not bound")
-checkI c (App e1 e2) = do
-  v <- checkI c e1
-  case v of
+checkI _ _ U = return U -- U has itself as its element
+checkI s c (Var x) = do
+  case getType c x of
+    Just t -> let env = getEnv s c
+              in return $ eval t env
+checkI s c (App m n) = do
+  tm <- checkI s c m
+  case tm of
     Clos (Abs (Dec x a) b) r -> do
-      checkT c e2 (eval a r)
-      let v' = eval e2 (envCont c)
-      return $ eval b (consEVar r x v')
-    _ -> throwError $ InvalidApp e1
-checkI c (Abs (Def x a e1) e) = do
-  c' <- checkDef c x a e1
-  checkI c' e
-checkI c e@(Abs Dec {} _) = do
-  checkT c e U
+      let va = eval a r
+      checkT s c n va
+      let env = getEnv s c
+          vn = eval n env
+          r' = consEVar r x vn
+      return (eval b r')
+    _ -> throwError $ InvalidApp (App m n)
+checkI s c (Abs d@Def {} e) = do
+  c' <- checkDecl s c d
+  checkI s c' e
+checkI s c e@Abs {} = do
+  checkT s c e U
   return U
-checkI _ e = throwError $ TypeInferErr e
+checkI _ _ e = throwError $ TypeInferErr e
 
-checkT c U U = return ()
-checkT c (Var x) v = case getType c x of
-  Just v' -> void (checkCI c v' v)
-checkT c e@App {} v = do
-  v' <- checkI c e
-  void (checkCI c v v')
-checkT c (Abs (Dec x a) b) U = do
-  checkT c a U
-  checkT (consCVar c x a) b U
-checkT c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
-  checkT c a U
-  let v  = eval a (envCont c)
-      v' = eval a' r
-  checkCI c v v'
-  checkT (consCVar c x a) e (eval e' (consEVar r x' (Var x)))
-checkT c (Abs (Def x a e1) e) v = do
-  c' <- checkDef c x a e1
-  checkT c' e v
+checkT _ _ U U = return ()
+checkT s c (Var x) v = do
+  case getType c x of
+    Just t -> do
+      let env = getEnv s c
+          vt  = eval t env
+      void (checkCI s c vt v)
+checkT s c e@App {} v = do
+  v' <- checkI s c e
+  void (checkCI s c v v')
+checkT s c (Abs (Dec x a) b) U = do
+  checkT s c a U
+  let c' = consCVar c x a
+  checkT s c' b U
+checkT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
+  checkT s c a U
+  let env = getEnv s c
+      av  = eval a env
+      av' = eval a' r
+  checkCI s c av av'
+  let r' = consEVar r x' (Var x)
+      ve' = eval e' r'
+      c' = consCVar c x a
+  checkT s c' e ve'
+checkT s c (Abs d@Def {}  e) v = do
+  c' <- checkDecl s c d
+  checkT s c' e v
 
-checkCI _ U U = return U
-checkCI c (Var x) (Var x') =
+checkCI _ _ U U = return U
+checkCI s c (Var x) (Var x') =
   if x == x'
   then case getType c x of
-         Just v  -> return v
-         Nothing -> error ("variable: " ++ show x ++ " is not bound")
+         Just t -> do
+           let env = getEnv s c
+           return $ eval t env
   else throwError $ NotConvertible (Var x) (Var x')
-checkCI c (App m1 n1) (App m2 n2) = do
-  t1 <- checkCI c m1 m2
-  case t1 of
+checkCI s c (App m1 n1) (App m2 n2) = do
+  v <- checkCI s c m1 m2
+  case v of
     Clos (Abs (Dec x a) b) r -> do
-      let t2 = eval a r
-          v  = eval n1 (envCont c)
-      checkCT c n1 n2 t2
-      return (eval b (consEVar r x v))
+      let av = eval a r
+          env = getEnv s c
+          nv  = eval n1 env
+      checkCT s c n1 n2 av
+      let r' = consEVar r x nv
+      return $ eval b r'
     _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
-checkCI c v1@(Clos (Abs (Dec x a) e) r) v2@(Clos (Abs (Dec x' a') e') r') = do
-  checkCT c v1 v2 U
+checkCI s c v1@Clos {} v2@Clos {} = do
+  checkCT s c v1 v2 U
   return U
-checkCI _ v v' = throwError $ NotConvertible v v'
+checkCI _ _ v v' = throwError $ NotConvertible v v'
 
-checkCT c v1 v2 (Clos (Abs (Dec z a) b) r) = do
-  let t1 = eval a r
-      sx = freshVar z (varsCont c)
-      vx = Var sx
-      c1 = consCVar c sx t1
-      r1 = consEVar r z vx
-      t2 = eval b r1
-      v1' = eval (App v1 vx) (envCont c)
-      v2' = eval (App v2 vx) (envCont c)
-  checkCT c1 v1' v2' t2
-checkCT c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
-  let t1 = eval a1 r1
-      t2 = eval a2 r2
-      sx = freshVar x1 (varsCont c)
-      vx = Var sx
-      c1 = consCVar c sx t1
-      v1 = eval b1 (consEVar r1 x1 vx)
-      v2 = eval b2 (consEVar r2 x2 vx)
-  checkCI c t1 t2
-  checkCI c1 v1 v2
-  return ()
-checkCT c v1 v2 t = do
-  checkCI c v1 v2
-  return ()
+checkCT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
+  let va = eval a r
+      fz = freshVar z (varsCont c)
+      vfz = Var fz
+      r1 = consEVar r z vfz
+      vb = eval b r1
+      env = getEnv s c
+      v1' = eval (App v1 vfz) env
+      v2' = eval (App v2 vfz) env
+      c1 = consCVar c fz va
+  checkCT s c1 v1' v2' vb
+checkCT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
+  let va1 = eval a1 r1
+      va2 = eval a2 r2
+  checkCI s c va1 va2
+  let fx = freshVar x1 (varsCont c)
+      vfx = Var fx
+      c' = consCVar c fx va1
+      v1 = eval b1 (consEVar r1 x1 vfx)
+      v2 = eval b2 (consEVar r2 x2 vfx)
+  void $ checkCI s c' v1 v2
+checkCT s c v1 v2 t = do
+  void $ checkCI s c v1 v2
 
-checkDef c x a e = do
-  checkT c a U
-  checkT c e (eval a (envCont c))
-  return (CConsDef c x a e)
+checkDecl s c (Dec x a) = do
+  checkT s c a U
+  return $ consCVar c x a
 
-checkDec c x a = do
-  checkT c a U
-  return (consCVar c x a)
+checkDecl s c (Def x a e) = do
+  checkT s c a U
+  let va = eval a (getEnv s c)
+  checkT s c e va
+  return $ CConsDef c x a e
 
-runTypeCheckCtx :: Context -> Either TypeCheckError Cont
-runTypeCheckCtx ctx@(Ctx cs) =
+runTypeCheckCtx :: EnvStrategy s => s -> Context -> Either [String] Cont
+runTypeCheckCtx s ctx@(Ctx cs) =
   case runG (absCtx ctx) Map.empty of
-    Left err -> Left err
-    Right ds -> runG (typeCheckCtx ds) CNil
+    Left err -> Left $ explain err
+    Right ds -> case runG (typeCheckCtx ds) CNil of
+                  Left err -> Left $ explain err
+                  Right c  -> Right c
   where
     typeCheckCtx :: [Decl] -> TypeCheckM Cont
     typeCheckCtx ds = do
-      mapM_ checkDecl ds
+      mapM_ checkAndUpdateDecl ds
       get
-    checkDecl :: Decl -> TypeCheckM ()
-    checkDecl d@(Dec x a) = do {
-      c  <- get ;
-      c' <- checkDec c x a ;
-      put c' } `catchError` errhandler d
-    checkDecl d@(Def x a e) = do {
-      c  <- get ;
-      c' <- checkDef c x a e ;
-      put c' } `catchError` errhandler d
-    errhandler :: Decl -> TypeCheckError -> TypeCheckM ()
-    errhandler d err = do
-      let ss = ["when checking decl: " ++ show d]
-      throwError $ ExtendedErr err ss
+    checkAndUpdateDecl :: Decl -> TypeCheckM ()
+    checkAndUpdateDecl d = do
+      c  <- get
+      c' <- checkDecl s c d
+      put c'
 
-checkExpValidity :: Context -> Cont -> CExp -> Either TypeCheckError Exp
-checkExpValidity cc ac ce = let m = toMap cc in
+checkExpValidity :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either [String] Exp
+checkExpValidity s cc ac ce = let m = toMap cc in
   case runG (absExp ce) m of
-    Left err -> Left err
-    Right e  -> case runG (checkI ac e) CNil of
-      Left err -> Left err
+    Left err -> Left $ explain err
+    Right e  -> case runG (checkI s ac e) CNil of
+      Left err -> Left $ explain err
       Right _  -> Right e
 
-checkDeclValidity :: Context -> Cont -> CDecl -> Either TypeCheckError Decl
-checkDeclValidity cc ac cd =
+checkDeclValidity :: EnvStrategy s => s -> Context -> Cont -> CDecl -> Either [String] Decl
+checkDeclValidity s cc ac cd =
   let m = toMap cc
   in case runG (absDecl cd) m of
-       Left err -> Left err
-       Right d -> case d of
-         Dec x a -> case runG (checkDec ac x a) of
-           Left err -> Left err
-
+       Left err -> Left $ explain err
+       Right d  -> case runG (checkDecl s ac d) CNil of
+                     Left err -> Left $ explain err
+                     _        -> Right d
 
 toMap :: Context -> Map.Map String Id
 toMap (Ctx ds) = Map.unions (map toMapD ds)
