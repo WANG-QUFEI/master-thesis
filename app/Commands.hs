@@ -1,17 +1,17 @@
 {-|
-Module          : CmdUtil
+Module          : Commands
 Description     : provides simple command line functions
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
-module CmdUtil
+module Commands
   ( Cmd(..)
-  , getCmd
+  , parseToCommand
   , parseCheckFile
   , checkExpValidity
   , headRed
   , unfold
-  , totalEval
+  , fullEval
   , typeOf
   , typeCheckErrMsg
   , okayMsg
@@ -23,9 +23,10 @@ import           Data.Char
 import           Data.List.Split
 import           System.Directory (doesFileExist)
 
-import           Base
+import           Classes
 import           Core.Abs
 import           Core.Par         (myLexer, pCDecl, pCExp, pContext)
+import           Lang
 import           MessageHelper
 import           TypeChecker
 
@@ -35,81 +36,79 @@ data Cmd = Quit
          | None
          | Help
          | ShowFile
-         | Load FilePath
-         | Check CExp
+         | LoadFile FilePath
+         | CheckE CExp
          | CheckD CDecl
-         | HeadRed
-         | ExpEval
+         | HeadReduct
+         | FullEvalExp
          | Unfold [String]
          | GetType CExp
          deriving (Show)
 
--- | given an input string, return a valid command or an error message if the input is not valid
-getCmd :: String -> Either String Cmd
-getCmd s = if blankStr s
-           then Right None
-           else let ws = words s in
-                  case head ws of
-                    ":?"         -> Right Help
-                    ":h"         -> Right Help
-                    ":help"      -> Right Help
-                    ":q"         -> Right Quit
-                    ":quit"      -> Right Quit
-                    ":s"         -> Right ShowFile
-                    ":show"      -> Right ShowFile
-                    ":l"         -> getLoad ws
-                    ":load"      -> getLoad ws
-                    ":c"         -> getCheck ws
-                    ":check"     -> getCheck ws
-                    ":checkDecl" -> getCheckDecl ws
-                    ":hred"      -> Right HeadRed
-                    ":eval"      -> Right ExpEval
-                    ":u"         -> Right (Unfold (tail ws))
-                    ":unfold"    -> Right (Unfold (tail ws))
-                    ":t"         -> getExpType ws
-                    _            -> Left $ errorMsg "unknown command"
+-- | Parse a string into a command, return an error message if no command
+--   could be found
+parseToCommand :: String -> Either String Cmd
+parseToCommand s =
+  if blankStr s
+    then Right None
+    else
+      let ws = words s
+       in case head ws of
+            ":?"      -> Right Help
+            ":h"      -> Right Help
+            ":help"   -> Right Help
+            ":q"      -> Right Quit
+            ":quit"   -> Right Quit
+            ":sf"     -> Right ShowFile
+            ":lf"     -> getLoad ws
+            ":ce"     -> getCheckExp ws
+            ":cd"     -> getCheckDecl ws
+            ":hred"   -> Right HeadReduct
+            ":eval"   -> Right FullEvalExp
+            ":unfold" -> Right (Unfold (tail ws))
+            ":type"   -> getExpType ws
+            _         -> Left $ errorMsg "Invalid command"
   where
     blankStr :: String -> Bool
     blankStr s = all isSpace s
 
     getLoad :: [String] -> Either String Cmd
     getLoad ws = case tail ws of
-                   []  -> Left $ errorMsg "missing file path"
-                   f:_ -> Right (Load f)
+      []     -> Left $ errorMsg "Lack of file path"
+      fp : _ -> Right (LoadFile fp)
 
-    getCheck :: [String] -> Either String Cmd
-    getCheck ws = case tail ws of
-                   []  -> Left $ errorMsg "missing expression"
-                   ws' -> case pCExp (myLexer (unwords ws')) of
-                            Left _   -> Left $ errorMsg "syntax error, bad expression"
-                            Right ce -> Right (Check ce)
+    getCheckExp :: [String] -> Either String Cmd
+    getCheckExp ws = case tail ws of
+      []  -> Left $ errorMsg "Lack of expression"
+      ws' -> case pCExp (myLexer (unwords ws')) of
+        Left _   -> Left $ errorMsg "Syntax error: bad expression"
+        Right ce -> Right (CheckE ce)
 
     getCheckDecl :: [String] -> Either String Cmd
     getCheckDecl ws = case tail ws of
-                        [] -> Left $ errorMsg "missing declarations/definitions"
-                        ws' -> case pCDecl (myLexer (unwords ws')) of
-                                 Left _ -> Left $ errorMsg "syntax error, bad declaration/definition"
-                                 Right cd -> Right (CheckD cd)
+      [] -> Left $ errorMsg "Lack of declaration/definition"
+      ws' -> case pCDecl (myLexer (unwords ws')) of
+        Left _   -> Left $ errorMsg "Syntax error: bad declaration/definition"
+        Right cd -> Right (CheckD cd)
 
     getExpType :: [String] -> Either String Cmd
     getExpType ws = case tail ws of
-                      [] -> Left $ errorMsg "missing expression"
-                      ws' -> case pCExp (myLexer (unwords ws')) of
-                               Left _ -> Left (errorMsg "syntax error, bad expression")
-                               Right ce -> Right (GetType ce)
-
+      [] -> Left $ errorMsg "Lack of expression"
+      ws' -> case pCExp (myLexer (unwords ws')) of
+        Left _   -> Left (errorMsg "Syntax error: bad expression")
+        Right ce -> Right (GetType ce)
 
 -- | parse and type check the content of a file
-parseCheckFile :: String -> Either String (Context, Cont)
-parseCheckFile text = case pContext (myLexer text) of
-  Left err  -> Left (unlines (map errorMsg ["parse failed!", err]))
-  Right ctx -> case runTypeCheckCtx ctx of
-                 Left tce -> Left (typeCheckErrMsg tce)
-                 Right ac -> Right (ctx, ac)
+parseCheckFile :: EnvStrategy s => s -> String -> Either String (Context, Cont)
+parseCheckFile s text = case pContext (myLexer text) of
+  Left parseError   -> Left (unlines (map errorMsg ["Failed to parse the file", parseError]))
+  Right concreteCtx -> case runTypeCheckCtx s concreteCtx of
+                 Left typeCheckError -> Left (typeCheckErrMsg $ explain typeCheckError)
+                 Right abstractCtx   -> Right (concreteCtx, abstractCtx)
 
 -- | evaluate an expression with all variables available
-totalEval :: Cont -> Exp -> Val
-totalEval c e = eval e (envCont c)
+fullEval :: Cont -> Exp -> Val
+fullEval c e = eval e (envCont c)
 
 -- | given a type checking context, head evaluation on an expression
 headRed :: Cont -> Exp -> Exp

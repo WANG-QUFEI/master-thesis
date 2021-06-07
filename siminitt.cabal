@@ -30,7 +30,7 @@ source-repository head
 executable siminitt
   main-is: Main.hs
   other-modules:
-      CmdUtil
+      Commands
       Convertor
       Core.Abs
       Core.ErrM
@@ -44,6 +44,7 @@ executable siminitt
       Classes
       MessageHelper
       TypeChecker
+      Locking
       Paths_siminitt
   hs-source-dirs:
       app

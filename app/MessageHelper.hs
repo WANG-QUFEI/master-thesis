@@ -11,7 +11,7 @@ module MessageHelper
   , typeCheckErrMsg
   ) where
 
-import           Base
+import           Lang
 
 errorMsg :: String -> String
 errorMsg s = "\10006 " ++ s
@@ -19,9 +19,8 @@ errorMsg s = "\10006 " ++ s
 okayMsg :: String -> String
 okayMsg s = "\10004 " ++ s
 
-typeCheckErrMsg :: TypeCheckError -> String
-typeCheckErrMsg tce = let ss = "type check failed!" : (errorText tce)
-                      in unlines (map errorMsg ss)
+typeCheckErrMsg :: [String] -> String
+typeCheckErrMsg ss = unlines (map errorMsg ss)
 
 infoMsg :: String -> String
 infoMsg = id
