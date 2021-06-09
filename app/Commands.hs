@@ -27,9 +27,9 @@ import           Classes
 import           Core.Abs
 import           Core.Par         (myLexer, pCDecl, pCExp, pContext)
 import           Lang
+import           Locking
 import           MessageHelper
 import           TypeChecker
-
 
 -- | data type for the commands
 data Cmd = Quit
@@ -103,26 +103,39 @@ parseCheckFile :: EnvStrategy s => s -> String -> Either String (Context, Cont)
 parseCheckFile s text = case pContext (myLexer text) of
   Left parseError   -> Left (unlines (map errorMsg ["Failed to parse the file", parseError]))
   Right concreteCtx -> case runTypeCheckCtx s concreteCtx of
-                 Left typeCheckError -> Left (typeCheckErrMsg $ explain typeCheckError)
-                 Right abstractCtx   -> Right (concreteCtx, abstractCtx)
+                 Left ss           -> Left (typeCheckErrMsg $ ss)
+                 Right abstractCtx -> Right (concreteCtx, abstractCtx)
 
 -- | evaluate an expression with all variables available
 fullEval :: Cont -> Exp -> Val
-fullEval c e = eval e (envCont c)
+fullEval c e = eval e (getEnv NoLocking c)
 
 -- | given a type checking context, head evaluation on an expression
 headRed :: Cont -> Exp -> Exp
 headRed c (Abs d e) =
   case d of
     Dec x a ->
-      let v = eval a (envCont c)
+      let va = eval a (getEnv NoLocking c)
           a' = headRed c a
-          e' = headRed (consCVar c x v) e
+          e' = headRed (consCVar c x va) e
       in Abs (Dec x a') e'
     Def x a b ->
       let e' = headRed (CConsDef c x a b) e
       in Abs d e'
 headRed c e = readBack (varsCont c) (headRedV c e)
+
+-- | turn a value into an expression, remove the closure of a value
+readBack :: [String] -> Val -> Exp
+readBack _ U = U
+readBack _ (Var x) = Var x
+readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
+readBack ns (Clos (Abs (Dec "" a) e) r) = Abs (Dec "" (readBack ns (eval a r))) (readBack ns (eval e r))
+readBack ns (Clos (Abs (Dec x a) e) r) =
+  let z  = freshVar x ns
+      a' = readBack ns (eval a r)
+      e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
+  in Abs (Dec z a') e'
+readBack _ _ = error "operation not supported"
 
 headRedV :: Cont -> Exp -> Val
 headRedV c (Var x)     = eval (defCont x c) ENil
@@ -139,40 +152,18 @@ defCont x (CConsDef c x' a e)
   | x == x'   = e
   | otherwise = defCont x c
 
--- | turn a value into an expression, remove the closure of a value
-readBack :: [String] -> Val -> Exp
-readBack _ U = U
-readBack _ (Var x) = Var x
-readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
-readBack ns (Clos (Abs (Dec "" a) e) r) = Abs (Dec "" (readBack ns (eval a r))) (readBack ns (eval e r))
-readBack ns (Clos (Abs (Dec x a) e) r) =
-  let z  = freshVar x ns
-      a' = readBack ns (eval a r)
-      e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
-  in Abs (Dec z a') e'
-readBack _ _ = error "operation not supported"
-
--- | get the environment related with a context by giving a list of unlocked definitions
-envContLock :: [String] -> Cont -> Env
-envContLock _ CNil = ENil
-envContLock xs (CConsVar c _ _) = envContLock xs c
-envContLock xs (CConsDef c x a e) =
-  let r = envContLock xs c
-  in if x `elem` xs
-     then EConsDef r x a e
-     else r
-
 -- | given a type checking context, evaluate an expression with a list of constants unlocked
 unfold :: Cont -> [String] -> Exp -> Exp
-unfold c [] e = readBack (varsCont c) (eval e ENil)
-unfold c ss e = readBack (varsCont c) (eval e (envContLock ss c))
+unfold c ss e =
+  let envStra = AnnotatedLocking False ss
+  in readBack (varsCont c) (eval e $ getEnv envStra c)
 
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Abs d e) =
   case d of
     Dec x a ->
       let a' = typeOf c a
-          v  = eval a (envCont c)
+          v  = eval a (getEnv NoLocking c)
           c' = consCVar c x v
           e' = typeOf c' e
       in Abs (Dec x a') e'

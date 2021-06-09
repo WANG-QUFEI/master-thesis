@@ -123,8 +123,14 @@ getVal (EConsVar r x' v) x
   | x == x'   = v
   | otherwise = getVal r x
 getVal (EConsDef r x' a e) x
-  | x == x' = eval e r
+  | x == x'   = eval e r
   | otherwise = getVal r x
+
+-- | application operation on values
+appVal :: Val -> Val -> Val
+appVal v1 v2 = case v1 of
+  Clos (Abs (Dec x _) e) r -> eval e (consEVar r x v2)
+  _                        -> App v1 v2
 
 -- | get the type of a variable in a given context
 getType :: Cont -> String -> Maybe Exp
@@ -135,12 +141,6 @@ getType (CConsVar c x' a) x
 getType (CConsDef c x' a _) x
   | x' == x = Just a
   | otherwise = getType c x
-
--- | application operation on values
-appVal :: Val -> Val -> Val
-appVal v1 v2 = case v1 of
-  Clos (Abs (Dec x _) e) r -> eval e (consEVar r x v2)
-  _                        -> App v1 v2
 
 -- | extend an environment with a variable and its value
 consEVar :: Env -> String -> Val -> Env

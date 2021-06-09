@@ -88,9 +88,9 @@ checkT s c (Abs (Dec x a) b) U = do
 checkT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
   checkT s c a U
   let env = getEnv s c
-      av  = eval a env
-      av' = eval a' r
-  checkCI s c av av'
+      va  = eval a env
+      va' = eval a' r
+  checkCI s c va va'
   let r' = consEVar r x' (Var x)
       ve' = eval e' r'
       c' = consCVar c x a
@@ -111,10 +111,10 @@ checkCI s c (App m1 n1) (App m2 n2) = do
   v <- checkCI s c m1 m2
   case v of
     Clos (Abs (Dec x a) b) r -> do
-      let av = eval a r
+      let va = eval a r
           env = getEnv s c
           nv  = eval n1 env
-      checkCT s c n1 n2 av
+      checkCT s c n1 n2 va
       let r' = consEVar r x nv
       return $ eval b r'
     _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
