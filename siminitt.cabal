@@ -4,13 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0ebe822a9fb4b6cb5fcc99d577023ce9a5f828623a4d29aebc7efb5d625bb75c
+-- hash: 828df78b88aa6e0e1accccad1c4ee0761b8c6815fcb57a2e1074a1dd25d98634
 
 name:           siminitt
 version:        0.1.0.0
 synopsis:       A simplified version of Mini-TT
 description:    Please see the README on GitHub at <https://github.com/WANG-QUFEI/thesis#readme>
-category:       Dependent Types
+category:       Type theory, dependent types
 homepage:       https://github.com/WANG-QUFEI/thesis#readme
 bug-reports:    https://github.com/WANG-QUFEI/thesis/issues
 author:         qufei
@@ -21,7 +21,13 @@ license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
     README.md
-    ChangeLog.md
+    extra-sources/Core.cf
+    extra-sources/gen.sh
+    extra-sources/loop1.smtt
+    extra-sources/loop2.smtt
+    extra-sources/loop4.smtt
+    extra-sources/test.sh
+    extra-sources/tmp.smtt
 
 source-repository head
   type: git
@@ -30,6 +36,7 @@ source-repository head
 executable siminitt
   main-is: Main.hs
   other-modules:
+      Classes
       Commands
       Convertor
       Core.Abs
@@ -40,15 +47,14 @@ executable siminitt
       Core.Print
       Core.Skel
       Lang
-      Monads
-      Classes
-      MessageHelper
-      TypeChecker
       Locking
+      Message
+      Monads
+      TypeChecker
       Paths_siminitt
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       array >=0.5.4
     , base >=4.7 && <5
@@ -57,4 +63,24 @@ executable siminitt
     , haskeline >=0.8.1.0
     , mtl >=2.2
     , split >=0.2.3.4 && <0.3
+    , text >=1.2.4.0
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_siminitt
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -main-is Spec
+  build-depends:
+      array >=0.5.4
+    , base >=4.7 && <5
+    , containers >=0.6.2
+    , directory >=1.3.6.0
+    , haskeline >=0.8.1.0
+    , mtl >=2.2
+    , split >=0.2.3.4 && <0.3
+    , text >=1.2.4.0
   default-language: Haskell2010

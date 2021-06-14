@@ -3,7 +3,7 @@
 
 module Core.Abs where
 
-import           Prelude (Char, Double, Int, Integer, String)
+import           Prelude (Int, String)
 import qualified Prelude as C (Eq, Ord, Read, Show)
 
 newtype Id = Id ((Int, Int), String)

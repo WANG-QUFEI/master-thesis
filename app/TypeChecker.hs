@@ -4,20 +4,18 @@ Description     : providing functions that type check the abstract syntax
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module TypeChecker where
 
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
-import           Data.List
 import qualified Data.Map             as Map
-import           Data.Maybe
-import           Debug.Trace
+-- import           Debug.Trace
 
 import           Classes
 import           Convertor
 import           Core.Abs
-import           Core.Print           (printTree)
 import           Lang
 import           Monads
 
@@ -26,15 +24,20 @@ type TypeCheckM a = G TypeCheckError Cont a
 
 -- | a datatype used as exception in an ExceptT monad
 data TypeCheckError
-  = InvalidApp Exp
-  | TypeInferErr Exp
+  = CannotInferType Exp
+  | NoTypeBoundVar String
+  | TypeNotMatch Exp Val
   | NotConvertible Val Val
+  | ExtendedWithPos TypeCheckError Decl
   deriving (Show)
 
 instance InformativeError TypeCheckError where
-  explain (InvalidApp e) = ["Invalid application: " ++ show e]
-  explain (TypeInferErr e) = ["Cannot infer type for expression: " ++ show e]
-  explain (NotConvertible v1 v2) = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
+  explain (CannotInferType e)       = ["Cannot infer type of expression: " ++ show e]
+  explain (NotConvertible v1 v2)    = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
+  explain (NoTypeBoundVar var)      = ["Variable without a bound type (this exception normally should not happen)",
+                                       "variable name: " ++ var]
+  explain (TypeNotMatch e v)        = ["Expression does not have the given type", "exp: " ++ show e, "type given: " ++ show v]
+  explain (ExtendedWithPos terr d)  = ("Type check error found at " ++ show d) : explain terr
 
 -- | check an expression is well typed and infer its type
 checkI    :: EnvStrategy s => s -> Cont -> Exp -> TypeCheckM Val
@@ -52,7 +55,8 @@ checkI s c (Var x) = do
   case getType c x of
     Just t -> let env = getEnv s c
               in return $ eval t env
-checkI s c (App m n) = do
+    Nothing -> throwError $ NoTypeBoundVar x
+checkI s c eapp@(App m n) = do
   tm <- checkI s c m
   case tm of
     Clos (Abs (Dec x a) b) r -> do
@@ -62,14 +66,14 @@ checkI s c (App m n) = do
           vn = eval n env
           r' = consEVar r x vn
       return (eval b r')
-    _ -> throwError $ InvalidApp (App m n)
+    _ -> throwError $ CannotInferType eapp
 checkI s c (Abs d@Def {} e) = do
   c' <- checkDecl s c d
   checkI s c' e
 checkI s c e@Abs {} = do
   checkT s c e U
   return U
-checkI _ _ e = throwError $ TypeInferErr e
+checkI _ _ e = throwError $ CannotInferType e
 
 checkT _ _ U U = return ()
 checkT s c (Var x) v = do
@@ -78,6 +82,7 @@ checkT s c (Var x) v = do
       let env = getEnv s c
           vt  = eval t env
       void (checkCI s c vt v)
+    Nothing -> throwError $ NoTypeBoundVar x
 checkT s c e@App {} v = do
   v' <- checkI s c e
   void (checkCI s c v v')
@@ -98,6 +103,7 @@ checkT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
 checkT s c (Abs d@Def {}  e) v = do
   c' <- checkDecl s c d
   checkT s c' e v
+checkT _ _ e t = throwError $ TypeNotMatch e t
 
 checkCI _ _ U U = return U
 checkCI s c (Var x) (Var x') =
@@ -106,6 +112,7 @@ checkCI s c (Var x) (Var x') =
          Just t -> do
            let env = getEnv s c
            return $ eval t env
+         Nothing -> throwError $ NoTypeBoundVar x
   else throwError $ NotConvertible (Var x) (Var x')
 checkCI s c (App m1 n1) (App m2 n2) = do
   v <- checkCI s c m1 m2
@@ -144,7 +151,7 @@ checkCT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
       v1 = eval b1 (consEVar r1 x1 vfx)
       v2 = eval b2 (consEVar r2 x2 vfx)
   void $ checkCI s c' v1 v2
-checkCT s c v1 v2 t = do
+checkCT s c v1 v2 _ = do
   void $ checkCI s c v1 v2
 
 checkDecl s c (Dec x a) = do
@@ -158,22 +165,25 @@ checkDecl s c (Def x a e) = do
   return $ CConsDef c x a e
 
 runTypeCheckCtx :: EnvStrategy s => s -> Context -> Either [String] Cont
-runTypeCheckCtx s ctx@(Ctx cs) =
+runTypeCheckCtx s ctx@(Ctx _) =
   case runG (absCtx ctx) Map.empty of
     Left err -> Left $ explain err
-    Right ds -> case runG (typeCheckCtx ds) CNil of
-                  Left err -> Left $ explain err
-                  Right c  -> Right c
+    Right ds ->
+      case runG (typeCheckCtx ds) CNil of
+        Left err -> Left $ explain err
+        Right c  -> Right c
   where
     typeCheckCtx :: [Decl] -> TypeCheckM Cont
     typeCheckCtx ds = do
       mapM_ checkAndUpdateDecl ds
       get
+
     checkAndUpdateDecl :: Decl -> TypeCheckM ()
     checkAndUpdateDecl d = do
-      c  <- get
+      c <- get
       c' <- checkDecl s c d
       put c'
+      `catchError` (\e -> throwError $ ExtendedWithPos e d)
 
 checkExpValidity :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either [String] Exp
 checkExpValidity s cc ac ce = let m = toMap cc in
@@ -196,5 +206,5 @@ toMap :: Context -> Map.Map String Id
 toMap (Ctx ds) = Map.unions (map toMapD ds)
 
 toMapD :: CDecl -> Map.Map String Id
-toMapD (CDec id _)   = Map.singleton (idStr id) id
-toMapD (CDef id _ _) = Map.singleton (idStr id) id
+toMapD (CDec x _)   = Map.singleton (idStr x) x
+toMapD (CDef x _ _) = Map.singleton (idStr x) x

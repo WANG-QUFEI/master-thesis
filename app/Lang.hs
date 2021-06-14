@@ -6,8 +6,6 @@ Portability     : POSIX
 -}
 module Lang where
 
-import qualified Data.Map as Map
-
 import           Core.Abs
 
 -- | abstract syntax for expressions, extended with closure as values

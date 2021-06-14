@@ -17,4 +17,3 @@ newtype G e s a = G {mkg :: ExceptT e (State s) a}
 -- | run the monad and get the result
 runG :: G e s a -> s -> Either e a
 runG g = evalState (runExceptT (mkg g))
-
