@@ -23,4 +23,3 @@ data CExp
 
 data CDecl = CDec Id CExp | CDef Id CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
-

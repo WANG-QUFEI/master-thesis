@@ -65,12 +65,12 @@ instance Show Exp where
                      Var _ -> pLow
                      _     -> pHigh
           in showsPrec p1 e1 . showString " " . showsPrec p2 e2
-        Abs (Dec "" a) e -> case a of
-                              Abs _ _ -> showsPrec pHigh a . showString " -> " . showsPrec pLow e
-                              _       -> showsPrec pLow a . showString " -> " . showsPrec pLow e
-        Abs d@(Dec x _) e  -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e
-        Abs d@Def {} e -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e
-        Clos e r -> showsPrec pLow e . showString " @env " . showsPrec pLow r
+        Abs (Dec "" a) e' -> case a of
+                              Abs _ _ -> showsPrec pHigh a . showString " -> " . showsPrec pLow e'
+                              _       -> showsPrec pLow a . showString " -> " . showsPrec pLow e'
+        Abs d@(Dec _ _) e'  -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
+        Abs d@Def {} e' -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
+        Clos e' r -> showsPrec pLow e' . showString " @env " . showsPrec pLow r
 
 instance Show Decl where
   showsPrec _ d = case d of
@@ -98,7 +98,7 @@ instance Show Cont where
 
 -- | string of an id
 idStr :: Id -> String
-idStr (Id (_, id)) = id
+idStr (Id (_, s)) = s
 
 -- | position of an id
 idPos :: Id -> (Int, Int)
@@ -111,7 +111,7 @@ eval e r = case e of
   Var x              -> getVal r x
   App e1 e2          -> appVal (eval e1 r) (eval e2 r)
   Abs Dec {} _       -> Clos e r
-  Abs (Def x a e) e' -> eval e' (EConsDef r x a e)
+  Abs (Def x a b) e' -> eval e' (EConsDef r x a b)
   Clos _ _           -> e
 
 -- | get the value of a variable from an environment
@@ -120,7 +120,7 @@ getVal ENil x = Var x
 getVal (EConsVar r x' v) x
   | x == x'   = v
   | otherwise = getVal r x
-getVal (EConsDef r x' a e) x
+getVal (EConsDef r x' _ e) x
   | x == x'   = eval e r
   | otherwise = getVal r x
 

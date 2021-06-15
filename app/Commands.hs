@@ -7,8 +7,9 @@ Portability     : POSIX
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module Commands
   ( Cmd(..)
+  , ShowItem(..)
+  , CheckItem(..)
   , getCommand
-  , parseAndTypeCheck
   -- , checkExpValidity
   -- , headRed
   -- , unfold
@@ -20,16 +21,11 @@ module Commands
   -- , infoMsg
   ) where
 
-import           Classes
 import           Core.Abs
 import           Core.Par
-import           Lang
 import           Locking
-import           Message
-import           TypeChecker
 
 import           Data.List.Split
-
 
 -- | data type for the commands
 data Cmd = Help
@@ -46,7 +42,7 @@ data ShowItem = SFilePath         -- show file path
               | SLocked           -- show locked constants
               | SUnlocked         -- show unlocked constants from the currently loaded file
               | SExp              -- show the latest type-checked expression
-              | SAbsContext       -- show the abstract context (type-checking context)
+              | SContext       -- show the abstract context (type-checking context)
               deriving (Show)
 
 data CheckItem = CExp CExp        -- check an expression
@@ -87,7 +83,7 @@ getCommand str =
       ["const_locked"]   -> return (Show SLocked)
       ["const_unlocked"] -> return (Show SUnlocked)
       ["expr"]           -> return (Show SExp)
-      ["absCtx"]         -> return (Show SAbsContext)
+      ["context"]        -> return (Show SContext)
       _                  -> Left "invalid command, type ':?' for a detailed description of the command"
 
     parseCheck :: [String] -> Either String Cmd
@@ -114,16 +110,6 @@ getCommand str =
     parseDecl :: String -> Either String CDecl
     parseDecl "" = Left "invalid command, type ':?' for a detailed description of the command"
     parseDecl s  = pCDecl (myLexer s)
-
--- | parse and type check the content of a file
-parseAndTypeCheck :: EnvStrategy s => s -> String -> Either String (Context, Cont)
-parseAndTypeCheck s text = case pContext (myLexer text) of
-  Left parseError   -> Left (unlines (map errorMsg ["failed to parse the file", parseError]))
-  Right concreteCtx ->
-    case runTypeCheckCtx s concreteCtx of
-      Left ss           -> Left (unlines (map errorMsg ss))
-      Right abstractCtx -> Right (concreteCtx, abstractCtx)
-
 
 -- getCommand :: String -> Either String Cmd
 -- getCommand s =

@@ -9,15 +9,18 @@ module TypeChecker where
 
 import           Control.Monad
 import           Control.Monad.Except
+-- import           Debug.Trace
 import           Control.Monad.State
 import qualified Data.Map             as Map
--- import           Debug.Trace
 
 import           Classes
 import           Convertor
 import           Core.Abs
+import           Core.Par
 import           Lang
+import           Message
 import           Monads
+
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
@@ -164,6 +167,40 @@ checkDecl s c (Def x a e) = do
   checkT s c e va
   return $ CConsDef c x a e
 
+-- | parse and type check a file
+parseCheckFile :: EnvStrategy s => s -> String -> Either String (Context, Cont)
+parseCheckFile s text = case pContext (myLexer text) of
+  Left parseError -> Left (unlines (map errorMsg ["failed to parse the file", parseError]))
+  Right cx ->
+    case runTypeCheckCtx s cx of
+      Left ss  -> Left (unlines (map errorMsg ss))
+      Right ax -> Right (cx, ax)
+
+convertCheckExpr :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either String Exp
+convertCheckExpr s cc ac ce =
+  let m = toMap cc in
+  case runG (absExp ce) m of
+    Left err -> Left $ unlines . map errorMsg $ explain err
+    Right e  -> case runG (checkI s ac e) CNil of
+                  Left err -> Left $ unlines . map errorMsg $ explain err
+                  Right _  -> Right e
+
+convertCheckDecl :: EnvStrategy s => s -> Context -> Cont -> CDecl -> Either String Decl
+convertCheckDecl s cc ac cd =
+  let m = toMap cc in
+  case runG (absDecl cd) m of
+    Left err -> Left $ unlines . map errorMsg $ explain err
+    Right d  -> case runG (checkDecl s ac d) CNil of
+                  Left err -> Left $ unlines . map errorMsg $ explain err
+                  _        -> Right d
+
+toMap :: Context -> Map.Map String Id
+toMap (Ctx ds) = Map.unions (map toMapD ds)
+
+toMapD :: CDecl -> Map.Map String Id
+toMapD (CDec x _)   = Map.singleton (idStr x) x
+toMapD (CDef x _ _) = Map.singleton (idStr x) x
+
 runTypeCheckCtx :: EnvStrategy s => s -> Context -> Either [String] Cont
 runTypeCheckCtx s ctx@(Ctx _) =
   case runG (absCtx ctx) Map.empty of
@@ -184,27 +221,3 @@ runTypeCheckCtx s ctx@(Ctx _) =
       c' <- checkDecl s c d
       put c'
       `catchError` (\e -> throwError $ ExtendedWithPos e d)
-
-checkExpValidity :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either [String] Exp
-checkExpValidity s cc ac ce = let m = toMap cc in
-  case runG (absExp ce) m of
-    Left err -> Left $ explain err
-    Right e  -> case runG (checkI s ac e) CNil of
-      Left err -> Left $ explain err
-      Right _  -> Right e
-
-checkDeclValidity :: EnvStrategy s => s -> Context -> Cont -> CDecl -> Either [String] Decl
-checkDeclValidity s cc ac cd =
-  let m = toMap cc
-  in case runG (absDecl cd) m of
-       Left err -> Left $ explain err
-       Right d  -> case runG (checkDecl s ac d) CNil of
-                     Left err -> Left $ explain err
-                     _        -> Right d
-
-toMap :: Context -> Map.Map String Id
-toMap (Ctx ds) = Map.unions (map toMapD ds)
-
-toMapD :: CDecl -> Map.Map String Id
-toMapD (CDec x _)   = Map.singleton (idStr x) x
-toMapD (CDef x _ _) = Map.singleton (idStr x) x

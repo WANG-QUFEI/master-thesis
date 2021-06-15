@@ -28,43 +28,46 @@ instance InformativeError ConversionError where
     [ "Duplicated declaration of variable",
       idStr id1 ++ " is first declared at " ++ show (idPos id1),
       "Find duplication at " ++ show (idPos id2)]
-  explain (VarNotbound (Id (pos, id))) =
-    ["Find unbound variable " ++ id ++ ", at " ++ show pos]
+  explain (VarNotbound (Id (pos, s))) =
+    ["Find unbound variable " ++ s ++ ", at " ++ show pos]
 
 -- | Transform a concrete context into the corresponding abstract context,
 --   and check the proper declaration and reference of variables during the conversion
 absCtx :: Context -> ConvertM [Decl]
 absCtx (Ctx xs) = mapM absDecl xs
 
--- |transform a concrete declaration (or definition) into its abstract form
+-- |transform a concrete declaration/definition into its abstract form
 absDecl :: CDecl -> ConvertM Decl
-absDecl (CDec id e) = do
-  r <- gets (Map.lookup (idStr id))
+absDecl (CDec var e) = do
+  let s = idStr var
+  r <- gets $ Map.lookup s
   case r of
-    Just id' -> throwError $ DupDecl id' id
-    _        -> do
+    Just var' -> throwError $ DupDecl var' var
+    _         -> do
       e' <- absExp e
-      modify (Map.insert (idStr id) id)
-      return $ Dec (idStr id) e'
-absDecl (CDef id e1 e2) = do
-  r <- gets (Map.lookup (idStr id))
+      modify (Map.insert s var)
+      return $ Dec s e'
+absDecl (CDef var e1 e2) = do
+  let s = idStr var
+  r <- gets $ Map.lookup s
   case r of
-    Just id' -> throwError $ DupDecl id' id
-    _        -> do
+    Just var' -> throwError $ DupDecl var' var
+    _         -> do
       e1' <- absExp e1
       e2' <- absExp e2
-      modify (Map.insert (idStr id) id)
-      return $ Def (idStr id) e1' e2'
+      modify (Map.insert s var)
+      return $ Def s e1' e2'
 
 -- |transform a concrete expression into its abstract form
 absExp :: CExp -> ConvertM Exp
 absExp e = case e of
   CU -> return U
-  CVar id -> do
-    r <- gets (Map.lookup (idStr id))
+  CVar var -> do
+    let s = idStr var
+    r <- gets (Map.lookup s)
     case r of
-      Just _ -> return $ Var (idStr id)
-      _      -> throwError $ VarNotbound id
+      Just _ -> return $ Var s
+      _      -> throwError $ VarNotbound var
   CApp e1 e2 -> do
     e1' <- absExp e1
     e2' <- absExp e2
@@ -73,24 +76,26 @@ absExp e = case e of
     e1' <- absExp e1
     e2' <- absExp e2
     return $ Abs (Dec "" e1') e2'
-  CPi id e1 e2 -> do
+  CPi var e1 e2 -> do
+    let s = idStr var
     m <- get
-    case Map.lookup (idStr id) m of
-      Just id' -> throwError $ DupDecl id' id
-      _        -> do
+    case Map.lookup s m of
+      Just var' -> throwError $ DupDecl var' var
+      _         -> do
         e1' <- absExp e1
-        put (Map.insert (idStr id) id m)
+        put (Map.insert s var m)
         e2' <- absExp e2
         put m
-        return $ Abs (Dec (idStr id) e1') e2'
-  CWhere id e1 e2 e3 -> do
+        return $ Abs (Dec s e1') e2'
+  CWhere var e1 e2 e3 -> do
+    let s = idStr var
     m <- get
-    case Map.lookup (idStr id) m of
-      Just id' -> throwError $ DupDecl id' id
-      _        -> do
+    case Map.lookup s m of
+      Just var' -> throwError $ DupDecl var' var
+      _         -> do
         e1' <- absExp e1
-        put (Map.insert (idStr id) id m)
+        put (Map.insert s var m)
         e2' <- absExp e2
         e3' <- absExp e3
         put m
-        return $ Abs (Def (idStr id) e1' e2') e3'
+        return $ Abs (Def s e1' e2') e3'

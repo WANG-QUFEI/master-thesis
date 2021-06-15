@@ -7,13 +7,15 @@ Portability     : POSIX
 module Main (main) where
 
 import           Commands
-import           Core.Abs
+import           Core.Abs                 (Context (..))
 import           Lang
 import           Locking
 import           Message
+import           TypeChecker
 
 import           Control.Monad.State
 import           Data.Char
+import qualified Data.Set                 as Set
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as TI
 import           System.Console.Haskeline
@@ -23,16 +25,15 @@ import           System.Directory
 data ReplState = ReplState
   { filePath    :: FilePath,      -- path of the loaded file
     fileContent :: T.Text,        -- content of the loaded file
-    concreteCtx :: Context,       -- concrete context of a well-typed file
-    abstractCtx :: Cont,          -- abstract context of a well-typed file
+    concretCtx  :: Context,       -- concret context of the loaded file
+    context     :: Cont,          -- abstract context of the loaded file
     lockStyle   :: LockStyle,     -- locking/unlocking variables
-    cexpr       :: CExp,          -- concrete form of the last successfully evaluated expression
-    aexpr       :: Exp,           -- abstract form of the last successfully evaluated expression
+    expr        :: Exp,           -- abstract form of the last successfully evaluated expression
     continue    :: Bool           -- continue execution ?
   }
 
 initState :: ReplState
-initState = ReplState "" T.empty (Ctx []) CNil NoLock CU U True
+initState = ReplState "" T.empty (Ctx []) CNil NoLock U True
 
 main :: IO ()
 main = do
@@ -42,26 +43,28 @@ main = do
 
 repl :: InputT (StateT ReplState IO) ()
 repl = do
-  ms <- getInputLine "\955> "
+  ms <- getInputLine "\960.\955> "
   forM_ ms handleInput
   ct <- lift $ gets continue
   when ct repl
-  where
-    handleInput :: String -> InputT (StateT ReplState IO) ()
-    handleInput str =
-      if isEmptyString str
-      then return ()
-      else let str' = trimString str
-           in case getCommand str' of
-                Left err           -> outputStrLn (errorMsg err)
-                Right Quit         -> stop
-                Right Help         -> usage
-                Right cmd@(Load _ fp) -> do
-                  b <- liftIO (doesFileExist fp)
-                  if b
-                    then tryLoadFile cmd
-                    else outputStrLn (errorMsg "error: file does not exist")
-                _                  -> return ()
+
+handleInput :: String -> InputT (StateT ReplState IO) ()
+handleInput str =
+  if isEmptyString str
+  then return ()
+  else let str' = trimString str
+       in case getCommand str' of
+            Left err           -> outputStrLn (errorMsg err)
+            Right Quit         -> stop
+            Right Help         -> usage
+            Right (Load ls fp) -> do
+              b <- liftIO (doesFileExist fp)
+              if b
+                then tryLoadFile ls fp
+                else outputStrLn (errorMsg "error: file does not exist")
+            Right (Show si)    -> showItem si
+            Right (Check ci)   -> checkItem ci
+            _                  -> return ()
 
 stop :: InputT (StateT ReplState IO) ()
 stop = lift $ modify (\s -> s {continue = False})
@@ -73,26 +76,86 @@ trimString :: String -> String
 trimString = t . t
   where t = reverse . dropWhile isSpace
 
-tryLoadFile :: Cmd -> InputT (StateT ReplState IO) ()
-tryLoadFile (Load ls fp) = do
+tryLoadFile :: LockStyle -> FilePath -> InputT (StateT ReplState IO) ()
+tryLoadFile ls fp = do
   t <- liftIO (TI.readFile fp)
-  let scontent  = T.unpack t
-  case parseAndTypeCheck ls scontent of
+  let scontent = T.unpack t
+  case parseCheckFile ls scontent of
     Left err -> outputStrLn err
-    Right (cctx, actx) -> do
+    Right (cx, ax) -> do
       outputStrLn $ okayMsg "file loaded!"
-      lift $ modify (\s -> s {filePath = fp,
+      lift $ modify (\s -> s {filePath    = fp,
                               fileContent = t,
-                              concreteCtx = cctx,
-                              abstractCtx = actx,
+                              concretCtx  = cx,
+                              context     = ax,
                               lockStyle   = ls})
-tryLoadFile _ = return ()
+
+showItem :: ShowItem -> InputT (StateT ReplState IO) ()
+showItem SFilePath = do
+  fp <- lift $ gets filePath
+  if fp == ""
+    then outputStrLn "no file been loaded"
+    else outputStrLn fp
+showItem SFileContent = do
+  fc <- lift $ gets fileContent
+  if fc == T.empty
+    then outputStrLn "no file been loaded"
+    else outputStrLn (T.unpack fc)
+showItem SConsants = do
+  ac <- lift $ gets context
+  if ac == CNil
+    then outputStrLn "no file been loaded"
+    else outputStrLn $ show (varsCont ac)
+showItem SLocked = do
+  ls <- lift $ gets lockStyle
+  ac <- lift $ gets context
+  case ls of
+    NoLock   -> outputStrLn "[]"
+    AllLock  -> outputStrLn $ show (varsCont ac)
+    ExplicitLock True ss -> outputStrLn $ show ss
+    ExplicitLock False ss -> do
+      let set1 = Set.fromList (varsCont ac)
+          set2 = Set.fromList ss
+          setd = Set.difference set1 set2
+      outputStrLn $ show setd
+showItem SUnlocked = do
+  ls <- lift $ gets lockStyle
+  ac <- lift $ gets context
+  case ls of
+    AllLock   -> outputStrLn "[]"
+    NoLock    -> outputStrLn $ show (varsCont ac)
+    ExplicitLock False ss -> outputStrLn $ show ss
+    ExplicitLock True ss -> do
+      let set1 = Set.fromList (varsCont ac)
+          set2 = Set.fromList ss
+          setd = Set.difference set1 set2
+      outputStrLn $ show setd
+showItem SExp = do
+  ae <- lift $ gets expr
+  outputStrLn $ show ae
+showItem SContext = do
+  ac <- lift $ gets context
+  outputStrLn $ show ac
+
+checkItem :: CheckItem -> InputT (StateT ReplState IO) ()
+checkItem (CExp cexp) = do
+  ls <- lift $ gets lockStyle
+  cx <- lift $ gets concretCtx
+  ax <- lift $ gets context
+  case convertCheckExpr ls cx ax cexp of
+    Left err -> do
+      outputStrLn (errorMsg "invalid expression!")
+      outputStrLn err
+    Right e  -> do
+      outputStrLn (okayMsg "valid expression!")
+      lift $ modify (\s -> s {expr = e})
+checkItem (CDecl _decl) = undefined
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"
                   , "   :?                            show this usage message"
                   , "   :q                            quit"
-                  , "   :show {'filePath' | 'fileContent' | 'const_all' | 'const_locked' | 'const_unlocked' | 'expr' | 'absCtx'}"
+                  , "   :show {'filePath' | 'fileContent' | 'const_all' | 'const_locked' | 'const_unlocked' | 'expr' | 'context'}"
                   , "      - :show filePath           show the path of the currently loaded file"
                   , "      - :show fileContent        show the content of the currently loaded file"
                   , "      - :show const_all          show the name of all of the constants of the currently loaded file"
@@ -106,8 +169,9 @@ usage = let msg = [ " Commands available:"
                   , "                                 when used with option '-no_lock' or '-all_lock', <varlist> must not be given"
                   , "                                 <varlist> must be in the form '[var1,var2,...,varn]' with no whitespace interspersed"
                   , "                                 "
-                  , "   :check {'-expr' | '-decl'}  <exp>/<decl>"
-                  , "                                 parse and type check an expression or declaration/definition"
+                  , "   :check {'-expr' | '-decl'}  <exp>|<decl>"
+                  , "                                 parse and type check an expression or declaration/definition with the current setting"
+                  , "                                 of locking/unlocking variables,"
                   , "                                 A successfully type-checked declaration/definition will be added automatically to the"
                   , "                                 current type-checking context"
                   , "   :hred                         apply head reduction on the latest type-checked expression, making"
