@@ -7,7 +7,7 @@ Portability     : POSIX
 module Main (main) where
 
 import           Commands
-import           Core.Abs                 (Context (..))
+import           Core.Abs
 import           Lang
 import           Locking
 import           Message
@@ -64,6 +64,9 @@ handleInput str =
                 else outputStrLn (errorMsg "error: file does not exist")
             Right (Show si)    -> showItem si
             Right (Check ci)   -> checkItem ci
+            Right (ChangeLock ls) -> lift $ modify (\s -> s {lockStyle = ls})
+            Right (AddToLock ss) -> changeLockingList True ss
+            Right (RemoveFromLock ss) -> changeLockingList False ss
             _                  -> return ()
 
 stop :: InputT (StateT ReplState IO) ()
@@ -149,7 +152,63 @@ checkItem (CExp cexp) = do
     Right e  -> do
       outputStrLn (okayMsg "valid expression!")
       lift $ modify (\s -> s {expr = e})
-checkItem (CDecl _decl) = undefined
+checkItem (CDecl cdecl) = do
+  ls <- lift $ gets lockStyle
+  cx <- lift $ gets concretCtx
+  ax <- lift $ gets context
+  case convertCheckDecl ls cx ax cdecl of
+    Left err -> do
+      outputStrLn (errorMsg "invalid declaration/definition!")
+      outputStrLn err
+    Right d  -> do
+      outputStrLn (okayMsg "valid declaration/definition!")
+      let (cx', ax') = expandContext (cx, ax) (cdecl, d)
+      lift $ modify (\s -> s {concretCtx = cx',
+                              context = ax'})
+
+changeLockingList :: Bool -> [String] -> InputT (StateT ReplState IO) ()
+changeLockingList True ss = do
+  ls <- lift $ gets lockStyle
+  case ls of
+    AllLock -> return ()
+    NoLock  -> do
+      let ls' = ExplicitLock True ss
+      lift . modify $ \s -> s {lockStyle = ls'}
+    ExplicitLock lt vs -> do
+      let set1 = Set.fromList vs
+          set2 = Set.fromList ss
+      if lt
+        then let set' = Set.union set1 set2
+                 ls'  = ExplicitLock True (Set.toList set')
+             in lift . modify $ \s -> s {lockStyle = ls'}
+        else let set' = Set.difference set1 set2
+                 ls'  = ExplicitLock False (Set.toList set')
+             in lift . modify $ \s -> s {lockStyle = ls'}
+changeLockingList False ss = do
+  ls <- lift . gets $ lockStyle
+  case ls of
+    NoLock  -> return ()
+    AllLock -> do
+      let ls' = ExplicitLock False ss
+      lift . modify $ \s -> s {lockStyle = ls'}
+    ExplicitLock lt vs -> do
+      let set1 = Set.fromList vs
+          set2 = Set.fromList ss
+      if lt
+        then let set' = Set.difference set1 set2
+                 ls'  = ExplicitLock True (Set.toList set')
+             in lift . modify $ \s -> s {lockStyle = ls'}
+        else let set' = Set.union set1 set2
+                 ls'  = ExplicitLock False (Set.toList set')
+             in lift . modify $ \s -> s {lockStyle = ls'}
+
+expandContext :: (Context, Cont) -> (CDecl, Decl) -> (Context, Cont)
+expandContext (Ctx ds, ax) (cdecl, decl) =
+  let cx  = Ctx (ds ++ [cdecl])
+      ax' = case decl of
+             Dec x a   -> CConsVar ax x a
+             Def x a b -> CConsDef ax x a b
+  in (cx, ax')
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"
@@ -168,91 +227,18 @@ usage = let msg = [ " Commands available:"
                   , "                                 when used with option '-lock' or '-unlock', <varlist>, a list of names of variables, must be given"
                   , "                                 when used with option '-no_lock' or '-all_lock', <varlist> must not be given"
                   , "                                 <varlist> must be in the form '[var1,var2,...,varn]' with no whitespace interspersed"
-                  , "                                 "
                   , "   :check {'-expr' | '-decl'}  <exp>|<decl>"
                   , "                                 parse and type check an expression or declaration/definition with the current setting"
                   , "                                 of locking/unlocking variables,"
                   , "                                 A successfully type-checked declaration/definition will be added automatically to the"
                   , "                                 current type-checking context"
+                  , "   :change {'-lock' | '-unlock' | '-no_lock' | '-all_lock'} [<varlist>]"
+                  , "                                 change the current locking/unlocking strategy"
+                  , "   :add <varlist>                add a list of variables to the locking list"
+                  , "   :remove <varlist>             remove a list of variables from the locking list"
                   , "   :hred                         apply head reduction on the latest type-checked expression, making"
                   , "                                 the result be the new expression of the context"
-                  , "   :unfold <varlist>             evaluate the current expression of the context with a list of variables (constants)"
+                  , "   :unfold                       evaluate the current expression of the context "
                   , "                                 unlocked, making the reuslt be the new expression of the context"
                   ]
         in outputStr (unlines msg)
-
-
--- -----------------------------------------------------
--- repl :: InputT IO ()
--- repl = do
---   outputStrLn "welcome, type ':?' for the usage of this program, ':q' to quit"
---   loop (Ctx []) CNil U
-
--- loop :: Context -> Cont -> Exp -> InputT IO ()
--- loop cc ac e = do
---   ms <- getInputLine "\955> "
---   case ms of
---     Nothing -> loop cc ac e
---     Just s  -> case getCommand s of
---       Left err  -> do
---         outputStrLn err
---         loop cc ac e
---       Right Quit -> return ()
---       Right None -> loop cc ac e
---       Right Help -> do
---         usage
---         loop cc ac e
---       Right ShowFile -> case cc of
---         Ctx [] -> do
---           outputStrLn $ infoMsg "empty context, no file loaded"
---           loop cc ac e
---         _      -> do
---           outputStrLn (printTree cc)
---           loop cc ac e
---       Right (Load fp) -> do
---         fb <- liftIO (doesFileExist fp)
---         if fb then (do
---           r <- liftIO (loadFile fp)
---           case r of
---             Left err -> do
---               outputStr err
---               loop cc ac e
---             Right (cc', ac') -> do
---               outputStrLn $ okayMsg "file loaded!"
---               loop cc' ac' e) else (do
---           outputStrLn $ errorMsg "file does not exist"
---           loop cc ac e)
---       Right (Check ce) -> case checkExpValidity cc ac ce of
---         Left tce -> do
---           outputStr (typeCheckErrMsg tce)
---           loop cc ac e
---         Right e' -> do
---           outputStrLn (okayMsg "expression type checked!")
---           loop cc ac e'
---       Right (CheckD cd) ->
---       Right (GetType ce) -> case checkExpValidity cc ac ce of
---         Left tce -> do
---           outputStr (typeCheckErrMsg tce)
---           loop cc ac e
---         Right e' -> do
---           let e1 = typeOf ac e'
---           outputStrLn $ infoMsg (show e1)
---           loop cc ac e
---       Right HeadRed -> do
---         let e' = headRed ac e
---         outputStrLn $ infoMsg (show e')
---         loop cc ac e'
---       Right ExpEval -> do
---         let v = totalEval ac e
---         outputStrLn $ infoMsg (show v)
---       Right (Unfold xs) -> do
---         let e' = unfold ac xs e
---         outputStrLn $ infoMsg ("evaluate the current expression with the following definitions unlocked: " ++ show xs)
---         outputStrLn $ infoMsg (show e')
---         loop cc ac e'
-
-
--- loadFile :: FilePath -> IO (Either String (Context, Cont))
--- loadFile fp = do
---   text <- readFile fp
---   return $ parseCheckFile text

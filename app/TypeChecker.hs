@@ -176,6 +176,7 @@ parseCheckFile s text = case pContext (myLexer text) of
       Left ss  -> Left (unlines (map errorMsg ss))
       Right ax -> Right (cx, ax)
 
+-- | type check an expression under given context and locking strategy
 convertCheckExpr :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either String Exp
 convertCheckExpr s cc ac ce =
   let m = toMap cc in
@@ -185,6 +186,7 @@ convertCheckExpr s cc ac ce =
                   Left err -> Left $ unlines . map errorMsg $ explain err
                   Right _  -> Right e
 
+-- | type check an declaration/definition under given context and locking strategy
 convertCheckDecl :: EnvStrategy s => s -> Context -> Cont -> CDecl -> Either String Decl
 convertCheckDecl s cc ac cd =
   let m = toMap cc in

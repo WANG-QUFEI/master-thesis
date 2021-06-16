@@ -30,7 +30,7 @@ data Env = ENil
 
 -- | context that relates a variable to a type
 data Cont = CNil
-          | CConsVar Cont String Val
+          | CConsVar Cont String Exp
           | CConsDef Cont String Exp Exp
           deriving (Eq)
 
@@ -150,6 +150,7 @@ consCVar :: Cont -> String -> Val -> Cont
 consCVar c "" _ = c
 consCVar c x t  = CConsVar c x t
 
+-- | get all variables of a context
 varsCont :: Cont -> [String]
 varsCont CNil               = []
 varsCont (CConsVar c x _)   = reverse (x : varsCont c)

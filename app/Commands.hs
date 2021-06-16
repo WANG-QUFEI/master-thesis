@@ -10,8 +10,7 @@ module Commands
   , ShowItem(..)
   , CheckItem(..)
   , getCommand
-  -- , checkExpValidity
-  -- , headRed
+  , headRed
   -- , unfold
   -- , fullEval
   -- , typeOf
@@ -21,8 +20,10 @@ module Commands
   -- , infoMsg
   ) where
 
+import           Classes
 import           Core.Abs
 import           Core.Par
+import           Lang
 import           Locking
 
 import           Data.List.Split
@@ -33,7 +34,11 @@ data Cmd = Help
          | Load LockStyle FilePath
          | Show ShowItem
          | Check CheckItem
+         | ChangeLock LockStyle
+         | AddToLock [String]
+         | RemoveFromLock [String]
          | HeadReduct
+         | UnfoldExpr
          deriving (Show)
 
 data ShowItem = SFilePath         -- show file path
@@ -53,15 +58,20 @@ data CheckItem = CExp CExp        -- check an expression
 --   could be found
 getCommand :: String -> Either String Cmd
 getCommand str =
-  let ws = words str
+  let ws  = words str
+      tws = tail ws
   in case head ws of
-    ":?"     -> return Help
-    ":q"     -> return Quit
-    ":load"  -> parseLoad (tail ws)
-    ":show"  -> parseShow (tail ws)
-    ":check" -> parseCheck (tail ws)
-    ":hred"  -> return HeadReduct
-    _        -> Left "invalid command, type ':?' for a detailed description of the command"
+    ":?"      -> return Help
+    ":q"      -> return Quit
+    ":load"   -> parseLoad tws
+    ":show"   -> parseShow tws
+    ":check"  -> parseCheck tws
+    ":change" -> parseChangeLock tws
+    ":add"    -> parseAddRemove True tws
+    ":remove" -> parseAddRemove False tws
+    ":hred"   -> return HeadReduct
+    ":unfold" -> return UnfoldExpr
+    _         -> Left "invalid command, type ':?' for a detailed description of the command"
   where
     parseLoad :: [String] -> Either String Cmd
     parseLoad tws = case tws of
@@ -96,6 +106,27 @@ getCommand str =
         return $ Check (CDecl d)
       _              ->  Left "invalid command, type ':?' for a detailed description of the command"
 
+    parseChangeLock :: [String] -> Either String Cmd
+    parseChangeLock tws = case tws of
+      ["-lock", consts] -> do
+        ss <- parseConsts consts
+        return $ ChangeLock (ExplicitLock True ss)
+      ["-unlock", consts] -> do
+        ss <- parseConsts consts
+        return $ ChangeLock (ExplicitLock False ss)
+      ["-no_lock"] -> return $ ChangeLock NoLock
+      ["-all_lock"] -> return $ ChangeLock AllLock
+      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+
+    parseAddRemove :: Bool -> [String] -> Either String Cmd
+    parseAddRemove b tws = case tws of
+      [consts] -> do
+        ss <- parseConsts consts
+        if b
+          then return $ AddToLock ss
+          else return $ RemoveFromLock ss
+      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+
     parseConsts :: String -> Either String [String]
     parseConsts s =
       if head s == '[' && last s == ']'
@@ -111,123 +142,69 @@ getCommand str =
     parseDecl "" = Left "invalid command, type ':?' for a detailed description of the command"
     parseDecl s  = pCDecl (myLexer s)
 
--- getCommand :: String -> Either String Cmd
--- getCommand s =
---   if isEmptyString s
---     then Right None
---     else
---       let ws = words s
---        in case head ws of
---             ":?"      -> Right Help
---             ":q"      -> Right Quit
---             ":sf"     -> Right ShowFile
---             ":lf"     -> getLoad ws
---             ":ce"     -> getCheckExp ws
---             ":cd"     -> getCheckDecl ws
---             ":hred"   -> Right HeadReduct
---             ":eval"   -> Right FullEvalExp
---             ":unfold" -> Right (Unfold (tail ws))
---             ":type"   -> getExpType ws
---             _         -> Left $ errorMsg "Invalid command"
---   where
---     isEmptyString :: String -> Bool
---     isEmptyString s = all isSpace s
+readBack :: [String] -> Val -> Exp
+readBack _ U = U
+readBack _ (Var x) = Var x
+readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
+readBack ns (Clos (Abs (Dec "" a) e) r) =
+  let a' = readBack ns (eval a r)
+      e' = readBack ns (eval e r)
+  in Abs (Dec "" a') e'
+readBack ns (Clos (Abs (Dec x a) e) r) =
+  let z  = freshVar x ns
+      a' = readBack ns (eval a r)
+      e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
+  in Abs (Dec z a') e'
+readBack _ v = error ("cannot readback value: " ++ show v)
 
---     getLoad :: [String] -> Either String Cmd
---     getLoad ws = case tail ws of
---       []     -> Left $ errorMsg "Lack of file path"
---       fp : _ -> Right (LoadFile fp)
+headRed :: Cont -> Exp -> Exp
+headRed c (Abs (Dec x a) e) =
+  let va = eval a ENil
+      a' = headRed c a
+      e' = headRed (consCVar c x va) e
+  in Abs (Dec x a') e'
+headRed c (Abs d@(Def x a b) e) =
+  let e' = headRed (CConsDef c x a b) e
+  in Abs d e'
+headRed c e = readBack (varsCont c) (headRedV c e)
 
---     getCheckExp :: [String] -> Either String Cmd
---     getCheckExp ws = case tail ws of
---       []  -> Left $ errorMsg "Lack of expression"
---       ws' -> case pCExp (myLexer (unwords ws')) of
---         Left _   -> Left $ errorMsg "Syntax error: bad expression"
---         Right ce -> Right (CheckE ce)
+headRedV :: Cont -> Exp -> Val
+headRedV c (Var x)     = eval (defVar x c) ENil
+headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
+headRedV _ e           = eval e ENil
 
---     getCheckDecl :: [String] -> Either String Cmd
---     getCheckDecl ws = case tail ws of
---       [] -> Left $ errorMsg "Lack of declaration/definition"
---       ws' -> case pCDecl (myLexer (unwords ws')) of
---         Left _   -> Left $ errorMsg "Syntax error: bad declaration/definition"
---         Right cd -> Right (CheckD cd)
+defVar :: String -> Cont -> Exp
+defVar x CNil = Var x
+defVar x (CConsVar c x' _)
+  | x == x'   = Var x
+  | otherwise = defVar x c
+defVar x (CConsDef c x' _ e)
+  | x == x'   = e
+  | otherwise = defVar x c
 
---     getExpType :: [String] -> Either String Cmd
---     getExpType ws = case tail ws of
---       [] -> Left $ errorMsg "Lack of expression"
---       ws' -> case pCExp (myLexer (unwords ws')) of
---         Left _   -> Left (errorMsg "Syntax error: bad expression")
---         Right ce -> Right (GetType ce)
+typeOf :: Cont -> Exp -> Exp
+typeOf c (Abs (Dec x a) e) =
+  let a' = typeOf c a
+      va = eval a (getEnv NoLock c)
+      c' = consCVar c x va
+      e' = typeOf c' e
+  in Abs (Dec x a') e'
+typeOf c (Abs d@(Def x a b) e) =
+  let c' = CConsDef c x a b
+      e' = typeOf c' e
+  in Abs d e'
+typeOf c e = readBack (varsCont c) (typeOfV c e)
 
+typeOfV :: Cont -> Exp -> Val
+typeOfV c (Var x)     =
+  let Just a = getType c x
+  in eval a (getEnv NoLock c)
+typeOfV _ U           = U
+typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
+typeOfV _ e           = error ("not typeable expression: " ++ show e)
 
--- -- | evaluate an expression with all variables available
--- fullEval :: Cont -> Exp -> Val
--- fullEval c e = eval e (getEnv NoLocking c)
-
--- -- | given a type checking context, head evaluation on an expression
--- headRed :: Cont -> Exp -> Exp
--- headRed c (Abs d e) =
---   case d of
---     Dec x a ->
---       let va = eval a (getEnv NoLocking c)
---           a' = headRed c a
---           e' = headRed (consCVar c x va) e
---       in Abs (Dec x a') e'
---     Def x a b ->
---       let e' = headRed (CConsDef c x a b) e
---       in Abs d e'
--- headRed c e = readBack (varsCont c) (headRedV c e)
-
--- -- | turn a value into an expression, remove the closure of a value
--- readBack :: [String] -> Val -> Exp
--- readBack _ U = U
--- readBack _ (Var x) = Var x
--- readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
--- readBack ns (Clos (Abs (Dec "" a) e) r) = Abs (Dec "" (readBack ns (eval a r))) (readBack ns (eval e r))
--- readBack ns (Clos (Abs (Dec x a) e) r) =
---   let z  = freshVar x ns
---       a' = readBack ns (eval a r)
---       e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
---   in Abs (Dec z a') e'
--- readBack _ _ = error "operation not supported"
-
--- headRedV :: Cont -> Exp -> Val
--- headRedV c (Var x)     = eval (defCont x c) ENil
--- headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
--- headRedV c e           = eval e ENil
-
--- -- | given a type checking context, get the definition of a variable
--- defCont :: String -> Cont -> Exp
--- defCont x CNil = Var x
--- defCont x (CConsVar c x' _)
---   | x == x'   = Var x
---   | otherwise = defCont x c
--- defCont x (CConsDef c x' a e)
---   | x == x'   = e
---   | otherwise = defCont x c
-
--- -- | given a type checking context, evaluate an expression with a list of constants unlocked
--- unfold :: Cont -> [String] -> Exp -> Exp
--- unfold c ss e =
---   let envStra = AnnotatedLocking False ss
---   in readBack (varsCont c) (eval e $ getEnv envStra c)
-
--- typeOf :: Cont -> Exp -> Exp
--- typeOf c (Abs d e) =
---   case d of
---     Dec x a ->
---       let a' = typeOf c a
---           v  = eval a (getEnv NoLocking c)
---           c' = consCVar c x v
---           e' = typeOf c' e
---       in Abs (Dec x a') e'
---     Def x a b ->
---       let e' = typeOf (CConsDef c x a b) e
---       in Abs d e'
--- typeOf c e = readBack (varsCont c) (typeOfV c e)
-
--- typeOfV :: Cont -> Exp -> Val
--- typeOfV c (Var x)     = let Just v = getType c x in v
--- typeOfV c U           = U
--- typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
--- typeOfV _ e           = error ("typeOf " ++ show e)
+-- | unfold an expression under given context and locking strategy
+unfoldExpr :: EnvStrategy s => Cont -> s -> Exp -> Exp
+unfoldExpr c s e =
+  let ve = eval e (getEnv s c)
+  in readBack (varsCont c) ve
