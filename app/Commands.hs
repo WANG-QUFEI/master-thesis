@@ -4,55 +4,56 @@ Description     : a module that provides command line functions
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module Commands
   ( Cmd(..)
   , ShowItem(..)
   , CheckItem(..)
+  , LockOption(..)
   , getCommand
   , headRed
-  -- , unfold
-  -- , fullEval
-  -- , typeOf
-  -- , typeCheckErrMsg
-  -- , okayMsg
-  -- , errorMsg
-  -- , infoMsg
-  ) where
+  , unfold
+  , typeOf
+   ) where
 
 import           Classes
 import           Core.Abs
 import           Core.Par
 import           Lang
-import           Locking
+import qualified Locking         as L
 
 import           Data.List.Split
 
 -- | data type for the commands
 data Cmd = Help
          | Quit
-         | Load LockStyle FilePath
+         | Load FilePath
          | Show ShowItem
+         | Lock LockOption
+         | Bind String CExp
          | Check CheckItem
-         | ChangeLock LockStyle
-         | AddToLock [String]
-         | RemoveFromLock [String]
+         | Unfold (Either String CExp)
+         | TypeOf (Either String CExp)
          | HeadReduct
-         | UnfoldExpr
          deriving (Show)
 
 data ShowItem = SFilePath         -- show file path
               | SFileContent      -- show file content
               | SConsants         -- show all constants from the currently loaded file
               | SLocked           -- show locked constants
-              | SUnlocked         -- show unlocked constants from the currently loaded file
-              | SExp              -- show the latest type-checked expression
-              | SContext       -- show the abstract context (type-checking context)
+              | SUnlocked         -- show unlocked constants
+              | SContext          -- show the type-checking context
+              | SName String      -- show the expression bound to a name
               deriving (Show)
 
 data CheckItem = CExp CExp        -- check an expression
                | CDecl CDecl      -- check a declaration/definition
                deriving (Show)
+
+data LockOption = LockAll
+                | LockNone
+                | LockAdd [String]
+                | LockRemove [String]
+                deriving (Show)
 
 -- | Parse a string into a command, return an error message if no command
 --   could be found
@@ -62,27 +63,21 @@ getCommand str =
       tws = tail ws
   in case head ws of
     ":?"      -> return Help
+    ":help"   -> return Help
     ":q"      -> return Quit
     ":load"   -> parseLoad tws
     ":show"   -> parseShow tws
+    ":lock"   -> parseLock tws
+    ":bind"   -> parseBind tws
     ":check"  -> parseCheck tws
-    ":change" -> parseChangeLock tws
-    ":add"    -> parseAddRemove True tws
-    ":remove" -> parseAddRemove False tws
+    ":unfold" -> parseUnfold tws
+    ":typeOf" -> parseTypeof tws
     ":hred"   -> return HeadReduct
-    ":unfold" -> return UnfoldExpr
     _         -> Left "invalid command, type ':?' for a detailed description of the command"
   where
     parseLoad :: [String] -> Either String Cmd
     parseLoad tws = case tws of
-      ["-lock", consts, fp] -> do
-        ss <- parseConsts consts
-        return $ Load (ExplicitLock True ss) fp
-      ["-unlock", consts, fp] -> do
-        ss <- parseConsts consts
-        return $ Load (ExplicitLock False ss) fp
-      ["-no_lock", fp]  -> return $ Load NoLock fp
-      ["-all_lock", fp] -> return $ Load AllLock fp
+      [fp] -> return $ Load fp
       _ -> Left "invalid command, type ':?' for a detailed description of the command"
 
     parseShow :: [String] -> Either String Cmd
@@ -92,9 +87,28 @@ getCommand str =
       ["const_all"]      -> return (Show SConsants)
       ["const_locked"]   -> return (Show SLocked)
       ["const_unlocked"] -> return (Show SUnlocked)
-      ["expr"]           -> return (Show SExp)
       ["context"]        -> return (Show SContext)
+      ["-name", n]       -> return (Show (SName n))
       _                  -> Left "invalid command, type ':?' for a detailed description of the command"
+
+    parseLock :: [String] -> Either String Cmd
+    parseLock tws = case tws of
+      ["-all"]             -> return $ Lock LockAll
+      ["-none"]            -> return $ Lock LockNone
+      ["-add", varlist]    -> do
+        ss <- parseList varlist
+        return $ Lock (LockAdd ss)
+      ["-remove", varlist] -> do
+        ss <- parseList varlist
+        return $ Lock (LockRemove ss)
+      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+
+    parseBind :: [String] -> Either String Cmd
+    parseBind tws = case tws of
+      v : "=" : ws' -> do
+        e <- parseExpr (unwords ws')
+        return $ Bind v e
+      _ -> Left "invalid command, type ':?' for a detailed description of the command"
 
     parseCheck :: [String] -> Either String Cmd
     parseCheck tws = case tws of
@@ -104,31 +118,26 @@ getCommand str =
       "-decl" : ws'  -> do
         d <- parseDecl (unwords ws')
         return $ Check (CDecl d)
-      _              ->  Left "invalid command, type ':?' for a detailed description of the command"
+      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
 
-    parseChangeLock :: [String] -> Either String Cmd
-    parseChangeLock tws = case tws of
-      ["-lock", consts] -> do
-        ss <- parseConsts consts
-        return $ ChangeLock (ExplicitLock True ss)
-      ["-unlock", consts] -> do
-        ss <- parseConsts consts
-        return $ ChangeLock (ExplicitLock False ss)
-      ["-no_lock"] -> return $ ChangeLock NoLock
-      ["-all_lock"] -> return $ ChangeLock AllLock
-      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+    parseUnfold :: [String] -> Either String Cmd
+    parseUnfold tws = case tws of
+      ["-name", v] -> return $ Unfold (Left v)
+      "-expr" : ws' -> do
+        e <- parseExpr (unwords ws')
+        return $ Unfold (Right e)
+      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
 
-    parseAddRemove :: Bool -> [String] -> Either String Cmd
-    parseAddRemove b tws = case tws of
-      [consts] -> do
-        ss <- parseConsts consts
-        if b
-          then return $ AddToLock ss
-          else return $ RemoveFromLock ss
-      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+    parseTypeof :: [String] -> Either String Cmd
+    parseTypeof tws = case tws of
+      ["-name", v] -> return $ TypeOf (Left v)
+      "-expr" : ws' -> do
+        e <- parseExpr (unwords ws')
+        return $ TypeOf (Right e)
+      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
 
-    parseConsts :: String -> Either String [String]
-    parseConsts s =
+    parseList :: String -> Either String [String]
+    parseList s =
       if head s == '[' && last s == ']'
       then let s' = init . tail $ s
            in Right (endBy "," s')
@@ -184,11 +193,11 @@ defVar x (CConsDef c x' _ e)
 
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Abs (Dec x a) e) =
-  let a' = typeOf c a
-      va = eval a (getEnv NoLock c)
-      c' = consCVar c x va
+  let c' = consCVar c x a
       e' = typeOf c' e
-  in Abs (Dec x a') e'
+  in if hasVar x e'
+     then Abs (Dec x a) e'
+     else Abs (Dec "" a) e'
 typeOf c (Abs d@(Def x a b) e) =
   let c' = CConsDef c x a b
       e' = typeOf c' e
@@ -198,13 +207,23 @@ typeOf c e = readBack (varsCont c) (typeOfV c e)
 typeOfV :: Cont -> Exp -> Val
 typeOfV c (Var x)     =
   let Just a = getType c x
-  in eval a (getEnv NoLock c)
+  in eval a (getEnv L.LockNone c)
 typeOfV _ U           = U
 typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
 typeOfV _ e           = error ("not typeable expression: " ++ show e)
 
--- | unfold an expression under given context and locking strategy
-unfoldExpr :: EnvStrategy s => Cont -> s -> Exp -> Exp
-unfoldExpr c s e =
+unfold :: EnvStrategy s => s -> Cont -> Exp -> Exp
+unfold s c e =
   let ve = eval e (getEnv s c)
   in readBack (varsCont c) ve
+
+hasVar :: String -> Exp -> Bool
+hasVar _ U = False
+hasVar x (Var x') = x == x'
+hasVar x (App e1 e2) =
+  hasVar x e1 || hasVar x e2
+hasVar x (Abs (Dec _ a) e) =
+  hasVar x a || hasVar x e
+hasVar x (Abs (Def _ a b) e) =
+  hasVar x a || hasVar x b || hasVar x e
+hasVar _ _ = error "not applicable: hasVar"

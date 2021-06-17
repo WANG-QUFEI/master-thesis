@@ -26,16 +26,13 @@ data Decl = Dec String Exp | Def String Exp Exp deriving (Eq)
 data Env = ENil
          | EConsVar Env String Val
          | EConsDef Env String Exp Exp
-         deriving (Eq)
+         deriving (Eq, Show)
 
 -- | context that relates a variable to a type
 data Cont = CNil
           | CConsVar Cont String Exp
           | CConsDef Cont String Exp Exp
           deriving (Eq)
-
--- | a datatype defined for the ease of printing Env and Cont
-data PrintPair = PrintPair Bool String Val
 
 -- | an abstract context for a loaded source file
 type AbsContext = [Decl]
@@ -46,8 +43,14 @@ pBar  = 1
 pLow  = pBar - 1
 pHigh = pBar + 1
 
+instance Show Cont where
+  showsPrec _ CNil = showString ""
+  showsPrec p (CConsVar CNil x a) = showString x . showString " : " . showsPrec p a
+  showsPrec p (CConsDef CNil x a b) = showString x . showString " : " . showsPrec p a . showString " = " . showsPrec p b
+  showsPrec p (CConsVar c x a) = showsPrec p c . showString "\n" . showString x . showString " : " . showsPrec p a
+  showsPrec p (CConsDef c x a b) = showsPrec p c . showString "\n" . showString x . showString " : " . showsPrec p a . showString " = " . showsPrec p b
+
 instance Show Exp where
---  showsPrec p e = show p `trace` showParen (p > p0) sf
   showsPrec p e = showParen (p > pBar) se
     where
       se :: ShowS
@@ -70,31 +73,13 @@ instance Show Exp where
                               _       -> showsPrec pLow a . showString " -> " . showsPrec pLow e'
         Abs d@(Dec _ _) e'  -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
         Abs d@Def {} e' -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
-        Clos e' r -> showsPrec pLow e' . showString " @env " . showsPrec pLow r
+        Clos e' _ -> showParen True (showsPrec pLow e') . showString "(..)"
 
 instance Show Decl where
   showsPrec _ d = case d of
     Dec "" a  -> showsPrec pBar a
     Dec x a   -> showString (x ++ " : ") . showsPrec pBar a
     Def x a e -> showString (x ++ " : ") . showsPrec pBar a . showString " = " . showsPrec pBar e
-
-instance Show PrintPair where
-  showsPrec _ (PrintPair True s v) = showString s . showString " = " . showsPrec pLow v
-  showsPrec _ (PrintPair False s v) = showString s . showString " : " . showsPrec pLow v
-
-instance Show Env where
-  showsPrec _ r = showList (reverse . convert $ r)
-    where convert :: Env -> [PrintPair]
-          convert ENil                = []
-          convert (EConsVar r' s v)   = PrintPair True s v : convert r'
-          convert (EConsDef r' s _ v) = PrintPair True s v : convert r'
-
-instance Show Cont where
-  showsPrec _ c = showList (reverse . convert $ c)
-    where convert :: Cont -> [PrintPair]
-          convert CNil                = []
-          convert (CConsVar c' s t)   = PrintPair False s t : convert c'
-          convert (CConsDef c' s t _) = PrintPair False s t : convert c'
 
 -- | string of an id
 idStr :: Id -> String

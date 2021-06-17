@@ -9,7 +9,6 @@ T : * -> * =
 funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
   [X : *][Y : *][f : X -> Y][t : T X][g : Y -> *] t ([x : X] g (f x)) ;
 
-{-
 ¬ : * -> * =
   [X : *] X -> ⊥ ;
 
@@ -46,4 +45,3 @@ loop : ⊥
    = lem2 lem3 ;
 
 delta2 : U -> U = [z : U] delta (delta z) ;
--}

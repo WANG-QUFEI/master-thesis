@@ -24,6 +24,7 @@ dependencies:
 - haskeline >= 0.8.1.0
 - split ^>= 0.2.3.4
 - text >= 1.2.4.0
+- unicode-show >= 0.1.0.4
 
 executables:
   siminitt:
