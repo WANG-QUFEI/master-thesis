@@ -43,73 +43,70 @@ instance InformativeError TypeCheckError where
   explain (ExtendedWithPos terr d)  = ("Type check error found at " ++ show d) : explain terr
 
 -- | check an expression is well typed and infer its type
-checkI    :: EnvStrategy s => s -> Cont -> Exp -> TypeCheckM Val
+checkInferT :: EnvStrategy s => s -> Cont -> Exp -> TypeCheckM Val
 -- | check an expression is well typed given a certain type
-checkT    :: EnvStrategy s => s -> Cont -> Exp -> Val -> TypeCheckM ()
+checkWithT :: EnvStrategy s => s -> Cont -> Exp -> Val -> TypeCheckM ()
 -- | check that two values are equal and infer their type
-checkCI   :: EnvStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
+checkEqualInferT :: EnvStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
 -- | check that two values are equal under a given type
-checkCT   :: EnvStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
+checkEqualWithT  :: EnvStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
 -- | check that a declaration/definition is valid
 checkDecl :: EnvStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
 
-checkI _ _ U = return U -- U has itself as its element
-checkI s c (Var x) = do
+checkInferT _ _ U = return U -- U has itself as its element
+checkInferT s c (Var x) = do
   case getType c x of
     Just t -> let env = getEnv s c
               in return $ eval t env
     Nothing -> throwError $ NoTypeBoundVar x
-checkI s c eapp@(App m n) = do
-  tm <- checkI s c m
+checkInferT s c eapp@(App m n) = do
+  tm <- checkInferT s c m
   case tm of
     Clos (Abs (Dec x a) b) r -> do
       let va = eval a r
-      checkT s c n va
+      checkWithT s c n va
       let env = getEnv s c
           vn = eval n env
           r' = consEVar r x vn
       return (eval b r')
     _ -> throwError $ CannotInferType eapp
-checkI s c (Abs d@Def {} e) = do
+checkInferT s c (Abs d@Def {} e) = do
   c' <- checkDecl s c d
-  checkI s c' e
-checkI s c e@Abs {} = do
-  checkT s c e U
-  return U
-checkI _ _ e = throwError $ CannotInferType e
+  checkInferT s c' e
+checkInferT _ _ e = throwError $ CannotInferType e
 
-checkT _ _ U U = return ()
-checkT s c (Var x) v = do
+checkWithT _ _ U U = return ()
+checkWithT s c (Var x) v = do
   case getType c x of
     Just t -> do
       let env = getEnv s c
           vt  = eval t env
-      void (checkCI s c vt v)
+      void (checkEqualInferT s c vt v)
     Nothing -> throwError $ NoTypeBoundVar x
-checkT s c e@App {} v = do
-  v' <- checkI s c e
-  void (checkCI s c v v')
-checkT s c (Abs (Dec x a) b) U = do
-  checkT s c a U
+checkWithT s c e@App {} v = do
+  v' <- checkInferT s c e
+  void (checkEqualInferT s c v v')
+checkWithT s c (Abs (Dec x a) b) U = do
+  checkWithT s c a U
   let c' = consCVar c x a
-  checkT s c' b U
-checkT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
-  checkT s c a U
+  checkWithT s c' b U
+checkWithT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
+  checkWithT s c a U
   let env = getEnv s c
       va  = eval a env
       va' = eval a' r
-  checkCI s c va va'
+  checkEqualInferT s c va va'
   let r' = consEVar r x' (Var x)
       ve' = eval e' r'
       c' = consCVar c x a
-  checkT s c' e ve'
-checkT s c (Abs d@Def {}  e) v = do
+  checkWithT s c' e ve'
+checkWithT s c (Abs d@Def {}  e) v = do
   c' <- checkDecl s c d
-  checkT s c' e v
-checkT _ _ e t = throwError $ TypeNotMatch e t
+  checkWithT s c' e v
+checkWithT _ _ e t = throwError $ TypeNotMatch e t
 
-checkCI _ _ U U = return U
-checkCI s c (Var x) (Var x') =
+checkEqualInferT _ _ U U = return U
+checkEqualInferT s c (Var x) (Var x') =
   if x == x'
   then case getType c x of
          Just t -> do
@@ -117,23 +114,23 @@ checkCI s c (Var x) (Var x') =
            return $ eval t env
          Nothing -> throwError $ NoTypeBoundVar x
   else throwError $ NotConvertible (Var x) (Var x')
-checkCI s c (App m1 n1) (App m2 n2) = do
-  v <- checkCI s c m1 m2
+checkEqualInferT s c (App m1 n1) (App m2 n2) = do
+  v <- checkEqualInferT s c m1 m2
   case v of
     Clos (Abs (Dec x a) b) r -> do
       let va = eval a r
           env = getEnv s c
           nv  = eval n1 env
-      checkCT s c n1 n2 va
+      checkEqualWithT s c n1 n2 va
       let r' = consEVar r x nv
       return $ eval b r'
     _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
-checkCI s c v1@Clos {} v2@Clos {} = do
-  checkCT s c v1 v2 U
+checkEqualInferT s c v1@Clos {} v2@Clos {} = do
+  checkEqualWithT s c v1 v2 U
   return U
-checkCI _ _ v v' = throwError $ NotConvertible v v'
+checkEqualInferT _ _ v v' = throwError $ NotConvertible v v'
 
-checkCT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
+checkEqualWithT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
   let va = eval a r
       fz = freshVar z (varsCont c)
       vfz = Var fz
@@ -143,28 +140,28 @@ checkCT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
       v1' = eval (App v1 vfz) env
       v2' = eval (App v2 vfz) env
       c1 = consCVar c fz va
-  checkCT s c1 v1' v2' vb
-checkCT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
+  checkEqualWithT s c1 v1' v2' vb
+checkEqualWithT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
   let va1 = eval a1 r1
       va2 = eval a2 r2
-  checkCI s c va1 va2
+  checkEqualInferT s c va1 va2
   let fx = freshVar x1 (varsCont c)
       vfx = Var fx
       c' = consCVar c fx va1
       v1 = eval b1 (consEVar r1 x1 vfx)
       v2 = eval b2 (consEVar r2 x2 vfx)
-  void $ checkCI s c' v1 v2
-checkCT s c v1 v2 _ = do
-  void $ checkCI s c v1 v2
+  void $ checkEqualInferT s c' v1 v2
+checkEqualWithT s c v1 v2 _ = do
+  void $ checkEqualInferT s c v1 v2
 
 checkDecl s c (Dec x a) = do
-  checkT s c a U
+  checkWithT s c a U
   return $ consCVar c x a
 
 checkDecl s c (Def x a e) = do
-  checkT s c a U
+  checkWithT s c a U
   let va = eval a (getEnv s c)
-  checkT s c e va
+  checkWithT s c e va
   return $ CConsDef c x a e
 
 -- | parse and type check a file
@@ -182,7 +179,7 @@ convertCheckExpr s cc ac ce =
   let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left $ unlines . map errorMsg $ explain err
-    Right e  -> case runG (checkI s ac e) CNil of
+    Right e  -> case runG (checkInferT s ac e) CNil of
                   Left err -> Left $ unlines . map errorMsg $ explain err
                   Right _  -> Right e
 
