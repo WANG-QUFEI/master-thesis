@@ -6,6 +6,7 @@ Portability     : POSIX
 -}
 module Main (main) where
 
+import           Classes
 import           Commands
 import           Core.Abs
 import           Lang
@@ -16,7 +17,6 @@ import           TypeChecker
 import           Control.Monad.State
 import           Data.Char
 import qualified Data.Map                 as Map
-import qualified Data.Set                 as Set
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as TI
 import           System.Console.Haskeline
@@ -25,13 +25,13 @@ import qualified Text.Show.Unicode        as U
 
 -- | the context/state of the REPL operation
 data ReplState = ReplState
-  { filePath    :: FilePath,            -- path of the loaded file
-    fileContent :: T.Text,              -- content of the loaded file
-    concretCtx  :: Context,             -- concret context of the loaded file
-    context     :: Cont,                -- abstract context of the loaded file
-    lockStyle   :: L.LockStyle,           -- locking/unlocking variables
-    bindMap     :: Map.Map String Exp,  -- a map binds well-typed expressions to names
-    continue    :: Bool                 -- whether to continue execution
+  { filePath     :: FilePath,            -- path of the loaded file
+    fileContent  :: T.Text,              -- content of the loaded file
+    concretCtx   :: Context,             -- concret context of the loaded file
+    context      :: Cont,                -- abstract context of the loaded file
+    lockStrategy :: L.SimpleLock,        -- locking/unlocking variables
+    bindMap      :: Map.Map String Exp,  -- a map binds well-typed expressions to names
+    continue     :: Bool                 -- whether to continue execution
   }
 
 initState :: ReplState
@@ -56,24 +56,25 @@ handleInput str =
   then return ()
   else let str' = trimString str
        in case getCommand str' of
-            Left err            -> outputStrLn (errorMsg err)
-            Right Quit          -> stop
-            Right Help          -> usage
-            Right (Load fp)     -> handleLoad fp
-            Right (Show s)      -> handleShow s
-            Right (Lock l)      -> handleLock l
-            Right (Bind x cexp) -> handleBind x cexp
-            Right (Check c)     -> handleCheck c
-            Right (Unfold uf)   -> handleUnfold uf
-            Right (TypeOf tf)   -> handleTypeOf tf
-            Right HeadReduct    -> handleHeadRed
+            Left err                    -> outputStrLn (errorMsg err)
+            Right Quit                  -> stop
+            Right Help                  -> usage
+            Right (Load fp)             -> handleLoad fp
+            Right (Show s)              -> handleShow s
+            Right (Lock l)              -> handleLock l
+            Right (Bind x cexp)         -> handleBind x cexp
+            Right (Check c)             -> handleCheck c
+            Right (Unfold uf)           -> handleUnfold uf
+            Right (TypeOf tf)           -> handleTypeOf tf
+            Right HeadReduct            -> handleHeadRed
+            Right (FindMinimumConsts v) -> handleFindMiniConsts v
 
 handleHeadRed :: InputT (StateT ReplState IO) ()
 handleHeadRed = do
-  ax <- lift . gets $ context
+  ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
   let Just e = Map.lookup "it" m
-      e' = headRed ax e
+      e' = headRed ac e
   outputStrLn . U.ushow $ e'
   let m' = Map.insert "it" e' m
   lift . modify $ \s -> s {bindMap = m'}
@@ -94,58 +95,44 @@ handleLoad fp = do
   if not b
     then outputStrLn . errorMsg $ "error: file does not exist"
     else do
-    ls <- lift . gets $ lockStyle
+    ls <- lift . gets $ lockStrategy
     t  <- liftIO (TI.readFile fp)
     let ts = T.unpack t
     case parseCheckFile ls ts of
       Left err -> outputStrLn err
-      Right (cx, ax) -> do
+      Right (cx, ac) -> do
         outputStrLn $ okayMsg "file loaded!"
         lift $ modify (\s -> s {filePath    = fp,
                                 fileContent = t,
                                 concretCtx  = cx,
-                                context     = ax})
+                                context     = ac})
 
 handleShow :: ShowItem -> InputT (StateT ReplState IO) ()
 handleShow SFilePath = do
   fp <- lift $ gets filePath
   if fp == ""
-    then outputStrLn . errorMsg $ "there's no file that has been loaded"
+    then outputStrLn . errorMsg $ "no file loaded"
     else outputStrLn fp
 handleShow SFileContent = do
   fc <- lift $ gets fileContent
-  if fc == T.empty
-    then outputStrLn . errorMsg $ "there's no file that has been loaded"
-    else outputStrLn (T.unpack fc)
+  outputStrLn (T.unpack fc)
 handleShow SConsants = do
   ac <- lift $ gets context
-  if ac == CNil
-    then outputStrLn . errorMsg $ "there's no file that has been loaded"
-    else outputStrLn $ U.ushow (varsCont ac)
+  outputStrLn $ U.ushow (varsCont ac)
 handleShow SLocked = do
-  ls <- lift $ gets lockStyle
+  ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
-  let varsAll = varsCont ac
-  case ls of
-    L.LockNone    -> outputStrLn "[]"
-    L.LockAll     -> outputStrLn $ U.ushow varsAll
-    L.LockList ss -> do
-      let set1 = Set.fromList varsAll
-          set2 = Set.fromList ss
-          ss'  = Set.toList (Set.intersection set1 set2)
-      outputStrLn . U.ushow $ ss'
+  let sl = getConstsLocked ls ac
+  outputStrLn . U.ushow $ sl
+  outputStrLn $ "Lock strategy: " ++ U.ushow ls
+
 handleShow SUnlocked = do
-  ls <- lift $ gets lockStyle
+  ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
-  let varsAll = varsCont ac
-  case ls of
-    L.LockAll     -> outputStrLn "[]"
-    L.LockNone    -> outputStrLn $ U.ushow varsAll
-    L.LockList ss -> do
-      let set1 = Set.fromList varsAll
-          set2 = Set.fromList ss
-          ss'  = Set.toList (Set.difference set1 set2)
-      outputStrLn . U.ushow $ ss'
+  let su = getConstsUnLocked ls ac
+  outputStrLn . U.ushow $ su
+  outputStrLn $ "Lock strategy: " ++ U.ushow ls
+
 handleShow SContext = do
   ac <- lift $ gets context
   outputStrLn $ U.ushow ac
@@ -156,48 +143,33 @@ handleShow (SName name) = do
     Just e  -> outputStrLn (U.ushow e)
 
 handleLock :: LockOption -> InputT (StateT ReplState IO) ()
-handleLock LockAll =
+handleLock LockAll = do
   let ls = L.LockAll
-  in lift . modify $ \s -> s {lockStyle = ls}
-handleLock LockNone =
+  showChangeOfLock ls
+  lift . modify $ \s -> s {lockStrategy = ls}
+
+handleLock LockNone = do
   let ls = L.LockNone
-  in lift . modify $ \s -> s {lockStyle = ls}
+  showChangeOfLock ls
+  lift . modify $ \s -> s {lockStrategy = ls}
 handleLock (LockAdd ss) = do
-  ls <- lift . gets $ lockStyle
-  case ls of
-    L.LockAll -> return ()
-    L.LockNone ->
-      let ls' = L.LockList ss
-      in lift . modify $ \s -> s {lockStyle = ls'}
-    L.LockList ss' ->
-      let set1 = Set.fromList ss'
-          set2 = Set.fromList ss
-          us   = Set.toList (Set.union set1 set2)
-      in lift . modify $ \s -> s {lockStyle = L.LockList us}
+  ls <- lift . gets $ lockStrategy
+  let ls' = addLock ls ss
+  showChangeOfLock ls'
+  lift . modify $ \s -> s {lockStrategy = ls'}
 handleLock (LockRemove ss) = do
-  ls <- lift . gets $ lockStyle
-  ax <- lift . gets $ context
-  case ls of
-    L.LockNone -> return ()
-    L.LockAll -> do
-      let allVars = varsCont ax
-          set1 = Set.fromList allVars
-          set2 = Set.fromList ss
-          ss'  = Set.toList (Set.difference set1 set2)
-      lift . modify $ \s -> s {lockStyle = L.LockList ss'}
-    L.LockList ss' ->
-      let set1 = Set.fromList ss'
-          set2 = Set.fromList ss
-          us   = Set.toList (Set.difference set1 set2)
-      in lift . modify $ \s -> s {lockStyle = L.LockList us}
+  ls <- lift . gets $ lockStrategy
+  let ls' = removeLock ls ss
+  showChangeOfLock ls'
+  lift . modify $ \s -> s {lockStrategy = ls'}
 
 handleBind :: String -> CExp -> InputT (StateT ReplState IO) ()
 handleBind x cexp = do
-  ls <- lift . gets $ lockStyle
+  ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
-  ax <- lift . gets $ context
+  ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
-  case convertCheckExpr ls cx ax cexp of
+  case convertCheckExpr ls cx ac cexp of
     Left err -> outputStr err
     Right e  ->
       let m' = Map.insert x e m
@@ -205,10 +177,10 @@ handleBind x cexp = do
 
 handleCheck :: CheckItem -> InputT (StateT ReplState IO) ()
 handleCheck (CExp cexp) = do
-  ls <- lift $ gets lockStyle
+  ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
-  ax <- lift $ gets context
-  case convertCheckExpr ls cx ax cexp of
+  ac <- lift $ gets context
+  case convertCheckExpr ls cx ac cexp of
     Left err -> do
       outputStrLn (errorMsg "error: invalid expression!")
       outputStr err
@@ -218,65 +190,85 @@ handleCheck (CExp cexp) = do
       let m' = Map.insert "it" e m
       lift $ modify (\s -> s {bindMap = m'})
 handleCheck (CDecl cdecl) = do
-  ls <- lift $ gets lockStyle
+  ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
-  ax <- lift $ gets context
-  case convertCheckDecl ls cx ax cdecl of
+  ac <- lift $ gets context
+  case convertCheckDecl ls cx ac cdecl of
     Left err -> do
       outputStrLn (errorMsg "error: invalid declaration/definition!")
-      outputStrLn err
+      outputStr err
     Right d  -> do
       outputStrLn (okayMsg "okay~")
-      let (cx', ax') = expandContext (cx, ax) (cdecl, d)
+      let (cx', ac') = expandContext (cx, ac) (cdecl, d)
       lift $ modify (\s -> s {concretCtx = cx',
-                              context = ax'})
+                              context = ac'})
   where
     expandContext :: (Context, Cont) -> (CDecl, Decl) -> (Context, Cont)
-    expandContext (Ctx ds, ax) (cd, d) =
+    expandContext (Ctx ds, ac) (cd, d) =
       let cx = Ctx (ds ++ [cd])
-          ax' = case d of
-            Dec x a   -> CConsVar ax x a
-            Def x a b -> CConsDef ax x a b
-      in (cx, ax')
+          ac' = case d of
+            Dec x a   -> CConsVar ac x a
+            Def x a b -> CConsDef ac x a b
+      in (cx, ac')
+handleCheck (Const var) = do
+  ls <- lift . gets $ lockStrategy
+  ac <- lift . gets $ context
+  case checkConstant ls ac var of
+    Left errmsg -> outputStrLn errmsg
+    Right _     -> outputStrLn "okay~"
 
 handleTypeOf :: Either String CExp -> InputT (StateT ReplState IO) ()
 handleTypeOf (Left name) = do
-  ax <- lift . gets $ context
+  ac <- lift . gets $ context
   m <- lift . gets $ bindMap
   case Map.lookup name m of
     Just e ->
-      let te = typeOf ax e
+      let te = typeOf ac e
       in outputStrLn (U.ushow te)
     Nothing -> outputStrLn . errorMsg $ "name: '" ++ name ++ "' is not bound"
 handleTypeOf (Right cexp) = do
-  ls <- lift . gets $ lockStyle
+  ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
-  ax <- lift . gets $ context
-  case convertCheckExpr ls cx ax cexp of
+  ac <- lift . gets $ context
+  case convertCheckExpr ls cx ac cexp of
     Left err -> outputStrLn err
     Right e  ->
-      let te = typeOf ax e
+      let te = typeOf ac e
       in outputStrLn (U.ushow te)
 
 handleUnfold :: Either String CExp -> InputT (StateT ReplState IO) ()
 handleUnfold (Left name) = do
-  ls <- lift . gets $ lockStyle
-  ax <- lift . gets $ context
+  ls <- lift . gets $ lockStrategy
+  ac <- lift . gets $ context
   m <- lift . gets $ bindMap
   case Map.lookup name m of
     Just e ->
-      let e' = unfold ls ax e
+      let e' = unfold ls ac e
       in outputStrLn (U.ushow e')
     Nothing -> outputStrLn . errorMsg $ "name: '" ++ name ++ "' is not bound"
 handleUnfold (Right cexp) = do
-  ls <- lift . gets $ lockStyle
+  ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
-  ax <- lift . gets $ context
-  case convertCheckExpr ls cx ax cexp of
+  ac <- lift . gets $ context
+  case convertCheckExpr ls cx ac cexp of
     Left err -> outputStrLn err
     Right e  ->
-      let e' = unfold ls ax e
+      let e' = unfold ls ac e
       in outputStrLn (U.ushow e')
+
+showChangeOfLock :: L.SimpleLock -> InputT (StateT ReplState IO) ()
+showChangeOfLock lockNew = do
+  lockNow <- lift . gets $ lockStrategy
+  outputStrLn "Change of lock strategy"
+  outputStrLn $ "  from: " ++ U.ushow lockNow
+  outputStrLn $ "  to: " ++ U.ushow lockNew
+
+handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
+handleFindMiniConsts x = do
+  ac <- lift . gets $ context
+  case minimumConsts ac x of
+    Left err -> outputStrLn err
+    Right ss -> outputStrLn (U.ushow ss)
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"
@@ -284,13 +276,13 @@ usage = let msg = [ " Commands available:"
                   , "   :q                            quit"
                   , "   :load <file>                  load <file> with the current locking strategy, default strategy is '-none'"
                   , "   :show {filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name> }"
-                  , "      - filePath                 show the path of the currently loaded file"
-                  , "      - fileContent              show the content of the currently loaded file"
-                  , "      - const_all                show the name of all of the constants of the currently loaded file"
-                  , "      - const_locked             show the name of all of the locked constants specified by the user"
-                  , "      - const_unlocked           show the name of all of the unlocked constants of the currently loaded file"
-                  , "      - context                  show the type checking context"
-                  , "      - -name <name>             show the expression bound to the name <name>"
+                  , "      filePath, fp               show the path of the currently loaded file"
+                  , "      fileContent, fc            show the content of the currently loaded file"
+                  , "      const_all, ca              show the name of all of the constants of the currently loaded file"
+                  , "      const_locked, cl           show the name of all of the locked constants specified by the user"
+                  , "      const_unlocked, cu         show the name of all of the unlocked constants of the currently loaded file"
+                  , "      context, ctx               show the type checking context"
+                  , "      -name <name>               show the expression bound to the name <name>"
                   , "   :lock {-all | -none | -add | -remove} [<varlist>]"
                   , "                                 change lock strategy:"
                   , "                                 -all: lock all constants; -none: lock none constants;"
@@ -299,19 +291,25 @@ usage = let msg = [ " Commands available:"
                   , "                                 <varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
                   , "   :bind <name> = <expr>         bind a name <name> to expression <expr>, if <expr> is well typed under the current"
                   , "                                 locking strategy."
-                  , "   :check {-expr | -decl}  { <expr> | <decl> }"
-                  , "                                 parse and type check an expression or declaration/definition with the current locking"
-                  , "                                 strategy. A successfully type checked expression will be bound to the name 'it',"
-                  , "                                 whereas a successfully type checked declaration/definition will be added to the"
-                  , "                                 underlying type-checking context"
+                  , "   :check {-expr | -decl | -const}  { <expr> | <decl> | <constant>}"
+                  , "      -expr   <expr>             parse and type check an expression in the current context with the current locking strategy."
+                  , "                                 a type checked expression will be bound to the name 'it'"
+                  , "      -decl   <decl>             parse and type check a declaration/definition in the current context with the current locking strategy."
+                  , "                                 a type checked declaration/definition will be added to the context"
+                  , "      -const  <constant>         type check a constant (identifier of a declaration/definition) in the current context with the current"
+                  , "                                 locking strategy."
+                  , "                                 the constant must come from the current context. This command is used to experiment with the locking/un-"
+                  , "                                 locking mechanism."
                   , "   :unfold {-name | -expr} { <name> | <expr> }"
                   , "                                 unfold an expression bound to a name <name> or a given expression <expr> under the"
                   , "                                 current locking strategy."
-                  , "                                 A given expression will firstly be type-checked before it being unfolded"
+                  , "                                 a given expression will firstly be type-checked before its being unfolded"
                   , "   :typeOf {-name | -expr} { <name> | <expr> }"
                   , "                                 calculate the type of an expression bound to a name <name> or a given expression <expr>."
-                  , "                                 A given expression will firstly be type-checked before being calculated the type"
+                  , "                                 a given expression will firstly be type-checked before being calculated the type"
                   , "   :hred                         apply head reduction on the expression bound to name 'it', making the result be bound to"
                   , "                                 'it' instead"
+                  , "   :fmc <constant>               find the minimum set of constants that need to be unfolded, such that the declaration/definition"
+                  ,"                                  referred by <constant> in the current context is type valid"
                    ]
         in outputStr (unlines msg)

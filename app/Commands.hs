@@ -13,14 +13,21 @@ module Commands
   , headRed
   , unfold
   , typeOf
+  , minimumConsts
+  , checkConstant
    ) where
 
 import           Classes
 import           Core.Abs
 import           Core.Par
 import           Lang
-import qualified Locking         as L
+import qualified Locking              as L
+import           Message
+import           Monads
+import           TypeChecker
 
+import           Control.Monad
+import           Control.Monad.Except
 import           Data.List.Split
 
 -- | data type for the commands
@@ -34,6 +41,7 @@ data Cmd = Help
          | Unfold (Either String CExp)
          | TypeOf (Either String CExp)
          | HeadReduct
+         | FindMinimumConsts String
          deriving (Show)
 
 data ShowItem = SFilePath         -- show file path
@@ -47,6 +55,7 @@ data ShowItem = SFilePath         -- show file path
 
 data CheckItem = CExp CExp        -- check an expression
                | CDecl CDecl      -- check a declaration/definition
+               | Const String     -- check a constant
                deriving (Show)
 
 data LockOption = LockAll
@@ -73,6 +82,7 @@ getCommand str =
     ":unfold" -> parseUnfold tws
     ":typeOf" -> parseTypeof tws
     ":hred"   -> return HeadReduct
+    ":fmc"    -> parseMiniConsts tws
     _         -> Left "invalid command, type ':?' for a detailed description of the command"
   where
     parseLoad :: [String] -> Either String Cmd
@@ -83,11 +93,17 @@ getCommand str =
     parseShow :: [String] -> Either String Cmd
     parseShow tws = case tws of
       ["filePath"]       -> return (Show SFilePath)
+      ["fp"]             -> return (Show SFilePath)
       ["fileContent"]    -> return (Show SFileContent)
+      ["fc"]             -> return (Show SFileContent)
       ["const_all"]      -> return (Show SConsants)
+      ["ca"]             -> return (Show SConsants)
       ["const_locked"]   -> return (Show SLocked)
+      ["cl"]             -> return (Show SLocked)
       ["const_unlocked"] -> return (Show SUnlocked)
+      ["cu"]             -> return (Show SUnlocked)
       ["context"]        -> return (Show SContext)
+      ["ctx"]            -> return (Show SContext)
       ["-name", n]       -> return (Show (SName n))
       _                  -> Left "invalid command, type ':?' for a detailed description of the command"
 
@@ -118,6 +134,7 @@ getCommand str =
       "-decl" : ws'  -> do
         d <- parseDecl (unwords ws')
         return $ Check (CDecl d)
+      ["-const", var] -> return $ Check (Const var)
       _ ->  Left "invalid command, type ':?' for a detailed description of the command"
 
     parseUnfold :: [String] -> Either String Cmd
@@ -150,6 +167,10 @@ getCommand str =
     parseDecl :: String -> Either String CDecl
     parseDecl "" = Left "invalid command, type ':?' for a detailed description of the command"
     parseDecl s  = pCDecl (myLexer s)
+
+    parseMiniConsts :: [String] -> Either String Cmd
+    parseMiniConsts [var] = return $ FindMinimumConsts var
+    parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
 readBack :: [String] -> Val -> Exp
 readBack _ U = U
@@ -192,12 +213,6 @@ defVar x (CConsDef c x' _ e)
   | otherwise = defVar x c
 
 typeOf :: Cont -> Exp -> Exp
-typeOf c (Abs (Dec x a) e) =
-  let c' = consCVar c x a
-      e' = typeOf c' e
-  in if hasVar x e'
-     then Abs (Dec x a) e'
-     else Abs (Dec "" a) e'
 typeOf c (Abs d@(Def x a b) e) =
   let c' = CConsDef c x a b
       e' = typeOf c' e
@@ -212,18 +227,72 @@ typeOfV _ U           = U
 typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
 typeOfV _ e           = error ("not typeable expression: " ++ show e)
 
-unfold :: EnvStrategy s => s -> Cont -> Exp -> Exp
+unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
 unfold s c e =
   let ve = eval e (getEnv s c)
   in readBack (varsCont c) ve
 
-hasVar :: String -> Exp -> Bool
-hasVar _ U = False
-hasVar x (Var x') = x == x'
-hasVar x (App e1 e2) =
-  hasVar x e1 || hasVar x e2
-hasVar x (Abs (Dec _ a) e) =
-  hasVar x a || hasVar x e
-hasVar x (Abs (Def _ a b) e) =
-  hasVar x a || hasVar x b || hasVar x e
-hasVar _ _ = error "not applicable: hasVar"
+checkConstant :: LockStrategy l => l -> Cont -> String -> Either String ()
+checkConstant ls c s =
+  case locate c s of
+    Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
+    Just (_, d) ->
+      case runG (checkDecl ls c d) CNil of
+        Left err ->
+          let errmsg = explain err
+          in Left (unlines (map errorMsg errmsg))
+        Right _ -> return ()
+
+minimumConsts :: Cont -> String -> Either String [String]
+minimumConsts c s =
+  case locate c s of
+    Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
+    Just (c', d) ->
+      case runG (trialAndUnfold L.LockAll c' d) CNil of
+        Left err ->
+          let errmsg = explain err
+          in Left (unlines (map errorMsg errmsg))
+        Right ss -> Right ss
+
+locate :: Cont -> String -> Maybe (Cont, Decl)
+locate c s = case c of
+  CNil -> Nothing
+  CConsVar c' x a ->
+    if x == s
+    then Just (c', Dec s a)
+    else locate c' s
+  CConsDef c' x a e ->
+    if x == s
+    then Just (c', Def x a e)
+    else locate c' s
+
+trialAndUnfold :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM [String]
+trialAndUnfold ls c d = do
+  void $ checkDecl ls c d
+  return $ getConstsUnLocked ls c
+  `catchError` h
+  where
+    h :: TypeCheckError -> TypeCheckM [String]
+    h err = case err of
+              TypeNotMatch _ v  -> tryNextConst err v
+              CannotInferType e -> tryNextConst err e
+              NotFunctionClos v -> tryNextConst err v
+              _ -> throwError $ ExtendedWithCtx err ["Unexpected exception in trialAndUnfold"]
+
+    tryNextConst :: TypeCheckError -> Exp -> TypeCheckM [String]
+    tryNextConst err e =
+      case nextConst e of
+        Nothing -> throwError $ ExtendedWithCtx err ["No constants referred in value: ", show e]
+        Just x ->
+          let uls = getConstsUnLocked ls c
+          in if x `elem` uls
+             then throwError $ ExtendedWithCtx err ["Already unlocked variable: " ++ x]
+             else let ls' = removeLock ls [x]
+                  in trialAndUnfold ls' c d
+    nextConst :: Exp -> Maybe String
+    nextConst (Var x) = Just x
+    nextConst (App e1 e2) =
+      case nextConst e1 of
+        Just x  -> Just x
+        Nothing -> nextConst e2
+    nextConst _ = Nothing

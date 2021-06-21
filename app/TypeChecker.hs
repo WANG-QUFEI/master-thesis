@@ -4,12 +4,10 @@ Description     : providing functions that type check the abstract syntax
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
-{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module TypeChecker where
 
 import           Control.Monad
 import           Control.Monad.Except
--- import           Debug.Trace
 import           Control.Monad.State
 import qualified Data.Map             as Map
 
@@ -28,38 +26,33 @@ type TypeCheckM a = G TypeCheckError Cont a
 -- | a datatype used as exception in an ExceptT monad
 data TypeCheckError
   = CannotInferType Exp
+  | NotFunctionClos Exp
   | NoTypeBoundVar String
   | TypeNotMatch Exp Val
   | NotConvertible Val Val
   | ExtendedWithPos TypeCheckError Decl
+  | ExtendedWithCtx TypeCheckError [String]
   deriving (Show)
 
 instance InformativeError TypeCheckError where
-  explain (CannotInferType e)       = ["Cannot infer type of expression: " ++ show e]
+  explain (CannotInferType e)       = ["Cannot infer type for expression: " ++ show e]
+  explain (NotFunctionClos v)       = ["Value supposed to be a function closure, but it isn't", show v]
   explain (NotConvertible v1 v2)    = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
   explain (NoTypeBoundVar var)      = ["Variable without a bound type (this exception normally should not happen)",
                                        "variable name: " ++ var]
-  explain (TypeNotMatch e v)        = ["Expression does not have the given type", "exp: " ++ show e, "type given: " ++ show v]
-  explain (ExtendedWithPos terr d)  = ("Type check error found at " ++ show d) : explain terr
+  explain (TypeNotMatch e v)        = ["Expression does not have the given type", "exp: " ++ show e, "type: " ++ show v]
+  explain (ExtendedWithPos terr d)  = "Found type check error at: " : show d : explain terr
+  explain (ExtendedWithCtx terr ss) = ss ++ explain terr
 
 -- | check an expression is well typed and infer its type
-checkInferT :: EnvStrategy s => s -> Cont -> Exp -> TypeCheckM Val
--- | check an expression is well typed given a certain type
-checkWithT :: EnvStrategy s => s -> Cont -> Exp -> Val -> TypeCheckM ()
--- | check that two values are equal and infer their type
-checkEqualInferT :: EnvStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
--- | check that two values are equal under a given type
-checkEqualWithT  :: EnvStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
--- | check that a declaration/definition is valid
-checkDecl :: EnvStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
-
+checkInferT :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM Val
 checkInferT _ _ U = return U -- U has itself as its element
 checkInferT s c (Var x) = do
   case getType c x of
     Just t -> let env = getEnv s c
               in return $ eval t env
     Nothing -> throwError $ NoTypeBoundVar x
-checkInferT s c eapp@(App m n) = do
+checkInferT s c (App m n) = do
   tm <- checkInferT s c m
   case tm of
     Clos (Abs (Dec x a) b) r -> do
@@ -69,12 +62,14 @@ checkInferT s c eapp@(App m n) = do
           vn = eval n env
           r' = consEVar r x vn
       return (eval b r')
-    _ -> throwError $ CannotInferType eapp
+    _ -> throwError (NotFunctionClos tm)
 checkInferT s c (Abs d@Def {} e) = do
   c' <- checkDecl s c d
   checkInferT s c' e
 checkInferT _ _ e = throwError $ CannotInferType e
 
+-- | check an expression is well typed given a certain type
+checkWithT :: LockStrategy s => s -> Cont -> Exp -> Val -> TypeCheckM ()
 checkWithT _ _ U U = return ()
 checkWithT s c (Var x) v = do
   case getType c x of
@@ -95,7 +90,7 @@ checkWithT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
   let env = getEnv s c
       va  = eval a env
       va' = eval a' r
-  checkEqualInferT s c va va'
+  void $ checkEqualInferT s c va va'
   let r' = consEVar r x' (Var x)
       ve' = eval e' r'
       c' = consCVar c x a
@@ -103,8 +98,10 @@ checkWithT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
 checkWithT s c (Abs d@Def {}  e) v = do
   c' <- checkDecl s c d
   checkWithT s c' e v
-checkWithT _ _ e t = throwError $ TypeNotMatch e t
+checkWithT _ _ e v = throwError $ TypeNotMatch e v
 
+-- | check that two values are equal and infer their type
+checkEqualInferT :: LockStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
 checkEqualInferT _ _ U U = return U
 checkEqualInferT s c (Var x) (Var x') =
   if x == x'
@@ -124,12 +121,14 @@ checkEqualInferT s c (App m1 n1) (App m2 n2) = do
       checkEqualWithT s c n1 n2 va
       let r' = consEVar r x nv
       return $ eval b r'
-    _ -> throwError $ NotConvertible (App m1 n1) (App m2 n2)
+    _ -> throwError $ NotFunctionClos v
 checkEqualInferT s c v1@Clos {} v2@Clos {} = do
   checkEqualWithT s c v1 v2 U
   return U
 checkEqualInferT _ _ v v' = throwError $ NotConvertible v v'
 
+-- | check that two values are equal under a given type
+checkEqualWithT  :: LockStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
 checkEqualWithT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
   let va = eval a r
       fz = freshVar z (varsCont c)
@@ -144,7 +143,7 @@ checkEqualWithT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
 checkEqualWithT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
   let va1 = eval a1 r1
       va2 = eval a2 r2
-  checkEqualInferT s c va1 va2
+  void $ checkEqualInferT s c va1 va2
   let fx = freshVar x1 (varsCont c)
       vfx = Var fx
       c' = consCVar c fx va1
@@ -154,6 +153,8 @@ checkEqualWithT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2
 checkEqualWithT s c v1 v2 _ = do
   void $ checkEqualInferT s c v1 v2
 
+-- | check that a declaration/definition is valid
+checkDecl :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
 checkDecl s c (Dec x a) = do
   checkWithT s c a U
   return $ consCVar c x a
@@ -165,7 +166,7 @@ checkDecl s c (Def x a e) = do
   return $ CConsDef c x a e
 
 -- | parse and type check a file
-parseCheckFile :: EnvStrategy s => s -> String -> Either String (Context, Cont)
+parseCheckFile :: LockStrategy s => s -> String -> Either String (Context, Cont)
 parseCheckFile s text = case pContext (myLexer text) of
   Left parseError -> Left (unlines (map errorMsg ["failed to parse the file", parseError]))
   Right cx ->
@@ -174,7 +175,7 @@ parseCheckFile s text = case pContext (myLexer text) of
       Right ax -> Right (cx, ax)
 
 -- | type check an expression under given context and locking strategy
-convertCheckExpr :: EnvStrategy s => s -> Context -> Cont -> CExp -> Either String Exp
+convertCheckExpr :: LockStrategy s => s -> Context -> Cont -> CExp -> Either String Exp
 convertCheckExpr s cc ac ce =
   let m = toMap cc in
   case runG (absExp ce) m of
@@ -184,7 +185,7 @@ convertCheckExpr s cc ac ce =
                   Right _  -> Right e
 
 -- | type check an declaration/definition under given context and locking strategy
-convertCheckDecl :: EnvStrategy s => s -> Context -> Cont -> CDecl -> Either String Decl
+convertCheckDecl :: LockStrategy s => s -> Context -> Cont -> CDecl -> Either String Decl
 convertCheckDecl s cc ac cd =
   let m = toMap cc in
   case runG (absDecl cd) m of
@@ -200,7 +201,7 @@ toMapD :: CDecl -> Map.Map String Id
 toMapD (CDec x _)   = Map.singleton (idStr x) x
 toMapD (CDef x _ _) = Map.singleton (idStr x) x
 
-runTypeCheckCtx :: EnvStrategy s => s -> Context -> Either [String] Cont
+runTypeCheckCtx :: LockStrategy s => s -> Context -> Either [String] Cont
 runTypeCheckCtx s ctx@(Ctx _) =
   case runG (absCtx ctx) Map.empty of
     Left err -> Left $ explain err
