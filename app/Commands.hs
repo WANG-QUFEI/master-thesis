@@ -29,6 +29,8 @@ import           TypeChecker
 import           Control.Monad
 import           Control.Monad.Except
 import           Data.List.Split
+import           Data.Maybe
+-- import           Debug.Trace
 
 -- | data type for the commands
 data Cmd = Help
@@ -248,7 +250,7 @@ minimumConsts c s =
   case locate c s of
     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
     Just (c', d) ->
-      case runG (trialAndUnfold L.LockAll c' d) CNil of
+      case runG (trialAndUnfold [] L.LockAll c' d) CNil of
         Left err ->
           let errmsg = explain err
           in Left (unlines (map errorMsg errmsg))
@@ -266,33 +268,36 @@ locate c s = case c of
     then Just (c', Def x a e)
     else locate c' s
 
-trialAndUnfold :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM [String]
-trialAndUnfold ls c d = do
+trialAndUnfold :: LockStrategy s => [String] -> s -> Cont -> Decl -> TypeCheckM [String]
+trialAndUnfold ss ls c d = do
   void $ checkDecl ls c d
   return $ getConstsUnLocked ls c
   `catchError` h
   where
     h :: TypeCheckError -> TypeCheckM [String]
     h err = case err of
-              TypeNotMatch _ v  -> tryNextConst err v
-              CannotInferType e -> tryNextConst err e
-              NotFunctionClos v -> tryNextConst err v
+              TypeNotMatch _ v     -> tryNextConst err (v, U)
+              CannotInferType e    -> tryNextConst err (e, U)
+              NotFunctionClos v    -> tryNextConst err (v, U)
+              NotConvertible v1 v2 -> tryNextConst err (v1, v2)
               _ -> throwError $ ExtendedWithCtx err ["Unexpected exception in trialAndUnfold"]
 
-    tryNextConst :: TypeCheckError -> Exp -> TypeCheckM [String]
-    tryNextConst err e =
-      case nextConst e of
-        Nothing -> throwError $ ExtendedWithCtx err ["No constants referred in value: ", show e]
-        Just x ->
-          let uls = getConstsUnLocked ls c
-          in if x `elem` uls
-             then throwError $ ExtendedWithCtx err ["Already unlocked variable: " ++ x]
-             else let ls' = removeLock ls [x]
-                  in trialAndUnfold ls' c d
-    nextConst :: Exp -> Maybe String
-    nextConst (Var x) = Just x
-    nextConst (App e1 e2) =
-      case nextConst e1 of
+    tryNextConst :: TypeCheckError -> (Exp, Exp) -> TypeCheckM [String]
+    tryNextConst err (e1, e2) =
+      let mx1 = constExp e1
+          mx2 = constExp e2
+          xs  = catMaybes [mx1, mx2]
+          xs' = filter (`notElem` ss) xs
+      in case xs' of
+           [] -> throwError $ ExtendedWithCtx err ["No further unfoldable constants could be found"]
+           x:_ -> let ls' = removeLock ls [x]
+                      ss' = x : ss
+                  in trialAndUnfold ss' ls' c d
+
+    constExp :: Exp -> Maybe String
+    constExp (Var x) = Just x
+    constExp (App e1 e2) =
+      case constExp e1 of
         Just x  -> Just x
-        Nothing -> nextConst e2
-    nextConst _ = Nothing
+        Nothing -> constExp e2
+    constExp _ = Nothing

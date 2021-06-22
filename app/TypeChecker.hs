@@ -129,26 +129,26 @@ checkEqualInferT _ _ v v' = throwError $ NotConvertible v v'
 
 -- | check that two values are equal under a given type
 checkEqualWithT  :: LockStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
-checkEqualWithT s c v1 v2 (Clos (Abs (Dec z a) b) r) = do
+checkEqualWithT s c v1 v2 (Clos (Abs (Dec x a) b) r) = do
   let va = eval a r
-      fz = freshVar z (varsCont c)
-      vfz = Var fz
-      r1 = consEVar r z vfz
-      vb = eval b r1
-      env = getEnv s c
-      v1' = eval (App v1 vfz) env
-      v2' = eval (App v2 vfz) env
-      c1 = consCVar c fz va
-  checkEqualWithT s c1 v1' v2' vb
+      x' = freshVar x (varsCont c)
+      var = Var x'
+      c' = consCVar c x' va
+      r' = consEVar r x var
+      vb = eval b r'
+      rc = getEnv s c
+      m = eval (App v1 var) rc
+      n = eval (App v2 var) rc
+  checkEqualWithT s c' m n vb
 checkEqualWithT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
   let va1 = eval a1 r1
       va2 = eval a2 r2
   void $ checkEqualInferT s c va1 va2
-  let fx = freshVar x1 (varsCont c)
-      vfx = Var fx
-      c' = consCVar c fx va1
-      v1 = eval b1 (consEVar r1 x1 vfx)
-      v2 = eval b2 (consEVar r2 x2 vfx)
+  let x' = freshVar x1 (varsCont c)
+      var = Var x'
+      c' = consCVar c x' va1
+      v1 = eval b1 (consEVar r1 x1 var)
+      v2 = eval b2 (consEVar r2 x2 var)
   void $ checkEqualInferT s c' v1 v2
 checkEqualWithT s c v1 v2 _ = do
   void $ checkEqualInferT s c v1 v2

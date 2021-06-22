@@ -69,16 +69,6 @@ handleInput str =
             Right HeadReduct            -> handleHeadRed
             Right (FindMinimumConsts v) -> handleFindMiniConsts v
 
-handleHeadRed :: InputT (StateT ReplState IO) ()
-handleHeadRed = do
-  ac <- lift . gets $ context
-  m  <- lift . gets $ bindMap
-  let Just e = Map.lookup "it" m
-      e' = headRed ac e
-  outputStrLn . U.ushow $ e'
-  let m' = Map.insert "it" e' m
-  lift . modify $ \s -> s {bindMap = m'}
-
 stop :: InputT (StateT ReplState IO) ()
 stop = lift $ modify (\s -> s {continue = False})
 
@@ -214,7 +204,7 @@ handleCheck (Const var) = do
   ls <- lift . gets $ lockStrategy
   ac <- lift . gets $ context
   case checkConstant ls ac var of
-    Left errmsg -> outputStrLn errmsg
+    Left errmsg -> outputStr errmsg
     Right _     -> outputStrLn "okay~"
 
 handleTypeOf :: Either String CExp -> InputT (StateT ReplState IO) ()
@@ -235,6 +225,16 @@ handleTypeOf (Right cexp) = do
     Right e  ->
       let te = typeOf ac e
       in outputStrLn (U.ushow te)
+
+handleHeadRed :: InputT (StateT ReplState IO) ()
+handleHeadRed = do
+  ac <- lift . gets $ context
+  m  <- lift . gets $ bindMap
+  let Just e = Map.lookup "it" m
+      e' = headRed ac e
+  outputStrLn . U.ushow $ e'
+  let m' = Map.insert "it" e' m
+  lift . modify $ \s -> s {bindMap = m'}
 
 handleUnfold :: Either String CExp -> InputT (StateT ReplState IO) ()
 handleUnfold (Left name) = do
@@ -259,7 +259,7 @@ handleUnfold (Right cexp) = do
 showChangeOfLock :: L.SimpleLock -> InputT (StateT ReplState IO) ()
 showChangeOfLock lockNew = do
   lockNow <- lift . gets $ lockStrategy
-  outputStrLn "Change of lock strategy"
+  outputStrLn "Change lock strategy"
   outputStrLn $ "  from: " ++ U.ushow lockNow
   outputStrLn $ "  to: " ++ U.ushow lockNew
 
