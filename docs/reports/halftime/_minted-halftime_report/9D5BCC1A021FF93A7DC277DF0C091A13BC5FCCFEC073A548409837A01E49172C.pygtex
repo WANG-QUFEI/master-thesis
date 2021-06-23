@@ -1,0 +1,11 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{c}{\PYGZpc{} Generate x\PYGZhy{} and y\PYGZhy{}nodes}
+\PYG{n}{x}\PYG{p}{=}\PYG{n+nb}{linspace}\PYG{p}{(}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{);} \PYG{n}{y}\PYG{p}{=}\PYG{n+nb}{linspace}\PYG{p}{(}\PYG{l+m+mi}{0}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{);}
+
+\PYG{c}{\PYGZpc{} Calculate z=f(x,y)}
+\PYG{k}{for} \PYG{n+nb}{i}\PYG{p}{=}\PYG{l+m+mi}{1}\PYG{p}{:}\PYG{n+nb}{length}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}
+ \PYG{n}{for} \PYG{l+s}{j=1:length(y)}
+  \PYG{n}{z}\PYG{p}{(}\PYG{n+nb}{i}\PYG{p}{,}\PYG{n+nb}{j}\PYG{p}{)=}\PYG{n}{x}\PYG{p}{(}\PYG{n+nb}{i}\PYG{p}{)}\PYG{o}{+}\PYG{l+m+mi}{2}\PYG{o}{*}\PYG{n}{y}\PYG{p}{(}\PYG{n+nb}{j}\PYG{p}{);}
+ \PYG{n}{end}
+\PYG{l+s}{end}
+\end{Verbatim}
