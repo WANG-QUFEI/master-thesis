@@ -116,10 +116,9 @@ checkEqualInferT s c (App m1 n1) (App m2 n2) = do
   case v of
     Clos (Abs (Dec x a) b) r -> do
       let va = eval a r
-          env = getEnv s c
-          nv  = eval n1 env
       checkEqualWithT s c n1 n2 va
-      let r' = consEVar r x nv
+      let nv = eval n1 (getEnv s c)
+          r' = consEVar r x nv
       return $ eval b r'
     _ -> throwError $ NotFunctionClos v
 checkEqualInferT s c v1@Clos {} v2@Clos {} = do

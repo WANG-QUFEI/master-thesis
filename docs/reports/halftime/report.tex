@@ -1,0 +1,212 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{parskip}
+\setlength{\parskip}{10pt}
+\usepackage{array}
+\usepackage{amsthm}
+
+\theoremstyle{remark}
+\newtheorem{example}{Example}
+
+
+\begin{document}
+\title{Halftime Report}
+\author{Qufei Wang}
+\maketitle
+
+\tableofcontents
+
+\clearpage
+
+\section{Report Structure}
+This report will be structured into three parts: First, a brief summary of the current progress of the project, including what has been done, any deviation from the planning report and what remains to be done; Second, the major part of the report, is a draft of the final report. And the third, adjustment on the time planning for the remaining of the project.
+
+\section{Project Progress}
+\subsection{What Has Been Done}
+An implementation of our target dependently typed language, a simplified version of Mini-TT \cite{coquand2009simple}, has been done in Haskell. The program presents itself as a command line REPL (read-evaluate-print-loop) tool where a source file of the target language could be loaded and type checked. For the ease of use, we also provide various other commands including those used to experiment with the locking/unlocking mechanism. The first part of the thesis project is to study an extension of lambda calculus with definitions, where constants could be locked/unlocked in the process of evaluation (or reduction). For this part, we could say that we have completed almost all of its work.
+
+\subsection{Deviation From the Time Plan}
+This halftime report comes about half month later than what has been scheduled in the planning report. The reasons for the delay are more of psychological than technical. One reason relevant with the project itself is that, I was too obsessed with the idea of getting a bigger picture of how the project might fit into the spectrum of the knowledge of functional programming or logic, rather than getting down to the practical work. Nonetheless, I'm still confident that the remaining work could be finished within the planned time frame, with the shift of my mindset. For this, I would like to thank Thierry for his patience and support.
+
+\subsection{Remaining Work}
+The second part of this thesis project is to add a module mechanism with the notion of \emph{segment}. Such a mechanism could be seen as an extension to our target language and the idea of `segment` comes from the system AUTOMATH \cite{de1994survey}, which is conceived and developed by N.G. de Bruijn. The whole picture of AUTOMATH may not be easy to grasp in a short time, but as the example given below shows, we may still be to borrow the idea of `segment` and incorporate it into our language without a fully understanding of the system.
+\begin{example}[The Notion of `segment`]
+  The idea of \emph{segment} is to add a new form of declaration $x = ds\; \textbf{Seg}$, where $x$ is the name of the `segment` or `modules with parameters` and $ds$ a list of declaration (`Seg` is a keyword reserved by the language). Here is an example:
+  \[ s = [ A : *,\; id : A \to A = [x : A]\; x ]\; \textbf{Seg} \]
+  This is a module which contains one declaration and one definition. The declaration \( A : * \) ($*$ here is the type of all small types, for a detailed description of the syntax, please refer to TODO-REF) acts as a parameter whereas the definition with name $id$ represents the identity function.
+
+  With this segment declaration, if we can form another type \( A0 : * \), we can then write the expression \( (s \; A0) \; . \; id \), which has type $A0 \to A0$ and value $([x : A]\; x) (A = A0)$ (the value here is a closure).
+\end{example}
+
+With this example taken in mind, we see what still lacks are extensions to the syntax and type checking rules for our language to accommodate this \emph{module} concept. 
+
+\section{Draft of the Final Report}
+\subsection{Abstract}
+In this paper, we present a dependently typed language which could be seen as a simplified version of Mini-TT \cite{coquand2009simple}. The main difference between our language and Mini-TT are threefold: First, the syntax of our language is much simpler than that of Mini-TT. Particularly, we use the same syntax for both dependent product ($\Pi x:A.B(x)$) and $\lambda$ abstraction ($\lambda x . M$); Second, we add a locking/unlocking mechanism into our type checking algorithm, from which we find a way to calculate the minimum set of constants that need to be unlocked, such that a new constant with certain definition or declaration could be type checked valid; Third, as an extension to Mini-TT, we build a module system based on the notion of \emph{segments} borrowed from the system AUTOMATH \cite{de1994survey}. The disadvantage of having a limited subset of syntax is its reduced capability in expressiveness (e.g., one can not build data types in our language, which could be expressed as \textbf{Labeled Sum} in Mini-TT). However, starting out with a simple syntax allows us to focus on the study of a definition mechanism in dependent type theory, which is the main aim of this thesis project. 
+
+\subsection{Introduction}
+\subsubsection{Some Background About Dependent Types}
+Dependent type theory has lent much of its power to the proof-assistant systems like Coq \cite{huet1997coq}, Lean \cite{de2015lean}, and functional programming languages like Agda \cite{norell2008dependently} and Idris \cite{brady2013idris}, and contributed much to their success. Essentially, \emph{dependent types} are types that depend on \textbf{values} of other types. As a simple example, consider the type that represents vectors of length $n$ comprising of elements of type $A$, which can be expressed as a dependent type $vec\; A\; n$. Readers may easily recall that in imperative languages such as c or java, there are array types which depend on the type of their elements, but no types that depend on values of some other type. More formally, suppose we have defined a function which to an arbitrary object $x$ of type $A$ assigns a type $B(x)$, then the Cartesian product $(\Pi x \in A)B(x)$ is a type, namely the type of functions which take an arbitrary object $x$ of type $A$ into an object of type $B(x)$.
+
+The advantage of having a strong type system built into a programming language is that well typed programs exclude a large portion of run-time errors than those without or with weak type systems. Just as the famous saying puts it “well-type programs cannot ‘go wrong’” [16]. It is in this sense that we say languages equipped with a dependently typed system are guaranteed with the highest level of correctness and precision, which makes them a natural option in building proof-assistant systems.
+
+\subsubsection{Issues with Dependently Typed Systems}
+The downside of introducing a dependent type system lies in its difficulties of implementation, one of which is checking the \textbf{convertibility} of terms. More precisely, in any typed system, it is crucial for the type checker to decide whether a type denoted by a term $A$ is equal with another type denoted by a term $B$. In a simple type system where no type polymorphism or dependent type is used, this is done by simply checking the syntactic identity of the symbols of the types. For example, in Java, a primitive type \emph{int} equals only to itself, nothing more, since types in Java are not computable \footnote{Technically speaking, the type of an object in Java can be retrieved by means of the \emph{reflections} and presented in the form of another object, thus subject to computation. But it is not computable on the syntactic level, like being passed as arguments to functions.}, there's no way for other terms in the language be reduced to the term \emph{int}. In a dependent type system, however, the situation is more complex since a type may contain any value as its component, deciding the equality of types entails doing reduction on values, which requires much more computation.
+
+One common approach to deciding the equality of terms in dependent type theory, whenever the property of confluence holds, is \textit{normalization by evaluation} (NbE) \cite{berger1998normalization}, which reduces terms to the canonical representations for comparison. This method, however, does not scale to large theories for various reasons, among which:
+\begin{itemize}
+\item Producing the normal form may require more reduction steps than necessary. For example, in proving $(1 + 1) ^ {10} = 2 ^{(5 + 5)}$, it is easier if we can prove $1 + 1 == 2$ and $5 + 5 == 10$ instead of having to reduce both sides to 1024 using the definition of exponentiation.
+\item As the number of definitions using previous definitions grows, the size of terms by expanding definitions can grow very quickly. For example, the inductive definition $x_n := (x_{n-1}, x_{n-1})$ makes the normal form of $x_{n}$ grow exponentially.
+\end{itemize}
+In this project, we shall focus on the first issue, that is, how to perform as few constant expansions as possible when deciding the convertibility of two terms in a dependently typed system. 
+
+\subsubsection{Aim of the Project}
+The first aim of the project is to study and explore a \emph{definition} mechanism, where definitions of constants could be expanded as few times as possible during the type checking process. What this means is that, we want to build a locking/unlocking operation on the constants, such that we can indicate certain constants to be locked (or unlocked) during the type checking process. We claim that a good definition mechanism can help improve the performance of a proof assistant that is based on dependent type theory. Without a rigorous proof for this claim, we will take the example above later to illustrate the idea behind the claim. Before that, we should at fist make it clearer for the reader this question: \emph{What is exactly the problem with a definition mechanism and why is it important}?
+
+A \emph{definition} in the context of dependent type theory is a declaration of the form $x : A$ or $x : A = B$, where the former means that a constant $x$ is a value of type $A$ and latter a constant $x$ is a value of type $A$, defined in the form of $B$. The problem with a definition mechanism is not about how constants should be declared, but how they should be \textbf{evaluated}. \emph{Evaluation}, or \emph{reduction}, in dependent type theory has its concept rooted in \emph{$\lambda$-calculus} \cite{barendregt1984lambda} (with some variance we will come about later in section TODO). There, a term in the form $(\lambda x . M) \;N$ can be \textbf{evaluated} (or \textbf{reduced}) to the form $M[x := N]$, meaning that replacing the appearance of $x$ in $M$ with $N$ everywhere \footnote{There is a problem of the capture of free variables which we will not elaborate here. Curious and uninformed readers are encouraged to read detailed articles about \emph{$\lambda$-calculus.}}. In a dependent type theory, however, different evaluation strategies have huge difference in terms of the efficiency of a type checker. 
+
+For example, if we define the exponentiation function on natural numbers as
+\begin{align*}
+  exp &: Nat \to Nat \to Nat \\
+  exp &\;\; \_\;\; 0 = 1 \\
+  exp &\;\; n \;\; m = n * (exp \;\; n \;\; (m - 1))
+\end{align*}
+where $Nat$ represents type of natural number and $*$ is the definition of multiplication. Then when we try to prove the convertibility of two terms: $(1 + 1)^{10}$ and $2 ^ {(5+5)}$, instead of unfolding the definition of $exp$ multiple times, we keep the constant $exp$ \textbf{locked} and only reduce both sides to the term ($exp \;\; 2 \;\; 10$). Then by showing that they can be reduced to a common term, we prove their equality with much less computation. Here, a \textbf{locked} constant has only its type information exposed, such that a type checker can still use it to do as much type checking work as possible, whereas its definition is erased so that we can not do any function application on it.
+
+The second aim of the project is to add a module system with the locking/unlocking capability. The module system is based on the idea `segments` borrowed from the work of AUTOMATH \cite{de1994survey}. (this paragraph could be expanded later when we have finished the module system)
+
+\subsubsection{Limitations}
+The limitations of our work come into three aspects: expressiveness, scope and meta-theory.
+\begin{enumerate}
+\item \textbf{Expressiveness:} We try to keep the syntax of our language as simple as possible in order to focus on the study of a proper definition mechanism, which inevitably affects the expressiveness of our language. As has been mentioned, there is no syntax for self-defined data types, nor for the pattern matches on case analysis functions. Besides, because we track the names of constants in a linear manner as an approach to the name collision problem, any constant declaration can not collide with that of top levels, there is no \emph{variable shadowing} in our language.
+\item \textbf{Scope:} For the study of definition, we do not try to establish a universal mechanism that is applicable in different systems. What we present here is only \textbf{one} alternative for doing type checking in the presence of definitions in a dependent type theory. Thus, the result of our work applies only in a very limited scope.
+\item \textbf{Meta-theory:} We do not conclude any meta-theory behind our system. Since our system shares much of its idea regardless of syntax or type checking rules with that of Mini-TT, there should be some correspondence between the meta-theories of these two systems, such as the property of decidability of type checking as has been claimed in Mini-TT. But we will not perform an analysis on this due to the limit of time and my knowledge. 
+\end{enumerate}
+
+\subsection{Theory}
+\subsubsection{Syntax of the Language}
+A summary of the syntax can be found in table \ref{tab:syntax}.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l l}
+    expression & $M,N,A,B$ & ::= & $U \mid x \mid M \, N \mid [D] M $ \\
+    declaration & $D$ & ::= & $x : A \mid x : A = B$ \\
+    syntactic sugar & $A \to B$ & ::= & $[\_ : A] B $
+  \end{tabular}
+  \caption{Language Syntax}
+  \label{tab:syntax}
+\end{table}
+
+Expressions are defined as follows
+\begin{itemize}
+\item $U$ : the type of a universe of small types. 
+\item $x, y, z$ : variables(constants) with names, as opposed to the variables denoted by \emph{De Bruijn} indices.
+\item $M N$ : function application.
+\item $[D] M$ : abstraction.
+\end{itemize}
+A declaration has either of the two forms
+\begin{itemize}
+\item $x : A$ : variable $x$ has type $A$.
+\item $x : A = B$ : variable $x$ has type $A$ and is defined as $B$.
+\end{itemize}
+
+An abstraction of the form $[x : A]\,B$ can be used to represent
+\begin{itemize}
+\item $\Pi\,x:A\,.\,B$ : dependent product, meaning that for any element $x \in A$, there's a type $B$ which may depend on $x$.
+\item $\lambda\,(x : A) \to B$ : $\lambda$ abstraction.
+\item A non-dependent function $A \to B$ is desugared as $[\_ : A]\, B$, with the dummy variable `$\_$' meaning that there's no variable introduced.
+\end{itemize}
+
+An abstraction of the form $[x : A = B] M$ can be used to represent
+\begin{itemize}
+\item A \textit{let} clause: \textit{let $x : A = B$ in $M$}, or
+\item A \textit{where} clause: \textit{$M$ where $x : A = B$}.
+\end{itemize}
+
+\subsubsection{Operational Semantics}
+\emph{Expressions} can be evaluated to \emph{values}, which are defined in table \ref{tab:values}. Note that in the implementation, we did not differentiate in syntax between \emph{expressions} and \emph{values}, since the syntax is simple and we can use the same syntax for both.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l l}
+    values & $u, v$ & ::= & $U \mid x \mid u\, v \mid \langle e, \rho \rangle $
+  \end{tabular}
+  \caption{Values of the Language}
+  \label{tab:values}
+\end{table}
+
+Another two important concepts that are used widely in expression evaluation and type checking are environment ($Env,\,\rho$) and context ($Cont,\,\Gamma$). An environment relates variables to their values and a context relates variables to their types. An environment is defined as
+\[
+\rho ::= ()\,|\,\rho,\,x = v\,|\,\rho,\,x : A = B
+\]
+and a context is defined as
+\[
+  \Gamma ::= ()\,|\,\Gamma,\,x : v\,|\,\Gamma,\,x : A = B
+\]
+
+We give the semantics of the language by equations of the form $[\![M]\!]\rho = v$, meaning that the expression $M$ evaluates to the value $v$ in the environment $\rho$.
+\begin{align*}
+  [\![U]\!]\rho \quad &= \quad U \\
+  [\![x]\!]\rho \quad &= \quad \rho(x) \\
+  [\![M_1 \; M_2]\!]\rho \quad &= \quad \text{appVal} \; ([\![M_1]\!]\rho) \; ([\![M_2]\!]\rho) \\
+  [\![[x : A]\,B]\!]\rho \quad &= \quad \langle[x : A]\,B, \rho\rangle \\
+  [\![[x : A = B]\,M]\!]\rho \quad &= \quad [\![M]\!](\rho, x : A = B) \\
+  [\![\langle e, \rho'\rangle]\!]\rho \quad &= \quad \langle e, \rho' \rangle \\
+\end{align*}
+The operation \textit{appVal} is defined as follows:
+\begin{align*}
+  \text{appVal} \quad \langle [x : A]\,B, \rho \rangle \quad v \quad &= \quad [\![B]\!](\rho, x = v) \\
+  \intertext{otherwise}
+  \text{appVal} \quad v1 \quad v2 \quad &= \quad v1\;v2
+\end{align*}
+We also define lookup operations on environment and context
+\begin{itemize}
+\item $\rho(x)$: find the value of variable $x$ in the environment $\rho$.
+\item $\Gamma(x)$: find the type of variable $x$ in the context $\Gamma$.
+\end{itemize}
+with
+\begin{align*}
+  ()(x) \quad &= \quad x \\
+  (\rho, x = v)(x) \quad &= \quad v \\
+  (\rho, y = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
+  (\rho, x : \_ = e)(x) \quad &= \quad [\![e]\!]\rho \\
+  (\rho, y : \_ = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
+\end{align*}
+and
+\begin{align*}
+  ()(x) \quad &= \quad \text{error: variable not declared} \\
+  (\Gamma, x : v)(x) \quad &= \quad v \\
+  (\Gamma, y = v)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+  (\Gamma, x : A = \_)(x) \quad &= \quad [\![A]\!](\text{envCont}\;\Gamma) \\
+  (\Gamma, y : A = B)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+\end{align*}
+Note that the type check algorithm ensures that each variable is bound with a type, such that the error condition never happens.
+
+We can get an environment out of a context by using the function \textit{envCont}
+\begin{align*}
+  \text{envCont} \quad () \quad &= \quad () \\
+  \text{envCont} \quad (\Gamma, x : v) \quad &= \quad \text{envCont}\;\Gamma \\
+  \text{envCont} \quad (\Gamma, x : A = B) \quad &= \quad (\text{envCont}\;\Gamma,\, x : A = B)
+\end{align*}
+
+\subsubsection{Typing Rules}
+The type checking algorithm is implemented as a state monad in Haskell, where the state is a context($\Gamma$) starting from an empty context and getting updated by checking each declaration from the source file.
+
+There are four forms of judgments:
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l}
+    checkD & $\Gamma \vdash D \Rightarrow \Gamma'$ & $D$ is a correct declaration and extends $\Gamma$ to $\Gamma'$ \\
+    checkT & $\Gamma \vdash M \Leftarrow t $ & $M$ is a correct expression given type $t$ \\
+    checkI & $\Gamma \vdash M \Rightarrow t$ & $M$ is a correct expression and its type is inferred to be $t$ \\
+    checkC & $\Gamma \vdash u,\; v$ & the two terms $u, v$ are convertible
+  \end{tabular}
+\end{table}
+
+
+\bibliographystyle{ieeetr}
+\bibliography{report.bib}
+
+\end{document}
