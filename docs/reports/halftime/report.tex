@@ -7,11 +7,21 @@
 \setlength{\parskip}{10pt}
 \usepackage{array}
 \usepackage{amsthm}
+\usepackage{multirow}
+\usepackage{ebproof}
+\usepackage{stmaryrd}
+\usepackage{titlesec}
 
 \theoremstyle{remark}
 \newtheorem{example}{Example}[section]
 \newtheorem{principle}{Principle}
 
+\setcounter{secnumdepth}{4}
+
+\titleformat{\paragraph}
+{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
 
 \begin{document}
 \title{Halftime Report}
@@ -46,15 +56,16 @@ With this example taken in mind, we see what still lacks are extensions to the s
 
 \section{Draft of the Final Report}
 \subsection{Abstract}
-In this paper, we present a dependently typed language which could be seen as a simplified version of Mini-TT \cite{coquand2009simple}. The main difference between our language and Mini-TT are threefold: First, the syntax of our language is much simpler than that of Mini-TT. Particularly, we use the same syntax for both dependent product ($\Pi x:A.B(x)$) and $\lambda$ abstraction ($\lambda x . M$); Second, we add a locking/unlocking mechanism into our type checking algorithm, from which we find a way to calculate the minimum set of constants that need to be unlocked, such that a constant declaration could be type checked; Third, as an extension to Mini-TT, we build a module system based on the notion of \emph{segments} borrowed from the system AUTOMATH \cite{de1994survey}. The disadvantage of having a limited subset of syntax is its reduced capability in expressiveness (e.g., one can not build data types in our language, which could be expressed as \emph{Labeled Sum} in Mini-TT). However, starting out with a simple syntax allows us to focus on the study of a definition mechanism in dependent type theory, which is the main aim of this thesis project. 
+In this paper, we present a dependently typed language which could be seen as a simplified version of Mini-TT \cite{coquand2009simple}. The main difference between our language and Mini-TT are threefold: First, the syntax of our language is much simpler than that of Mini-TT. Particularly, we use the same syntax for both dependent product ($\Pi x:A.B(x)$) and $\lambda$ abstraction ($\lambda x . M$); Second, we add a locking/unlocking mechanism into our type checking algorithm, from which we find a way to calculate the minimum set of constants that need to be unlocked, such that a constant declaration could be type checked; Third, as an extension to Mini-TT, we build a module system based on the notion of \emph{segments} borrowed from the system AUTOMATH \cite{de1994survey}. The disadvantage of having a limited subset of syntax is its reduced capability in expressiveness (e.g., one can not build data types in our language, which could be expressed as \emph{Labeled Sum} in Mini-TT). However, starting out with a simple syntax allows us to focus on the study of a definition mechanism in dependent type theory, which is the main aim of this thesis project. The outcome of the project is a REPL program implemented in Haskell that provide various commands to load the type check a source file of our language and to experiment with the locking/unlocking mechanism.
 
 \subsection{Terminology}
 In order to make clear of the potential ambiguity or unnecessary confusion over the words we choose to use in the following sections, we list here the key terminology and explain their meaning.
 \begin{itemize}
   \item \textbf{Declaration:} A \emph{declaration} has either the form $x : A$ or $x : A = B$. The latter is also referred, rather frequently, as a \emph{definition}. Sometimes when we want to make a distinction between these two forms, we use \emph{declaration} specifically to indicate a term of the former form. 
-  \item \textbf{Definition:} A \emph{definition} is a term of the form $x : A = B$, meaning that $x$ is an element of type $A$, defined as $B$.
+  \item \textbf{Definition:} A \emph{definition} is a term of the form $x : A = B$, meaning that $x$ is an element of type $A$, defined as $B$. Sometimes, when we talk about the components under a specific definition, we also use the word `definition` to refer to part $B$, as it is what $x$ represents.  
   \item \textbf{Constant:} A \emph{constant} is the name or identifier used in a declaration, like the $x$ in $x : A$, $x : A = B$.
   \item \textbf{Variable:} A synonym for the word \emph{constant}. More often, the word \emph{variable} is used to refer the variable bound in a $\lambda$-abstraction, like the variable $x$ in $\lambda x . A$. In most cases, these two words are interchangeable. 
+  \item \textbf{Value:} When talk about the components of a definition $x : A = B$, we also use the word `value` to refer to $B$, meaning the value of $x$. Strictly speaking, however, this is inaccurate, since in the syntax of our language, `value` is used to refer to the result of evaluation on an expression. Hence the value of $x$ should be the evaluated form of $B$, not $B$ itself. 
 \end{itemize}
 
 \subsection{Introduction}
@@ -77,6 +88,8 @@ In this project, we shall focus on the first issue, that is, how to perform as f
 The first aim of the project is to study and explore a \emph{definition} mechanism, where definitions of constants could be expanded as few times as possible during the type checking process. What this means is that, we want to build a locking/unlocking operation on the constants, such that we can indicate certain constants to be locked (or unlocked) during the type checking process. We claim that a good definition mechanism can help improve the performance of a proof assistant that is based on dependent type theory. Without providing a rigorous proof, we will take the example above later to illustrate the idea behind the claim. Before that, we should at fist make it clearer for the reader this question: \emph{What exactly is the problem of definition and why is it important}?
 
 A \emph{definition} in the context of dependent type theory is a term of the form $x : A = B$, meaning that $x$ is a constant of type $A$, defined as $B$. The problem with definition is not about how a constant should be introduced, but how it should be \textbf{evaluated}. \emph{Evaluation}, or \emph{reduction}, in dependent type theory has its concept rooted in \emph{$\lambda$-calculus} \cite{barendregt1984lambda} (with some variance we will come about later in section TODO). There, a term in the form $(\lambda x . M) \;N$ can be \textbf{evaluated} (or \textbf{reduced}) to the form $M[x := N]$, meaning that replacing the appearance of $x$ in $M$ with $N$ everywhere \footnote{There is a problem of the capture of free variables which we will not elaborate here. Curious and uninformed readers are encouraged to read detailed articles about \emph{$\lambda$-calculus.}}. In dependent type theory, however, different evaluation strategies can have huge difference when it comes to the efficiency of evaluation. 
+
+
 
 For example, if we define the exponentiation function on natural numbers as
 \begin{align*}
@@ -153,10 +166,10 @@ We present the subtleties by giving the following examples.
 \end{example}
 
 \subsubsection{Definitions in a Dependent Type Theory}
-The examples listed above provide us with insights about the common pitfalls one should avoid when implementing definitions in a dependent type theory. From there, we derived the following principles that guide us through the pitfalls in our own implementation:
+The examples listed above provide us with insights about the common pitfalls one should avoid when implementing definitions in dependent type theory. From there, we derived the following principles that guide us through the pitfalls in our own implementation:
 
 \begin{principle} \label{p1}
-  For definitions in the form $x : A = B$, treat the type $A$ and the definition $B$ of a constant $x$ separately.
+  For definitions in the form $x : A = B$, treat the type $A$ and the definition $B$ separately.
 \end{principle}
 
 \begin{principle} \label{p2}
@@ -164,127 +177,330 @@ The examples listed above provide us with insights about the common pitfalls one
 \end{principle}
 
 \begin{principle} \label{p3}
-  Rename variable during convertibility checking or `read back` a value to its normal form. 
+  Rename variable whenever necessary. 
 \end{principle}
 
+Principle \ref{p1} relates to example \ref{exa1}. As has been suggested in the example, the definition of a constant can be important to ensure the type safety of a term. In other cases, however, the definition is not needed, like in this term $\lambda (f : A \to B) (a : A) \; . \; f \; a$: $f$ could be any function from $A$ to $B$, $a$ could be any value of $A$, regardless of their specific values, we know for sure that term $f \; a$ has type $B$. These facts indicate that type and definition take unequal roles in dependent type theory: one can declare a constant without a definition, but cannot declare a constant without a type.
+
+In our implementation, we use two constructs, $\rho$ and $\Gamma$, to keep track of the variables with their definitions (or values) and the variables with their types. We call $\rho$ the \emph{environment} and $\Gamma$ the \emph{context}. Essentially, they are list like structures that can be extended with declarations or a single expression acting as a value or type. We use $\rho$ to get the definition (or value) of a constant, $\Gamma$ for the type. We have an operation to convert a context $\Gamma$ to an environment $\rho$, but not the other way around. All the major operations (type checking, head reduction, etc.) exposed by our Haskell program are conducted under a top level context.
+
+Principle \ref{p2} comes as a simple strategy to avoid the pitfall revealed by example \ref{exa2}. During the type checking process, each declaration, including the declarations from $\lambda$-abstraction, is checked with the top level context (actually, we have only one level context) to ensure no naming clash occurs. Using \emph{De Bruijn index} is another, maybe better, from the point of view of the user, way to avoid the name clashing issue. However, having to maintain the relationship between names and indices may unnecessarily complicate our implementation and obscure the main aim of the project. 
+
+Principle \ref{p3} is less specific by using the phrase `whenever necessary`. Indeed, it is hard to generalize a rule that works in all conditions. The practice of variable renaming is dependent on the syntax of the language and its evaluation strategy. In our implementation, we rename variables in two situations: one is convertibility checking and the other is reading back a term to the normal form. We will give more details when we introduce these two operations in section TODO. 
+
+Finally, we have a fourth, pillar principle in support of our locking/unlocking mechanism:
+
+\begin{principle} \label{p4}
+  Deferred evaluation.
+\end{principle}
+
+In order to reduce unnecessary reduction steps during the type checking process by exploiting a locking mechanism on variables, we need to defer the computation on function application as late as possible. We do this by
+\begin{enumerate}
+\item Using \emph{closure} to carry functions around. A closure is a function (or $\lambda$ abstraction) extended with an environment.
+\item Applying $\beta$-reduction on multi-variable functions in an incremental manner.
+\item Only unlocking a constant when the type checking procedure can not proceed. We use this technique to find the minimum set of unlocked constants to type check that a declaration is valid.
+\end{enumerate}
+
+With all the 4 principles introduced, we are ready to describe in detail the syntax and semantics of our language, and the operations we build upon it.
+
 \subsubsection{Syntax of the Language}
-A summary of the syntax can be found in table \ref{tab:syntax}.
+A program of our language consists of a list of declarations. A declaration has either the form $x : A$ or $x : A = B$, where $A, B$ are expressions. A summary of the syntax can be found in table \ref{tab:syntax}.
+
 \begin{table}[h]
   \centering
   \begin{tabular}{l l l l}
-    expression & $M,N,A,B$ & ::= & $U \mid x \mid M \, N \mid [D] M $ \\
-    declaration & $D$ & ::= & $x : A \mid x : A = B$ \\
-    syntactic sugar & $A \to B$ & ::= & $[\_ : A] B $
+    expression & $M,N,A,B$ & ::= & $U \mid x \mid M \; N \mid [D] M $ \\
+    declaration & $D$ & ::= & $x : A \mid x : A = B$
   \end{tabular}
   \caption{Language Syntax}
   \label{tab:syntax}
 \end{table}
 
-Expressions are defined as follows
+The meaning of each expression constructor is explained as follows:
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c l l}
+    $U$ & : & The type of small types. $U$ is also an element of itself \\
+    $x$ & : & Variables with names, e.g. `x' , `y', `z' \\
+    $M \; N$ & : & Function application \\
+    $[D] M$ & : & Depending on the form of $D$, it has different meanings \\ 
+  \end{tabular}
+  \caption{Expressions}
+\end{table}
+
+An expression in the form $[x : A]\; M$ can be used to represent
 \begin{itemize}
-\item $U$ : the type of a universe of small types. 
-\item $x, y, z$ : variables(constants) with names, as opposed to the variables denoted by \emph{De Bruijn} indices.
-\item $M N$ : function application.
-\item $[D] M$ : abstraction.
-\end{itemize}
-A declaration has either of the two forms
-\begin{itemize}
-\item $x : A$ : variable $x$ has type $A$.
-\item $x : A = B$ : variable $x$ has type $A$ and is defined as $B$.
+\item \textbf{Dependent Product:} $\Pi \,x : A \, . \, M$ - the type of functions which take an arbitrary object $x$ of type $A$ into an object of type $M$ ($M$ may dependent on $x$).
+\item \textbf{$\lambda$-abstraction:} $\lambda\,(x : A) \; . \; M$ - a function that takes a variable $x$ of type $A$ into an expression $M$.
 \end{itemize}
 
-An abstraction of the form $[x : A]\,B$ can be used to represent
-\begin{itemize}
-\item $\Pi\,x:A\,.\,B$ : dependent product, meaning that for any element $x \in A$, there's a type $B$ which may depend on $x$.
-\item $\lambda\,(x : A) \to B$ : $\lambda$ abstraction.
-\item A non-dependent function $A \to B$ is desugared as $[\_ : A]\, B$, with the dummy variable `$\_$' meaning that there's no variable introduced.
-\end{itemize}
+When $x$ does not appear in $M$ ($M$ does not depend on $x$), this expression is the same as $[\_ : A] M$. When used as a type of function, it means non-dependent functions of type $A \to M$, which we provide as a syntax sugar; When used as a $\lambda$ abstraction, it means the constant function $\lambda (\_:A) \; . \; M$ that always return $M$ regardless of the input argument.
 
-An abstraction of the form $[x : A = B] M$ can be used to represent
+An expression in the form $[x : A = B] M$ can be used to represent
 \begin{itemize}
 \item A \textit{let} clause: \textit{let $x : A = B$ in $M$}, or
 \item A \textit{where} clause: \textit{$M$ where $x : A = B$}.
 \end{itemize}
 
+The syntax of our language is a substantial subset of that of Mini-TT. Moreover, we use the same syntax for both dependent product and $\lambda$ abstraction as an effort to maintain simplicity. This practice causes ambiguity only when an expression in the form $[x : A] M$ is viewed in isolation: it can be seen both as a dependent type and a function abstraction. In the former case, $M$ represents a type, whereas in the latter case a value. Our type checking rules ensure that it could be used in a consistent way.
+
 \subsubsection{Operational Semantics}
-\emph{Expressions} can be evaluated to \emph{values}, which are defined in table \ref{tab:values}. Note that in the implementation, we did not differentiate in syntax between \emph{expressions} and \emph{values}, since the syntax is simple and we can use the same syntax for both.
+\emph{Expressions} are evaluated to \emph{values} under a given environment. The definitions for \emph{values} are given in table \ref{tab:values}.
+
 \begin{table}[h]
   \centering
   \begin{tabular}{l l l l}
-    values & $u, v$ & ::= & $U \mid x \mid u\, v \mid \langle e, \rho \rangle $
+    values & $u, v$ & ::= & $U \mid x \mid u\, v \mid \langle [x : A] M, \rho \rangle $
   \end{tabular}
   \caption{Values of the Language}
   \label{tab:values}
 \end{table}
 
-Another two important concepts that are used widely in expression evaluation and type checking are environment ($Env,\,\rho$) and context ($Cont,\,\Gamma$). An environment relates variables to their values and a context relates variables to their types. An environment is defined as
+The meaning of each value constructor is explained as follows:
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c l p{8cm}}
+    $U$ & : & The value of \emph{Universe}, $U$ \\
+    $x$ & : & \emph{Neutral value}, the value of a undefined variable \\
+    $u \; v$ & : & Value of an application when the first value $u$ cannot be reduced to a closure \\
+    $\langle [x : A] M, \rho \rangle$ & : & Closure, a function extended with an environment\\ 
+  \end{tabular}
+  \caption{Definition of Value}
+\end{table}
+
+Note that in our Haskell implementation, we use the same syntax for both expressions and values, since our syntax is simple.
+
+An environment is defined as
 \[
 \rho ::= ()\,|\,\rho,\,x = v\,|\,\rho,\,x : A = B
 \]
-and a context is defined as
-\[
-  \Gamma ::= ()\,|\,\Gamma,\,x : v\,|\,\Gamma,\,x : A = B
-\]
+meaning that an environment is either empty, or another environment extended with a variable paired with its value, or extended with a definition. 
 
-We give the semantics of the language by equations of the form $[\![M]\!]\rho = v$, meaning that the expression $M$ evaluates to the value $v$ in the environment $\rho$.
-\begin{align*}
-  [\![U]\!]\rho \quad &= \quad U \\
-  [\![x]\!]\rho \quad &= \quad \rho(x) \\
-  [\![M_1 \; M_2]\!]\rho \quad &= \quad \text{appVal} \; ([\![M_1]\!]\rho) \; ([\![M_2]\!]\rho) \\
-  [\![[x : A]\,B]\!]\rho \quad &= \quad \langle[x : A]\,B, \rho\rangle \\
-  [\![[x : A = B]\,M]\!]\rho \quad &= \quad [\![M]\!](\rho, x : A = B) \\
-  [\![\langle e, \rho'\rangle]\!]\rho \quad &= \quad \langle e, \rho' \rangle \\
-\end{align*}
-The operation \textit{appVal} is defined as follows:
+We give the semantics of our language by equations of the form $[\![M]\!]\rho = v$, meaning that the expression $M$ evaluates to the value $v$ in the environment $\rho$.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l}
+    $[\![U]\!]\rho$ & = & U \\
+    $[\![x]\!]\rho$ & = & $\rho(x)$ \\
+    $[\![M_1 \; M_2]\!]\rho$ & = & $\text{appVal} \; ([\![M_1]\!]\rho) \; ([\![M_2]\!]\rho)$ \\
+    $[\![[x : A]\,B]\!]\rho$ & = & $\langle[x : A]\,B, \rho\rangle$ \\
+    $[\![[x : A = B]\,M]\!]\rho$ & = & $[\![M]\!](\rho, x : A = B)$ 
+  \end{tabular}
+  \caption{Semantics of Language}
+\end{table}
+
+The operation \emph{appVal} is defined as:
 \begin{align*}
   \text{appVal} \quad \langle [x : A]\,B, \rho \rangle \quad v \quad &= \quad [\![B]\!](\rho, x = v) \\
-  \intertext{otherwise}
   \text{appVal} \quad v1 \quad v2 \quad &= \quad v1\;v2
 \end{align*}
-We also define lookup operations on environment and context
-\begin{itemize}
-\item $\rho(x)$: find the value of variable $x$ in the environment $\rho$.
-\item $\Gamma(x)$: find the type of variable $x$ in the context $\Gamma$.
-\end{itemize}
-with
+
+The lookup operation to find the value of a variable $x$ in $\rho$ is defined as
 \begin{align*}
   ()(x) \quad &= \quad x \\
   (\rho, x = v)(x) \quad &= \quad v \\
   (\rho, y = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
-  (\rho, x : \_ = e)(x) \quad &= \quad [\![e]\!]\rho \\
-  (\rho, y : \_ = v)(x) \quad &= \quad \rho(x)(y \neq x) \\
+  (\rho, x : A = B)(x) \quad &= \quad [\![B]\!]\rho \\
+  (\rho, y : A = B)(x) \quad &= \quad \rho(x)(y \neq x) \\
 \end{align*}
-and
+Note that the type information in a definition is always discarded.
+
+\subsubsection{Type Checking Rules}
+\paragraph{Type Checking Context}
+The type checking procedure is performed under a context $\Gamma$,
+\[
+  \Gamma ::= ()\,|\,\Gamma,\,x : A\,|\,\Gamma,\,x : A = B
+\]
+meaning that a type checking context is either empty, or another context extended with a variable paired with its type, or extended with a definition.
+
+The lookup operation to find the type of a variable $x$ in $\Gamma$ is defined as
 \begin{align*}
-  ()(x) \quad &= \quad \text{error: variable not declared} \\
-  (\Gamma, x : v)(x) \quad &= \quad v \\
-  (\Gamma, y = v)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
-  (\Gamma, x : A = \_)(x) \quad &= \quad [\![A]\!](\text{envCont}\;\Gamma) \\
-  (\Gamma, y : A = B)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+  ()(x) \quad &= \quad \text{error} \\
+  (\Gamma, x : A)(x) \quad &= \quad A \\
+  (\Gamma, y : A)(x) \quad &= \quad \Gamma(x)(y \neq x) \\
+  (\Gamma, x : A = B)(x) \quad &= \quad A \\
+  (\Gamma, y : A = B)(x) \quad &= \quad \Gamma(x)(y \neq x) 
 \end{align*}
-Note that the type check algorithm ensures that each variable is bound with a type, such that the error condition never happens.
+Note that the value information in a definition is always discarded.
 
-We can get an environment out of a context by using the function \textit{envCont}
+In our implementation, when parsing the source file into the abstract syntax of our language, we make sure that each variable must be declared with a type and the name of the variable has never been used. By doing so, we ensure that the error condition in the lookup operation will never occur during the type checking process and each variable's name is unique.
+
+We also defined a function named \emph{varsCont} that returns all the names of a context, and a function $freshVar$ that given a name of a variable and a list of used names, return a new name.
 \begin{align*}
-  \text{envCont} \quad () \quad &= \quad () \\
-  \text{envCont} \quad (\Gamma, x : v) \quad &= \quad \text{envCont}\;\Gamma \\
-  \text{envCont} \quad (\Gamma, x : A = B) \quad &= \quad (\text{envCont}\;\Gamma,\, x : A = B)
+  varsCont &:: \Gamma \to [String] \\
+  freshVar &:: String \to [String] \to String
 \end{align*}
+These two functions are used in the type checking process whenever a variable renaming is needed. We omit the implementation here since they are trivial and do not affect readers' understanding of the following text. 
 
-\subsubsection{Typing Rules}
-The type checking algorithm is implemented as a state monad in Haskell, where the state is a context($\Gamma$) starting from an empty context and getting updated by checking each declaration from the source file.
+The locking/unlocking mechanism in our system is implemented via a concept called \emph{lock strategy} plus a function called \emph{getEnv}. For a lock strategy $s$, we have 
+\[ getEnv :: s \to \Gamma \to \rho \]
 
-There are four forms of judgments:
-\begin{table}[h]
+The idea is that when we lock a constant, we need to remove its definition from the environment $\rho$, such that when evaluated, this constant becomes a neutral value, cutting off all the possibility for further evaluation; When we unlock the constant later, we need to restore its definition to $\rho$. During the type checking process, the context $\Gamma$ is always extended with all the definitions declared so far. By the function \emph{getEnv} and a lock strategy $s$ that represents our intention about the locking/unlocking of each variable, we can conveniently get the environment $\rho$ that effectuates our locking strategy.
+
+In our current implementation, we have 4 lock strategies: \emph{LockAll, LockNone, LockList vs, UnLockList vs}, where $vs$ is a list of variables. We give their definitions in a Haskell like pseudo-code in table \ref{tab:lock}.
+\begin{table}[h] 
   \centering
-  \begin{tabular}{l l l}
-    checkD & $\Gamma \vdash D \Rightarrow \Gamma'$ & $D$ is a correct declaration and extends $\Gamma$ to $\Gamma'$ \\
-    checkT & $\Gamma \vdash M \Leftarrow t $ & $M$ is a correct expression given type $t$ \\
-    checkI & $\Gamma \vdash M \Rightarrow t$ & $M$ is a correct expression and its type is inferred to be $t$ \\
-    checkC & $\Gamma \vdash u,\; v$ & the two terms $u, v$ are convertible
+  \begin{tabular}{l l l l p{5cm}}
+    getEnv & LockAll  & $\Gamma$ & = & () \\
+    \\ 
+    getEnv & LockNone & () & = & ()        \\
+    getEnv & LockNone & $\Gamma, x : A$ & = & getEnv LockNone $\Gamma$ \\ 
+    getEnv & LockNone & $\Gamma, x : A = B$ & = & let $\rho$ = getEnv LockNone $\Gamma$ \newline in $(\rho, x : A = B)$ \\
+    \\ 
+    getEnv & (LockList vs) & () & = & ()        \\
+    getEnv & l@(LockList vs) & $\Gamma, x : A$ & = & getEnv l $\Gamma$ \\ 
+    getEnv & l@(LockList vs) & $\Gamma, x : A = B$ & = & let $\rho$ = getEnv l $\Gamma$ \newline in if $x \in vs$ then $\rho$ \newline else $(\rho, x : A = B)$\\
+    \\
+    getEnv & (UnLockList vs) & () & = & ()        \\
+    getEnv & l@(UnLockList vs) & $\Gamma, x : A$ & = & getEnv l $\Gamma$ \\ 
+    getEnv & l@(UnLockList vs) & $\Gamma, x : A = B$ & = & let $\rho$ = getEnv l $\Gamma$ \newline in if $x \notin vs$ then $\rho$ \newline else $(\rho, x : A = B)$
   \end{tabular}
+  \caption{Lock Strategies}
+  \label{tab:lock}
 \end{table}
 
+During the type checking process, after a declaration is type checked, it is added to the underling type checking context. We denote the extension of a context by a declaration as
+\begin{align*}
+  \Gamma \vdash x : A &\Rightarrow \Gamma', \text{\emph{where}} \; \Gamma' = (\Gamma, x : A) \\
+  \Gamma \vdash x : A = B &\Rightarrow \Gamma', \text{\emph{where}} \; \Gamma' = (\Gamma, x : A = B)
+\end{align*}
+
+Table \ref{tab:judgments} lists out the judgments used during the type checking process. There, $\Gamma$ is the type checking context and $s$ is the lock strategy. Note that the name collision check is performed before the type checking process, so we do not need to check the name uniqueness of each constant in the declarations anymore.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l p{2 in}}
+    checkDecl   & $\Gamma,s \vdash D \Rightarrow \Gamma'$ & $D$ is a correct declaration and extends $\Gamma$ to $\Gamma'$ \\
+    checkInferT & $\Gamma,s \vdash M \Rightarrow t$ & $M$ is a correct expression and its type is inferred to be $t$ \\
+    checkWithT  & $\Gamma,s \vdash M \Leftarrow t$ & $M$ is a correct expression given type $t$ \\
+    checkEqualInferT & $\Gamma,s \vdash u \equiv v \Rightarrow t $ & $u, v$ are convertible and their type is inferred to be $t$ \\ 
+    checkEqualWithT  & $\Gamma,s \vdash u \equiv v \Leftarrow t  $ & $u, v$ are convertible given type $t$ 
+  \end{tabular}
+  \caption{Type Checking Judgments}
+  \label{tab:judgments}
+\end{table}
+
+\paragraph{checkDecl}
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash A \Leftarrow U}
+    \infer1{\Gamma,s \vdash x : A \Rightarrow \Gamma_1}
+  \end{prooftree} \quad \quad
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash A \Leftarrow U}
+    \hypo{\Gamma,s \vdash B \Leftarrow t}
+    \infer2{\Gamma,s \vdash x : A = B \Rightarrow \Gamma_1}
+  \end{prooftree}\left(\begin{array}{l} t = \llbracket A \rrbracket \rho, \, \rho = \text{getEnv} \; s \; \Gamma\end{array}\right)
+\]
+
+For a declaration $x : A$, we check that $A$ is valid and has type $U$; For a definition $x : A = B$, we check further that $B$ has type $t$, which is the value of $A$ evaluated in the environment $\rho$, which we get first by applying function \emph{getEnv} to $s$ and $\Gamma$. 
+
+\paragraph{checkInferT}
+\[
+  \begin{prooftree}
+    \infer0{\Gamma,s \vdash U \Rightarrow U}
+  \end{prooftree} \quad \quad
+  \begin{prooftree}
+    \infer0{\Gamma,s \vdash x \Rightarrow t}
+  \end{prooftree}\left(\begin{array}{l} t = \llbracket A \rrbracket \rho, \, A = \Gamma(x) \\ \rho = \text{getEnv} \; s \; \Gamma\end{array}\right)
+\]
+
+$U$ has itself as its type; A variable $x$ is well typed and its type is inferred to be the value evaluated from its bound type in $\Gamma$.
+
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash M \Rightarrow \langle [x : A] B, \rho \rangle}
+    \hypo{\Gamma,s \vdash N \Leftarrow va}
+    \infer2{\Gamma,s \vdash M \; N \Rightarrow v^*}
+  \end{prooftree}\left(\begin{array}
+                         {l} v^* = \llbracket B \rrbracket \rho_2, \, \rho_2 = (\rho, x = vn) \\
+                         vn = \llbracket N \rrbracket \rho_1, \, \rho_1 = \text{getEnv} \; s \; \Gamma \\
+                         va = \llbracket A \rrbracket \rho
+                       \end{array}\right)
+\]
+
+For application $M \; N$, we do as follows
+\begin{enumerate}
+  \item Check $M$ is a function, namely, it has type in form $\langle [x : A] B, \rho \rangle$
+  \item Check $N$ has the right type to be applied to $M$
+  \item Return the value of $B$ evaluated in $\rho$ extended by binding $x$ to the value of $N$ 
+\end{enumerate}
+
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash x : A = B \Rightarrow \Gamma_1}
+    \hypo{\Gamma_1,s \vdash M \Rightarrow t}
+    \infer2{\Gamma,s \vdash [x : A = B]\,M \Rightarrow t}
+  \end{prooftree}
+\]
+
+For expression in the form of a \emph{let} clause $[x : A = B] \, M$, we first check the definition is correct, then infer the type of $M$ under the new context.
+
+\paragraph{checkWithT}
+\[
+  \begin{prooftree}
+    \infer0{\Gamma,s \vdash U \Leftarrow U}
+  \end{prooftree} \quad \quad
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash v \equiv vt \Rightarrow v^*}
+    \infer1{\Gamma,s \vdash x \Leftarrow v}
+  \end{prooftree}\left(\begin{array}{l}
+                         vt = \llbracket A \rrbracket \rho, \, A = \Gamma(x), \, \rho = \text{getEnv} \; s \; \Gamma
+                       \end{array}\right)
+\]
+
+As we have already known, $U$ has $U$ as its type; To check a variable $x$ has type $v$, we first get the value $vt$ of the type bound to $x$ from the context $\Gamma$, then we check that $vt$ and $v$ are convertible.
+
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash M \; N \Rightarrow v'}
+    \hypo{\Gamma,s \vdash v' \equiv v \Rightarrow v^*}
+    \infer2{\Gamma,s \vdash M \; N \Leftarrow v}
+  \end{prooftree} \quad
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash A \Leftarrow U}
+    \hypo{\Gamma_1,s \vdash B \Leftarrow U}
+    \infer2{\Gamma,s \vdash [x : A] \, B \Leftarrow U}
+  \end{prooftree}(\Gamma_1 = (\Gamma, x : A))
+\]
+
+To check an application $M \; N$ has type $v$, we first infer its type $v'$, then we check that $v$ and $v'$ are convertible; To check an abstraction $[x : A] \, B$ has type $U$, we first check that $A$ has type $U$, then we check that $B$ also has type $U$ in an extended context.
+
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash A \Leftarrow U}
+    \hypo{\Gamma,s \vdash va \equiv va' \Rightarrow t}
+    \hypo{\Gamma_1,s \vdash B \Leftarrow vb'}
+    \infer3{\Gamma,s \vdash [x : A] \, B \Leftarrow \langle [x' : A'] \, B', \rho \rangle}
+  \end{prooftree}\left(\begin{array}{l}
+                         va = \llbracket A \rrbracket \rho_1, \, \rho_1 = \text{getEnv} \; s \; \Gamma \\
+                         va' = \llbracket A' \rrbracket \rho \\
+                         \rho_2 = (\rho, x' = x), \, vb' = \llbracket B' \rrbracket \rho_2 \\
+                         \Gamma_1 = (\Gamma, x : A)
+                       \end{array}\right)
+\]
+
+To check an abstraction $[x : A] \, B$ has a closure $\langle [x' : A'] \, B', \rho \rangle$ as its type, we do as follows
+\begin{enumerate}
+\item Check $A$ has type $U$
+\item Evaluate the value of $A$ in the environment extracted from the current context, denote it as $va$
+\item Evaluate the value of $A'$ in the environment from the closure, denote it as $va'$
+\item Check that $va$ and $va'$ are convertible
+\item Extend $\rho$ to $\rho_2$, with $x'$ bound to $x$
+\item Evaluate $B'$ in $\rho_2$, denote the value as $vb'$
+\item Extend $\Gamma$ to $\Gamma_1$, with $x$ having type $A$
+\item Check $B$ has type $vb'$ in the new context $\Gamma_1$
+\end{enumerate}
+This is the rule used to check an abstraction has another abstraction as its type.
+
+\[
+  \begin{prooftree}
+    \hypo{\Gamma,s \vdash x : A = B \Rightarrow \Gamma_1}
+    \hypo{\Gamma_1,s \vdash M \Leftarrow t}
+    \infer2{\Gamma,s \vdash [x : A = B]\,M \Leftarrow t}
+  \end{prooftree}
+\]
+
+For an expression in the form of a \emph{let} clause $[x : A = B] \, M$, we first check the definition is correct, then check that $M$ has the required type under the new context.
 
 \bibliographystyle{ieeetr}
 \bibliography{report.bib}

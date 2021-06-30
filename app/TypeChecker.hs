@@ -95,7 +95,7 @@ checkWithT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
       ve' = eval e' r'
       c' = consCVar c x a
   checkWithT s c' e ve'
-checkWithT s c (Abs d@Def {}  e) v = do
+checkWithT s c (Abs d@Def {} e) v = do
   c' <- checkDecl s c d
   checkWithT s c' e v
 checkWithT _ _ e v = throwError $ TypeNotMatch e v
