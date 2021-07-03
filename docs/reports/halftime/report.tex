@@ -13,7 +13,7 @@
 \usepackage{titlesec}
 
 \theoremstyle{remark}
-\newtheorem{example}{Example}[section]
+\newtheorem{example}{Example}
 \newtheorem{principle}{Principle}
 
 \setcounter{secnumdepth}{4}
@@ -33,51 +33,64 @@
 \clearpage
 
 \section{Report Structure}
-This report will be structured into three parts: First, a brief summary of the current progress of the project, including what has been done, any deviation from the planning report and what remains to be done; Second, the major part of the report, is a draft of the final report. And the third, adjustment on the time planning for the remaining of the project.
+This report will be structured into three parts: First, a brief summary of the current progress of the project, including what has been done, what remains to be done and the deviation from the planning report; Second, the time plan for the remaining work; Third, a draft of the final report. 
 
 \section{Project Progress}
 \subsection{What Has Been Done}
-A Haskell implementation of our target language, a command line REPL (read-evaluate-print-loop) tool where a source file of the target language could be loaded and type checked. For the ease of use, we also provide various other commands including those used to experiment with the locking/unlocking mechanism. The first part of the thesis project is to study an extension of lambda calculus with definitions, where constants could be locked/unlocked in the process of evaluation (or reduction). For this part, we could say that we have completed almost all of its work.
-
-\subsection{Deviation From the Time Plan}
-This halftime report comes about half month later than what has been scheduled in the planning report. The reasons for the delay are more of psychological than technical. One reason relevant with the project itself is that, I was too obsessed with the idea of getting a bigger picture of how the project might fit into the spectrum of the knowledge of functional programming or logic, rather than getting down to the practical work. Nonetheless, I'm still confident that the remaining work could be finished within the planned time frame, with the shift of my mindset. For this, I would like to thank Thierry for his patience and support.
+We have worked out a Haskell program that includes a type checker and a REPL interface which provides commands to experiment with the locking/unlocking mechanism. The first part of the project is to study how to present \emph{definitions} in a dependent type theory, where constants could be locked/unlocked during evaluation. For this part, we have finished most of the work.
 
 \subsection{Remaining Work}
-The second part of this thesis project is to add a module mechanism with the notion of \emph{segment}. Such a mechanism could be seen as an extension to our target language and the idea of `segment` comes from the system AUTOMATH \cite{de1994survey}, which is conceived and developed by N.G. de Bruijn. The whole picture of AUTOMATH may not be easy to grasp in a short time, but as the example given below shows, we may still be to borrow the idea of `segment` and incorporate it into our language without a fully understanding of the system.
-\begin{example}[The notion of `segment`]
-  The idea of \emph{segment} is to add a new form of declaration $x = ds\; \textbf{Seg}$, where $x$ is the name of the `segment` or `modules with parameters` and $ds$ a list of declaration (`Seg` is a keyword reserved by the language). Here is an example:
-  \[ s = [ A : *,\; id : A \to A = [x : A]\; x ]\; \textbf{Seg} \] 
-  This is a module which contains one declaration and one definition. The declaration \( A : * \) \footnote{`*' represents the universe of small types} acts as a parameter whereas the definition with name $id$ represents the identity function.
+For the first part of the project, what remains is to study more about the theoretical background of \emph{definitions} in a proof system, particularly the theory about \emph{closure} and \emph{head-reduction}. This involves some literature study and an enhancement on the text in the draft of the final report that is related with the definition mechanism.
 
-  With this segment declaration, if we can form another type \( A0 : * \), we can then write the expression \( (s \; A0) \; . \; id \), which has type $A0 \to A0$ and value $([x : A]\; x) (A = A0)$ (the value here is a closure).
+The second part of the project is to add a module mechanism with the notion of \emph{segment}. The idea of `segment' comes from the system AUTOMATH \cite{de1994survey} which is conceived and developed by N.G. de Bruijn. We illustrate the idea with the following example. 
+
+\begin{example} \label{exm:seg}
+  The idea of \emph{segment} is to have a new form of declaration: \[x = ds\; \texttt{Seg}\]
+  where $x$ is the name of the segment and $ds$ a list of declaration. The word `Seg' is designed as a language keyword and a segment can also be seen as a module with parameters.
+
+  Here is an example
+  \[ s = [ A : *,\; id : A \to A = [x : A]\; x ]\; \texttt{Seg} \] 
+  This is a module which contains a declaration and a definition. The declaration (\( A : * \footnote{`*' represents the type of small types}\)) is a parameter of the module and the definition $id$ is the identity function defined in this module.
+
+  Suppose we have another type (\( A0 : * \)), then the expression \( (s \; A0) \; . \; id \) has $A0 \to A0$ as its type and closure $([x : A]\; x) (A = A0)$ as its value. 
 \end{example}
 
-With this example taken in mind, we see what still lacks are extensions to the syntax and type checking rules for our language to accommodate this \emph{module} concept. 
+For the module mechanism, what remains is to add the syntax to the language and the corresponding type checking rules to the type checker. A theoretical description of the implementation is also needed in the final report. 
+
+\subsection{Deviation From The Time Plan}
+This halftime report comes more than 20 days later than what has been scheduled in the planning report. The reasons for the delay are more of psychological than technical, of which the details will not be brought up here. Nonetheless, I have gradually come to comprehend more and appreciate the ideas behind this project, thus getting more motivated. Besides, the draft of the final report included here also provides the context and framework for the remaining work. These two facts together make me feel confident that the project could still be delivered as scheduled. For this, I would like to thank Thierry for his patience and support.
+
+\subsection{Time Plan for The Remaining Work}
+The planning report states that from June 28 to July 25, the coding work of the AUTOMATH system should be done. Before that, there should be 20 days time spent on reading and understanding the literature about AUTOMATH. Now it is no longer realistic to spend ample amount of time on reading before the coding work. Instead, as the example \ref{exm:seg} above suggests, a complete and deep understanding of AUTOMATH may not be a prerequisite to the implementation of the module mechanism.
+
+So the time plan for the rest of the work remains the same: I will first try to have an implementation of the module system done before July 25. Then come back to the literature study and try to improve and complete the final report by the end of August.
 
 \section{Draft of the Final Report}
 \subsection{Abstract}
-In this paper, we present a dependently typed language which could be seen as a simplified version of Mini-TT \cite{coquand2009simple}. The main difference between our language and Mini-TT are threefold: First, the syntax of our language is much simpler than that of Mini-TT. Particularly, we use the same syntax for both dependent product ($\Pi x:A.B(x)$) and $\lambda$ abstraction ($\lambda x . M$); Second, we add a locking/unlocking mechanism into our type checking algorithm, from which we find a way to calculate the minimum set of constants that need to be unlocked, such that a constant declaration could be type checked; Third, as an extension to Mini-TT, we build a module system based on the notion of \emph{segments} borrowed from the system AUTOMATH \cite{de1994survey}. The disadvantage of having a limited subset of syntax is its reduced capability in expressiveness (e.g., one can not build data types in our language, which could be expressed as \emph{Labeled Sum} in Mini-TT). However, starting out with a simple syntax allows us to focus on the study of a definition mechanism in dependent type theory, which is the main aim of this thesis project. The outcome of the project is a REPL program implemented in Haskell that provide various commands to load the type check a source file of our language and to experiment with the locking/unlocking mechanism.
+In this paper, we present a dependently typed language which is a simplified version of Mini-TT \cite{coquand2009simple}. The differences between our language and Mini-TT are threefold: First, the syntax of our language is much simpler than that of Mini-TT. Particularly, we use the same syntax for both dependent product ($\Pi x:A.B(x)$) and $\lambda$ abstraction ($\lambda x . M$); Second, we build a locking/unlocking mechanism to the system and find a method to calculate the minimum set of constants to be unlocked, such that a new constant could be type check valid; Third, as an extension to Mini-TT, we build a module system based on the notion of \emph{segments} borrowed from the system AUTOMATH \cite{de1994survey}.
+
+The disadvantage of having a substantial limited syntax lies in its reduced capability in expressiveness: there is no syntax to create data types in our language, which could be expressed as \emph{Labeled Sum} in Mini-TT. However, starting out with a minimalized syntax allows us to focus more on the study of the definition mechanism, which is the main aim of this project. The outcome of the project is a REPL\footnote{REPL stands for a read-evaluate-print-loop program} implemented in Haskell, with commands to type check a source file and experiment with the locking/unlocking mechanism.
 
 \subsection{Terminology}
-In order to make clear of the potential ambiguity or unnecessary confusion over the words we choose to use in the following sections, we list here the key terminology and explain their meaning.
+In order to make clear of the potential ambiguity or unnecessary confusion over the words we choose to use in the following sections, we list below the terminology we use together with their meaning:
 \begin{itemize}
-  \item \textbf{Declaration:} A \emph{declaration} has either the form $x : A$ or $x : A = B$. The latter is also referred, rather frequently, as a \emph{definition}. Sometimes when we want to make a distinction between these two forms, we use \emph{declaration} specifically to indicate a term of the former form. 
-  \item \textbf{Definition:} A \emph{definition} is a term of the form $x : A = B$, meaning that $x$ is an element of type $A$, defined as $B$. Sometimes, when we talk about the components under a specific definition, we also use the word `definition` to refer to part $B$, as it is what $x$ represents.  
+  \item \textbf{Declaration:} A \emph{declaration} has either the form $x : A$ or $x : A = B$. The latter is also referred, rather frequently, as a \emph{definition}. Sometimes when we want to make a distinction between these two forms, we also use the word `declaration' specifically to indicate a term of the former form. 
+  \item \textbf{Definition:} A \emph{definition} is a term of the form $x : A = B$, meaning that $x$ is an element of type $A$, defined as $B$. Sometimes, when we talk about the components of a specific definition, we also use the word `definition' specifically to indicate the part of term $B$.  
   \item \textbf{Constant:} A \emph{constant} is the name or identifier used in a declaration, like the $x$ in $x : A$, $x : A = B$.
-  \item \textbf{Variable:} A synonym for the word \emph{constant}. More often, the word \emph{variable} is used to refer the variable bound in a $\lambda$-abstraction, like the variable $x$ in $\lambda x . A$. In most cases, these two words are interchangeable. 
-  \item \textbf{Value:} When talk about the components of a definition $x : A = B$, we also use the word `value` to refer to $B$, meaning the value of $x$. Strictly speaking, however, this is inaccurate, since in the syntax of our language, `value` is used to refer to the result of evaluation on an expression. Hence the value of $x$ should be the evaluated form of $B$, not $B$ itself. 
+  \item \textbf{Variable:} A synonym of the word \emph{constant}. More often, the word `variable' is used to refer to the variable bound in a $\lambda$-abstraction, like the variable $x$ in $\lambda x . A$. In most cases, these two words are interchangeable. 
+  \item \textbf{Value:} When talk about the components of a definition $x : A = B$, we also use the word `value' to indicate the part of term $B$, meaning the value of $x$. However, in the semantics of our language, a `value' is more precisely used to refer to the result of expression evaluation.
 \end{itemize}
 
 \subsection{Introduction}
 \subsubsection{Some Background About Dependent Types}
-Dependent type theory has lent much of its power to the proof-assistant systems like Coq \cite{huet1997coq}, Lean \cite{de2015lean}, and functional programming languages like Agda \cite{norell2008dependently} and Idris \cite{brady2013idris}, and contributed much to their success. Essentially, \emph{dependent types} are types that depend on \textbf{values} of other types. As a simple example, consider the type that represents vectors of length $n$ comprising of elements of type $A$, which can be expressed as a dependent type $vec\; A\; n$. Readers may easily recall that in imperative languages such as c or java, there are array types which depend on the type of their elements, but no types that depend on values of some other type. More formally, suppose we have defined a function which to an arbitrary object $x$ of type $A$ assigns a type $B(x)$, then the Cartesian product $(\Pi x \in A)B(x)$ is a type, namely the type of functions which take an arbitrary object $x$ of type $A$ into an object of type $B(x)$.
+Dependent type theory has lent much of its power to the proof-assistant systems like Coq \cite{huet1997coq}, Lean \cite{de2015lean}, and functional programming languages like Agda \cite{norell2008dependently} and Idris \cite{brady2013idris}, and contributed much to their success. Essentially, \emph{dependent types} are types that depend on \textbf{values} of other types. As a simple example, consider the type that represents vectors of length $n$ comprising of elements of type $A$, which can be expressed as a dependent type ($\texttt{vec}\; A\; n$). Readers may easily recall that in imperative languages such as c or java, there are array types which depend on the type of their elements, but no types that depend on values of some other type. More formally, suppose we have defined a function which to an arbitrary object $x$ of type $A$ assigns a type $B(x)$, then the Cartesian product $(\Pi x \in A)B(x)$ is a type, namely the type of functions which take an arbitrary object $x$ of type $A$ into an object of type $B(x)$.
 
-The advantage of having a strong type system built into a programming language is that well typed programs exclude a large portion of run-time errors than those without or with weak type systems. Just as the famous saying puts it “well-type programs cannot ‘go wrong’” [16]. It is in this sense that we say languages equipped with a dependently typed system are guaranteed with the highest level of correctness and precision, which makes them a natural option in building proof-assistant systems.
+The advantage of having a strong typed system built into a language lies in the fact that well typed programs exclude a large portion of run-time errors than those without or with weak type systems. Just as the famous saying puts it “well-type programs cannot ‘go wrong’” [16]. It is in this sense that we say languages equipped with a dependently typed system are guaranteed with the highest level of correctness and precision, which makes them a natural option in building proof-assistant systems.
 
 \subsubsection{Issues with Dependently Typed Systems}
-The downside of introducing a dependent type system lies in its difficulties of implementation, one of which is checking the \textbf{convertibility} of terms. More precisely, in any typed system, it is crucial for the type checker to decide whether a type denoted by a term $A$ is equal with another type denoted by a term $B$. In a simple type system where no type polymorphism or dependent type is used, this is done by simply checking the syntactic identity of the symbols of the types. For example, in Java, a primitive type \emph{int} equals only to itself, nothing more, since types in Java are not computable \footnote{Technically speaking, the type of an object in Java can be retrieved by means of the \emph{reflections} and presented in the form of another object, thus subject to computation. But it is not computable on the syntactic level, like being passed as arguments to functions.}, there's no way for other terms in the language to be reduced to the term \emph{int}. In a dependent type system, however, the situation is more complex since a type may contain any value as its component, deciding the equality of types entails doing reduction on values, which requires much more computation.
+The downside of introducing a dependent type system lies in its difficulties of implementation, one of which is checking the \textbf{convertibility} of terms. More precisely, in any typed system, it is crucial for the type checker to decide whether a type denoted by a term $A$ is equal with another type denoted by a term $B$. In a simple typed system, this is done by simply checking the syntactic identity of the symbols of the types. For example, in Java, a primitive type \emph{int} equals only to itself, nothing more. This is because types in Java are not computable \footnote{Technically speaking, the type of an object in Java can be retrieved by the Java \emph{reflection} mechanism and presented in the form of another object, thus subject to computation. Here, we stress on the fact that a type as a term is not computable on the syntactic level, e.g. being passed as an argument to a function.}: there's no way for other terms in the language to be reduced to the term \emph{int}. In a dependently typed system, however, the situation is more complex since a type may contain any value as its component, deciding the convertibility of types entails doing reduction on values, which requires much more computation.
 
-One common approach to deciding the equality of terms in dependent type theory, whenever the property of confluence holds, is \textit{normalization by evaluation} (NbE) \cite{berger1998normalization}, which reduces terms to the canonical representations for comparison. This method, however, does not scale to large theories for various reasons, among which:
+One common approach to deciding the equality of terms in dependent type theory, whenever the property of confluence holds, is \textit{normalization by evaluation} (NbE) \cite{berger1998normalization}, which reduces terms to their canonical representation for comparison. This method, however, does not scale to large theories for various reasons, among which:
 \begin{itemize}
 \item Producing the normal form may require more reduction steps than necessary. For example, in proving $(1 + 1) ^ {10} = 2 ^{(5 + 5)}$, it is easier if we can prove $1 + 1 == 2$ and $5 + 5 == 10$ instead of having to reduce both sides to 1024 using the definition of exponentiation.
 \item As the number of definitions using previous definitions grows, the size of terms by expanding definitions can grow very quickly. For example, the inductive definition $x_n := (x_{n-1}, x_{n-1})$ makes the normal form of $x_{n}$ grow exponentially.
@@ -85,7 +98,7 @@ One common approach to deciding the equality of terms in dependent type theory, 
 In this project, we shall focus on the first issue, that is, how to perform as few constant expansions as possible when deciding the convertibility of two terms in a dependently typed system. 
 
 \subsubsection{Aim of the Project}
-The first aim of the project is to study and explore a \emph{definition} mechanism, where definitions of constants could be expanded as few times as possible during the type checking process. What this means is that, we want to build a locking/unlocking operation on the constants, such that we can indicate certain constants to be locked (or unlocked) during the type checking process. We claim that a good definition mechanism can help improve the performance of a proof assistant that is based on dependent type theory. Without providing a rigorous proof, we will take the example above later to illustrate the idea behind the claim. Before that, we should at fist make it clearer for the reader this question: \emph{What exactly is the problem of definition and why is it important}?
+The first aim of the project is to study how to present \emph{definitions} properly in the dependent type theory. We hope that the definitions of constants could be expanded as few times as possible during the type checking process. We claim that a good definition mechanism can help improve the performance of a proof assistant that is based on dependent type theory. We will analyze the example above later to give a support to our claim. Before that, we shall at fist make it clear for the reader this question: What exactly is the problem of definition and why is it important?
 
 A \emph{definition} in the context of dependent type theory is a term of the form $x : A = B$, meaning that $x$ is a constant of type $A$, defined as $B$. The problem with definition is not about how a constant should be introduced, but how it should be \textbf{evaluated}. \emph{Evaluation}, or \emph{reduction}, in dependent type theory has its concept rooted in \emph{$\lambda$-calculus} \cite{barendregt1984lambda}. There, a term in the form $(\lambda x . M) \;N$ can be \textbf{evaluated} (or \textbf{reduced}) to the form $M[x := N]$, meaning that replacing the appearance of $x$ in $M$ with $N$ everywhere \footnote{There is a problem of the capture of free variables which we will not elaborate here. Curious and uninformed readers are encouraged to read detailed articles about \emph{$\lambda$-calculus.}}. In dependent type theory, however, different evaluation strategies can have huge difference when it comes to the efficiency of evaluation. 
 
@@ -640,14 +653,33 @@ To check two closures are convertible and has type $U$, we do as follows
 
 To check that in the general case, $v1$ and $v2$ are convertible given type $t$, we first check $v1$ and $v2$ are convertible and infer their type as $t'$, then we check $t$ and $t'$ are convertible.
 
-\subsubsection{Read Back Value to Expression}
+\subsubsection{Locking Mechanism}
+As has been introduced, a locking mechanism in our system is realized by setting up a \emph{lock strategy}, and use it to extract an environment from the underlying type checking context. The \emph{environment} is the place where a variable is bound to its definition and the context in which the evaluation of an expression takes place. A variable without a value bound evaluates to itself, a \emph{neutral value} about which we know nothing, which cannot be reduced to any other form, either by itself or applied with another value. We adjust the lock strategy so that the definition of a constant could be erased or restored from the environment. In this way, we effectively lock/unlock a variable.
 
-\subsubsection{Head Reduction on Expression}
+This is a locking mechanism applied to definitions where a constant acts as a \emph{locking unit}. The lock status of variables are independent of each other, meaning that lock/unlock a constant does not entail other constants in its definition being locked/unlocked. An alternative is to apply locking on expressions, where we define a metric of computation such that during evaluation, only certain `steps' of reductions are performed. We did not build this alternative in our system but will elaborate the idea more in section \ref{sec:head-red} when we talk about \emph{head reduction}.
+
+One application of our locking mechanism is to find the minimum set of constants unfolded in a well typed context, such that another constant could be checked valid. The method is straightforward and largely based on the type checking inference rules. We only sketch the idea here, readers who are curious can refer to appendix \ref{apdix:source-code} for a complete view of the Haskell source code.
+
+Say we have a text file which contains a valid program (a list of declarations) of our language. We want to find the minimum set of constants unfolded for another constant, say $x$, to be valid. We do as follows:
+\begin{enumerate}
+\item Load and type check the program with no variables locked. This will give us the complete type checking context $\Gamma^*$ .
+\item Find the definition of $x$ in $\Gamma*$, denote it as $D$.
+\item Denote the context consisting of all the declarations which appear before $D$ as $\Gamma$.
+\item Create a list \texttt{vs} that is used to keep track of all the variables unfolded and change the lock strategy to \texttt{UnLockList vs}. The initial value of \texttt{vs} is \texttt{[]} and the initial lock strategy is actually \texttt{LockAll}.
+\item Type check the declaration $D$. Whenever the type checking process halts because of an unmatched pattern (e.g. checking $[x : A] \, B$ with a neutral value $x$) or fails because of a violation to one of the inference rules, find the first variable locked that causes the exception, add it to \texttt{vs} and update the lock strategy.
+\item Repeat 5 until the type checking process succeed.
+\item Return the intersection of the variables in \texttt{vs} and the variables in $\Gamma$ as the result.
+\end{enumerate}
+
+Note that because the program is well typed, this algorithm is guaranteed to terminate. We take the intersection in the final step because the renaming operation introduces new variables that are not originally declared.
+
+\subsubsection{Read Back to Normal Form}
+
+\subsubsection{Head Reduction} \label{sec:head-red}
 
 \subsection{Methods}
 
 \subsection{Results}
-
 
 \subsection{Conclusion}
 
@@ -656,5 +688,9 @@ To check that in the general case, $v1$ and $v2$ are convertible given type $t$,
 
 \bibliographystyle{ieeetr}
 \bibliography{report.bib}
+
+\appendix
+\section{Appendix} 
+\subsection{Haskell Source Code} \label{apdix:source-code}
 
 \end{document}
