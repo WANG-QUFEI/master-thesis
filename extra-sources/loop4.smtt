@@ -42,6 +42,6 @@ lem3 : A
   = [p : Pow U] [h : Q p] h C ([x : U] h (delta x)) ;
 
 loop : ⊥
-   = lem2 lem3 ;
+  = lem2 lem3 ;
 
 delta2 : U -> U = [z : U] delta (delta z) ;

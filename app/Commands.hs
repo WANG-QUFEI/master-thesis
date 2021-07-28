@@ -187,9 +187,10 @@ readBack ns (Clos (Abs (Dec x a) e) r) =
       a' = readBack ns (eval a r)
       e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
   in Abs (Dec z a') e'
-readBack _ v = error ("cannot readback value: " ++ show v)
+readBack _ v = error ("invalid application of readBack on q-expression: " ++ show v)
 
 headRed :: Cont -> Exp -> Exp
+headRed _ U = U
 headRed c (Abs (Dec x a) e) =
   let va = eval a ENil
       a' = headRed c a
@@ -203,7 +204,7 @@ headRed c e = readBack (varsCont c) (headRedV c e)
 headRedV :: Cont -> Exp -> Val
 headRedV c (Var x)     = eval (defVar x c) ENil
 headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
-headRedV _ e           = eval e ENil
+headRedV _ e           = error  $ "invalid application of headRedV on expression" ++ show e
 
 defVar :: String -> Cont -> Exp
 defVar x CNil = Var x

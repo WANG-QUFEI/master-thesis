@@ -1,4 +1,4 @@
-position token Id ((letter | '⊥' | '¬') (letter | digit | '_' | '\'')*);
+position token Id (char - ["\\\n\t[]():;. "])+;
 
 entrypoints Context, CExp, CDecl;
 
@@ -13,6 +13,7 @@ CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
 
 CDec.    CDecl ::= Id ":" CExp;
 CDef.    CDecl ::= Id ":" CExp "=" CExp;
+
 
 terminator CDecl ";";
 
