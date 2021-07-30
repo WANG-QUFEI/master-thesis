@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 17909db767e192b9d735ce6b4e55687963c458afbf2be65bd4a9f414e77f01ed
+-- hash: 3f0578643f0967511abb416d6a2240d01b72157c749a0b5badf601afa455ba4b
 
 name:           siminitt
 version:        0.1.0.0
@@ -26,6 +26,7 @@ extra-source-files:
     extra-sources/loop1.smtt
     extra-sources/loop2.smtt
     extra-sources/loop4.smtt
+    extra-sources/Makefile
     extra-sources/test.sh
     extra-sources/test.smtt
     extra-sources/tmp.smtt

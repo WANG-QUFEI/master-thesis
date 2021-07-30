@@ -9,18 +9,29 @@ module Lang where
 import           Core.Abs
 
 -- | abstract syntax for expressions, extended with closure as values
-data Exp = U
-         | Var String
-         | App Exp Exp
-         | Abs Decl Exp
-         | Clos Exp Env
+data Exp = U                       -- ^ the universe of small types
+         | Var String              -- ^ variables or names of some other expressions
+         | App Exp Exp             -- ^ function application
+         | Abs String Exp Exp      -- ^ function abstraction or dependent product type
+         | Let String Exp Exp Exp  -- ^ let clause
+         | ClosFun Exp Env            -- ^ function closure
+         | ClosSeg 
          deriving (Eq)
 
--- | the syntax for 'Exp' is also used as value in this language
-type Val = Exp
+-- | the syntax for 'Exp' is also used as quasi-expression in this language
+type QExp = Exp
 
 -- | abstract syntax for declarations
-data Decl = Dec String Exp | Def String Exp Exp deriving (Eq)
+data Decl = Dec String Exp      -- ^ declaration of a variable with its type
+          | Def String Exp Exp  -- ^ definition of a variable with type and a binding expression 
+          | DSeg String Seg     -- ^ declaration of a segment
+          deriving (Eq)
+
+-- | data type used to express 'segments'
+data Seg = SegDs [Decl]         -- ^ a segment could be a list of declarations
+         | SegId String         -- ^ a segment could be assigned an identifier
+         | SegInst Seg [Exp]    -- ^ a segment could be instantiated by providing a list of expressions 
+         | SegSub Seg String    -- ^ a segment could be nested into another segment
 
 -- | environment that relates a variable to a value
 data Env = ENil
