@@ -147,26 +147,20 @@ instance Print Core.Abs.Context where
 
 instance Print Core.Abs.CExp where
   prt i = \case
-    Core.Abs.CU -> prPrec i 2 (concatD [doc (showString "*")])
-    Core.Abs.CVar id_ -> prPrec i 2 (concatD [prt 0 id_])
-    Core.Abs.CESeg cseg id_ -> prPrec i 2 (concatD [doc (showString "("), prt 0 cseg, doc (showString ")"), doc (showString "."), prt 0 id_])
-    Core.Abs.CApp cexp1 cexp2 -> prPrec i 1 (concatD [prt 1 cexp1, prt 2 cexp2])
-    Core.Abs.CArr cexp1 cexp2 -> prPrec i 0 (concatD [prt 1 cexp1, doc (showString "->"), prt 0 cexp2])
-    Core.Abs.CPi id_ cexp1 cexp2 -> prPrec i 0 (concatD [doc (showString "["), prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "]"), prt 0 cexp2])
-    Core.Abs.CWhere id_ cexp1 cexp2 cexp3 -> prPrec i 0 (concatD [doc (showString "["), prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2, doc (showString "]"), prt 0 cexp3])
+    Core.Abs.U -> prPrec i 2 (concatD [doc (showString "*")])
+    Core.Abs.Var id_ -> prPrec i 2 (concatD [prt 0 id_])
+    Core.Abs.ESeg id_1 cexps id_2 -> prPrec i 2 (concatD [doc (showString "("), prt 0 id_1, doc (showString "["), prt 0 cexps, doc (showString "]"), doc (showString ")"), doc (showString "."), prt 0 id_2])
+    Core.Abs.App cexp1 cexp2 -> prPrec i 1 (concatD [prt 1 cexp1, prt 2 cexp2])
+    Core.Abs.Arr cexp1 cexp2 -> prPrec i 0 (concatD [prt 1 cexp1, doc (showString "->"), prt 0 cexp2])
+    Core.Abs.Pi id_ cexp1 cexp2 -> prPrec i 0 (concatD [doc (showString "["), prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "]"), prt 0 cexp2])
+    Core.Abs.Where id_ cexp1 cexp2 cexp3 -> prPrec i 0 (concatD [doc (showString "["), prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2, doc (showString "]"), prt 0 cexp3])
 
 instance Print Core.Abs.CDecl where
   prt i = \case
-    Core.Abs.CDec id_ cexp -> prPrec i 0 (concatD [prt 0 id_, doc (showString ":"), prt 0 cexp])
-    Core.Abs.CDef id_ cexp1 cexp2 -> prPrec i 0 (concatD [prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2])
-    Core.Abs.CDSeg id_ cseg -> prPrec i 0 (concatD [prt 0 id_, doc (showString "="), prt 0 cseg])
-
-instance Print Core.Abs.CSeg where
-  prt i = \case
-    Core.Abs.CSegDecl cdecls -> prPrec i 0 (concatD [doc (showString "seg"), doc (showString "{"), prt 0 cdecls, doc (showString "}")])
-    Core.Abs.CSegInsti id_ cexps -> prPrec i 0 (concatD [prt 0 id_, doc (showString "["), prt 0 cexps, doc (showString "]")])
-    Core.Abs.CSegInstc cseg cexps -> prPrec i 0 (concatD [prt 0 cseg, doc (showString "["), prt 0 cexps, doc (showString "]")])
-    Core.Abs.CSegSub cseg id_ -> prPrec i 0 (concatD [prt 0 cseg, doc (showString "."), prt 0 id_])
+    Core.Abs.Dec id_ cexp -> prPrec i 0 (concatD [prt 0 id_, doc (showString ":"), prt 0 cexp])
+    Core.Abs.Def id_ cexp1 cexp2 -> prPrec i 0 (concatD [prt 0 id_, doc (showString ":"), prt 0 cexp1, doc (showString "="), prt 0 cexp2])
+    Core.Abs.DSeg id_ cdecls -> prPrec i 0 (concatD [prt 0 id_, doc (showString "="), doc (showString "seg"), doc (showString "{"), prt 0 cdecls, doc (showString "}")])
+    Core.Abs.DSegInst id_1 id_2 cexps -> prPrec i 0 (concatD [prt 0 id_1, doc (showString "="), prt 0 id_2, doc (showString "["), prt 0 cexps, doc (showString "]")])
 
 instance Print [Core.Abs.CDecl] where
   prt _ [] = concatD []

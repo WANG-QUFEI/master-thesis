@@ -17,23 +17,20 @@ data Context = Ctx [CDecl]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 data CExp
-    = CU
-    | CVar Id
-    | CESeg CSeg Id
-    | CApp CExp CExp
-    | CArr CExp CExp
-    | CPi Id CExp CExp
-    | CWhere Id CExp CExp CExp
+    = U
+    | Var Id
+    | ESeg Id [CExp] Id
+    | App CExp CExp
+    | Arr CExp CExp
+    | Pi Id CExp CExp
+    | Where Id CExp CExp CExp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data CDecl = CDec Id CExp | CDef Id CExp CExp | CDSeg Id CSeg
-  deriving (C.Eq, C.Ord, C.Show, C.Read)
-
-data CSeg
-    = CSegDecl [CDecl]
-    | CSegInsti Id [CExp]
-    | CSegInstc CSeg [CExp]
-    | CSegSub CSeg Id
+data CDecl
+    = Dec Id CExp
+    | Def Id CExp CExp
+    | DSeg Id [CDecl]
+    | DSegInst Id Id [CExp]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 newtype Id = Id ((C.Int, C.Int), String)

@@ -1,25 +1,21 @@
-position token Id ((char - ["\\\n\t[]():;.0123456789 "]) (char - ["\\\n\t[]():; "])*);
+position token Id ((char - ["\\\n\t[]():;,.0123456789 "]) (char - ["\\\n\t[]():;,. "])*);
 
 entrypoints Context, CExp, CDecl;
 
 Ctx. Context ::= [CDecl] ;
 
-CU.      CExp2 ::= "*" ;
-CVar.    CExp2 ::= Id ;
-CESeg.   CExp2 ::= "(" CSeg ")" "." Id;
-CApp.    CExp1 ::= CExp1 CExp2 ;
-CArr.    CExp  ::= CExp1 "->" CExp ;
-CPi.     CExp  ::= "[" Id ":" CExp "]" CExp ;
-CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
+U.      CExp2 ::= "*" ;
+Var.    CExp2 ::= Id ;
+ESeg.   CExp2 ::= "(" Id "[" [CExp] "]" ")" "." Id ;
+App.    CExp1 ::= CExp1 CExp2 ;
+Arr.    CExp  ::= CExp1 "->" CExp ;
+Pi.     CExp  ::= "[" Id ":" CExp "]" CExp ;
+Where.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
 
-CDec.      CDecl ::= Id ":" CExp ;
-CDef.      CDecl ::= Id ":" CExp "=" CExp ;
-CDSeg.     CDecl ::= Id "=" CSeg ;
-
-CSegDecl.  CSeg ::= "seg" "{" [CDecl] "}" ;
-CSegInsti. CSeg ::= Id "[" [CExp] "]" ;
-CSegInstc. CSeg ::= CSeg "[" [CExp] "]" ;
-CSegSub.   CSeg ::= CSeg "." Id;
+Dec.      CDecl ::= Id ":" CExp ;
+Def.      CDecl ::= Id ":" CExp "=" CExp ;
+DSeg.     CDecl ::= Id "=" "seg" "{" [CDecl] "}" ;
+DSegInst. CDecl ::= Id "=" Id "[" [CExp] "]" ;
 
 separator CDecl ";";
 
@@ -27,7 +23,7 @@ separator CExp "," ;
 
 coercions CExp 3;
 
-coercions CSeg 1;
+coercions CDecl 1;
 
 layout "seg";
 

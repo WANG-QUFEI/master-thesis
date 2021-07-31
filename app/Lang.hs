@@ -9,40 +9,38 @@ module Lang where
 import           Core.Abs
 
 -- | abstract syntax for expressions, extended with closure as values
-data Exp = U                       -- ^ the universe of small types
-         | Var String              -- ^ variables or names of some other expressions
-         | App Exp Exp             -- ^ function application
-         | Abs String Exp Exp      -- ^ function abstraction or dependent product type
-         | Let String Exp Exp Exp  -- ^ let clause
-         | ClosFun Exp Env            -- ^ function closure
-         | ClosSeg 
+data Exp = U                                -- ^ the universe of small types
+         | Var String                       -- ^ variables or names of some other expressions
+         | ESeg String [Exp] String         -- ^ refer to one name of an instantiated segment
+         | App Exp Exp                      -- ^ function application
+         | Abs String Exp Exp               -- ^ function abstraction or dependent product type
+         | Let String Exp Exp Exp           -- ^ let clause
+         | ClosFun Exp Env                  -- ^ function closure
+         | ClosSeg [Decl] Env               -- ^ segment closure 
          deriving (Eq)
 
 -- | the syntax for 'Exp' is also used as quasi-expression in this language
 type QExp = Exp
 
 -- | abstract syntax for declarations
-data Decl = Dec String Exp      -- ^ declaration of a variable with its type
-          | Def String Exp Exp  -- ^ definition of a variable with type and a binding expression 
-          | DSeg String Seg     -- ^ declaration of a segment
+data Decl = Dec String Exp                  -- ^ declaration of a variable with its type
+          | Def String Exp Exp              -- ^ definition of a variable with type and a binding expression 
+          | DSeg String [Decl]              -- ^ declaration of a segment
+          | DSegInst String String [Exp]    -- ^ declaration of a segment resulting from the instantiation of another segment 
           deriving (Eq)
-
--- | data type used to express 'segments'
-data Seg = SegDs [Decl]         -- ^ a segment could be a list of declarations
-         | SegId String         -- ^ a segment could be assigned an identifier
-         | SegInst Seg [Exp]    -- ^ a segment could be instantiated by providing a list of expressions 
-         | SegSub Seg String    -- ^ a segment could be nested into another segment
 
 -- | environment that relates a variable to a value
 data Env = ENil
-         | EConsVar Env String Val
+         | EConsVar Env String QExp
          | EConsDef Env String Exp Exp
+         | EConsSeg Env String Env
          deriving (Eq, Show)
 
 -- | context that relates a variable to a type
 data Cont = CNil
           | CConsVar Cont String Exp
           | CConsDef Cont String Exp Exp
+          | CConsSeg Cont String Cont 
           deriving (Eq)
 
 -- | an abstract context for a loaded source file

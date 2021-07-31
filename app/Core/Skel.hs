@@ -23,23 +23,17 @@ transContext x = case x of
 
 transCExp :: Core.Abs.CExp -> Result
 transCExp x = case x of
-  Core.Abs.CU -> failure x
-  Core.Abs.CVar id -> failure x
-  Core.Abs.CESeg cseg id -> failure x
-  Core.Abs.CApp cexp1 cexp2 -> failure x
-  Core.Abs.CArr cexp1 cexp2 -> failure x
-  Core.Abs.CPi id cexp1 cexp2 -> failure x
-  Core.Abs.CWhere id cexp1 cexp2 cexp3 -> failure x
+  Core.Abs.U -> failure x
+  Core.Abs.Var id -> failure x
+  Core.Abs.ESeg id1 cexps id2 -> failure x
+  Core.Abs.App cexp1 cexp2 -> failure x
+  Core.Abs.Arr cexp1 cexp2 -> failure x
+  Core.Abs.Pi id cexp1 cexp2 -> failure x
+  Core.Abs.Where id cexp1 cexp2 cexp3 -> failure x
 
 transCDecl :: Core.Abs.CDecl -> Result
 transCDecl x = case x of
-  Core.Abs.CDec id cexp -> failure x
-  Core.Abs.CDef id cexp1 cexp2 -> failure x
-  Core.Abs.CDSeg id cseg -> failure x
-
-transCSeg :: Core.Abs.CSeg -> Result
-transCSeg x = case x of
-  Core.Abs.CSegDecl cdecls -> failure x
-  Core.Abs.CSegInsti id cexps -> failure x
-  Core.Abs.CSegInstc cseg cexps -> failure x
-  Core.Abs.CSegSub cseg id -> failure x
+  Core.Abs.Dec id cexp -> failure x
+  Core.Abs.Def id cexp1 cexp2 -> failure x
+  Core.Abs.DSeg id cdecls -> failure x
+  Core.Abs.DSegInst id1 id2 cexps -> failure x
