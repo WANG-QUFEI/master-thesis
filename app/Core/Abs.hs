@@ -13,24 +13,24 @@ import qualified Prelude as C
   , Int, Maybe(..)
   )
 
-data Context = Ctx [CDecl]
+data Context = Ctx [Decl]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data CExp
+data Exp
     = U
     | Var Id
-    | ESeg Id [CExp] Id
-    | App CExp CExp
-    | Arr CExp CExp
-    | Pi Id CExp CExp
-    | Where Id CExp CExp CExp
+    | SegVar Seg Id
+    | App Exp Exp
+    | Arr Exp Exp
+    | Abs Id Exp Exp
+    | Let Id Exp Exp Exp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data CDecl
-    = Dec Id CExp
-    | Def Id CExp CExp
-    | DSeg Id [CDecl]
-    | DSegInst Id Id [CExp]
+data Decl = Dec Id Exp | Def Id Exp Exp | DSeg Id Seg
+  deriving (C.Eq, C.Ord, C.Show, C.Read)
+
+data Seg
+    = SegDef [Decl] | SegRef Id | SegInst Seg [Exp] | SegNest Seg Id
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 newtype Id = Id ((C.Int, C.Int), String)

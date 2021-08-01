@@ -19,21 +19,27 @@ transId x = case x of
 
 transContext :: Core.Abs.Context -> Result
 transContext x = case x of
-  Core.Abs.Ctx cdecls -> failure x
+  Core.Abs.Ctx decls -> failure x
 
-transCExp :: Core.Abs.CExp -> Result
-transCExp x = case x of
+transExp :: Core.Abs.Exp -> Result
+transExp x = case x of
   Core.Abs.U -> failure x
   Core.Abs.Var id -> failure x
-  Core.Abs.ESeg id1 cexps id2 -> failure x
-  Core.Abs.App cexp1 cexp2 -> failure x
-  Core.Abs.Arr cexp1 cexp2 -> failure x
-  Core.Abs.Pi id cexp1 cexp2 -> failure x
-  Core.Abs.Where id cexp1 cexp2 cexp3 -> failure x
+  Core.Abs.SegVar seg id -> failure x
+  Core.Abs.App exp1 exp2 -> failure x
+  Core.Abs.Arr exp1 exp2 -> failure x
+  Core.Abs.Abs id exp1 exp2 -> failure x
+  Core.Abs.Let id exp1 exp2 exp3 -> failure x
 
-transCDecl :: Core.Abs.CDecl -> Result
-transCDecl x = case x of
-  Core.Abs.Dec id cexp -> failure x
-  Core.Abs.Def id cexp1 cexp2 -> failure x
-  Core.Abs.DSeg id cdecls -> failure x
-  Core.Abs.DSegInst id1 id2 cexps -> failure x
+transDecl :: Core.Abs.Decl -> Result
+transDecl x = case x of
+  Core.Abs.Dec id exp -> failure x
+  Core.Abs.Def id exp1 exp2 -> failure x
+  Core.Abs.DSeg id seg -> failure x
+
+transSeg :: Core.Abs.Seg -> Result
+transSeg x = case x of
+  Core.Abs.SegDef decls -> failure x
+  Core.Abs.SegRef id -> failure x
+  Core.Abs.SegInst seg exps -> failure x
+  Core.Abs.SegNest seg id -> failure x
