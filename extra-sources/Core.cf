@@ -6,7 +6,7 @@ Ctx. Context ::= [Decl] ;
 
 U.        Exp2 ::= "*" ;
 Var.      Exp2 ::= Id ;
-SegVar.   Exp2 ::= Seg "." Id ;
+SegVar.   Exp2 ::= Seg2 "[" [Exp] "]" "." Id ;
 App.      Exp1 ::= Exp1 Exp2 ;
 Arr.      Exp  ::= Exp1 "->" Exp ;
 Abs.      Exp  ::= "[" Id ":" Exp "]" Exp ;
@@ -16,10 +16,12 @@ Dec.      Decl ::= Id ":" Exp ;
 Def.      Decl ::= Id ":" Exp "=" Exp ;
 DSeg.     Decl ::= Id "=" Seg ;
 
-SegDef.   Seg ::= "seg" "{" [Decl] "}" ;
-SegRef.   Seg ::= Id ;
-SegInst.  Seg ::= Seg "[" [Exp] "]" ;
-SegNest.  Seg ::= Seg "." Id ;
+SegRef.   Seg2 ::= Id ;
+SegNest.  Seg2 ::= Seg2 "." Id ;
+SegInst.  Seg1 ::= Seg2 "[" [Exp] "]" ;
+SegDef.   Seg  ::= "seg" "{" [Decl] "}" ;
+_.        Seg  ::= Seg1 ;
+_.        Seg1 ::= Seg2 ;
 
 separator Decl ";" ;
 

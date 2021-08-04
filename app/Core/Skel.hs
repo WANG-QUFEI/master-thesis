@@ -25,7 +25,7 @@ transExp :: Core.Abs.Exp -> Result
 transExp x = case x of
   Core.Abs.U -> failure x
   Core.Abs.Var id -> failure x
-  Core.Abs.SegVar seg id -> failure x
+  Core.Abs.SegVar seg exps id -> failure x
   Core.Abs.App exp1 exp2 -> failure x
   Core.Abs.Arr exp1 exp2 -> failure x
   Core.Abs.Abs id exp1 exp2 -> failure x
@@ -39,7 +39,7 @@ transDecl x = case x of
 
 transSeg :: Core.Abs.Seg -> Result
 transSeg x = case x of
-  Core.Abs.SegDef decls -> failure x
   Core.Abs.SegRef id -> failure x
-  Core.Abs.SegInst seg exps -> failure x
   Core.Abs.SegNest seg id -> failure x
+  Core.Abs.SegInst seg exps -> failure x
+  Core.Abs.SegDef decls -> failure x

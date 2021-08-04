@@ -149,7 +149,7 @@ instance Print Core.Abs.Exp where
   prt i = \case
     Core.Abs.U -> prPrec i 2 (concatD [doc (showString "*")])
     Core.Abs.Var id_ -> prPrec i 2 (concatD [prt 0 id_])
-    Core.Abs.SegVar seg id_ -> prPrec i 2 (concatD [prt 0 seg, doc (showString "."), prt 0 id_])
+    Core.Abs.SegVar seg exps id_ -> prPrec i 2 (concatD [prt 2 seg, doc (showString "["), prt 0 exps, doc (showString "]"), doc (showString "."), prt 0 id_])
     Core.Abs.App exp1 exp2 -> prPrec i 1 (concatD [prt 1 exp1, prt 2 exp2])
     Core.Abs.Arr exp1 exp2 -> prPrec i 0 (concatD [prt 1 exp1, doc (showString "->"), prt 0 exp2])
     Core.Abs.Abs id_ exp1 exp2 -> prPrec i 0 (concatD [doc (showString "["), prt 0 id_, doc (showString ":"), prt 0 exp1, doc (showString "]"), prt 0 exp2])
@@ -163,10 +163,10 @@ instance Print Core.Abs.Decl where
 
 instance Print Core.Abs.Seg where
   prt i = \case
+    Core.Abs.SegRef id_ -> prPrec i 2 (concatD [prt 0 id_])
+    Core.Abs.SegNest seg id_ -> prPrec i 2 (concatD [prt 2 seg, doc (showString "."), prt 0 id_])
+    Core.Abs.SegInst seg exps -> prPrec i 1 (concatD [prt 2 seg, doc (showString "["), prt 0 exps, doc (showString "]")])
     Core.Abs.SegDef decls -> prPrec i 0 (concatD [doc (showString "seg"), doc (showString "{"), prt 0 decls, doc (showString "}")])
-    Core.Abs.SegRef id_ -> prPrec i 0 (concatD [prt 0 id_])
-    Core.Abs.SegInst seg exps -> prPrec i 0 (concatD [prt 0 seg, doc (showString "["), prt 0 exps, doc (showString "]")])
-    Core.Abs.SegNest seg id_ -> prPrec i 0 (concatD [prt 0 seg, doc (showString "."), prt 0 id_])
 
 instance Print [Core.Abs.Decl] where
   prt _ [] = concatD []
