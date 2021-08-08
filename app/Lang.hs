@@ -6,7 +6,6 @@ Portability     : POSIX
 -}
 module Lang where
 
-import qualified Core.Abs                   as Abs
 import qualified Data.HashMap.Strict.InsOrd as M
 import           Text.Printf                (printf)
 
@@ -152,17 +151,17 @@ nodeToAbsCont x n p = case n of
 
 -- * BEGIN_SECTION: auxiliary functions
 
--- |Extract the string of a Abs.Id value
-idStr :: Abs.Id -> String
-idStr (Abs.Id (_, s)) = s
-
--- |Extract the position of a Abs.Id value
-idPos :: Abs.Id -> (Int, Int)
-idPos (Abs.Id (pos, _)) = pos
-
 isSegNode :: Node -> Bool
 isSegNode Ns {} = True
 isSegNode _     = False
+
+-- |Construct a value of segment from a reverse ordered path
+buildSegFromPath :: Namespace -> Seg
+buildSegFromPath []   = error "empty namesapce"
+buildSegFromPath [x]  = SRef x
+buildSegFromPath (x:xs) =
+  let s = buildSegFromPath xs
+  in SNest s x
 
 -- |Get the qualified form of a name with its namespace prepended.
 getQualifiedName :: Namespace -> Name -> Name
@@ -170,7 +169,7 @@ getQualifiedName ns x = foldr (\a b -> a ++ "." ++ b) x ns
 
 -- |Get the string representation of a namespace
 namespaceStr :: Namespace -> String
-namespaceStr []  = ""
+namespaceStr []  = "(top level namespace)"
 namespaceStr [x] = x
 namespaceStr ns  = foldr1 (\a b -> a ++ "." ++ b) ns
 
@@ -270,7 +269,7 @@ getSegVal rtop nsInit s var = case s of
     locateSeg :: Env -> Namespace -> Seg -> (Env, Namespace)
     locateSeg rho ns' s' = case s' of
       SRef n    -> (matchSegName rho n, ns' ++ [n])
-      SNest {}  -> let sp   = reverse $ getSegPath s'
+      SNest {}  -> let sp   = reverse $ getSegPathReversed s'
                        rSeg = foldl matchSegName rho sp
                    in (rSeg, ns' ++ sp)
       _         -> error "syntax error"
@@ -283,10 +282,10 @@ getSegVal rtop nsInit s var = case s of
         _           -> error $ "cannot locate segment with name: " ++ n
 
     -- ^ for nested segment, get its relative path in reverse order
-    getSegPath :: Seg -> Namespace
-    getSegPath (SRef n)     = [n]
-    getSegPath (SNest s' n) = n : getSegPath s'
-    getSegPath _            = error "syntax error"
+    getSegPathReversed :: Seg -> Namespace
+    getSegPathReversed (SRef n)     = [n]
+    getSegPathReversed (SNest s' n) = n : getSegPathReversed s'
+    getSegPathReversed _            = error "syntax error"
 
     -- ^ instantiate a segment
     instSeg :: Env -> [InstPair] -> Env
