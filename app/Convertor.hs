@@ -69,11 +69,11 @@ instance InformativeError ConversionError where
      "  the number of expressions provided does not match the number of declarations contained in the segment.",
      "  found at " ++ info,
      "  parent segment: " ++ namespaceStr ns]
-  explain (InvalidSegConstRef ns ids id) =
+  explain (InvalidSegConstRef ns ids ident) =
     let path = map identName ids
-        pos  = identPos id
+        pos  = identPos ident
     in ["Invalid segment variable reference",
-        printf "  segment %s does not contain a constant with name %s" (namespaceStr path) (identName id),
+        printf "  segment %s does not contain a constant with name %s" (namespaceStr path) (identName ident),
         printf "  found at position: %s" (show pos),
         printf "  parent segment: %s" (namespaceStr ns)]
 

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 747e1809b379bfb021572b83f17785075e5486ebc97ba34d912ea32eff8fc536
+-- hash: 45d871dbdae9a565f42de9cb45bbcbc09f3d37ca57eaf2f57f3e3d47cce5edd9
 
 name:           siminitt
 version:        0.1.0.0
@@ -65,8 +65,9 @@ executable siminitt
     , insert-ordered-containers >=0.2.5
     , mtl >=2.2
     , split >=0.2.3.4 && <0.3
-    , text >=1.2.4.0
+    , text >=1.2.5.0
     , unicode-show >=0.1.0.4
+    , unordered-containers >=0.2.14.0
   default-language: Haskell2010
 
 test-suite spec
@@ -86,6 +87,7 @@ test-suite spec
     , insert-ordered-containers >=0.2.5
     , mtl >=2.2
     , split >=0.2.3.4 && <0.3
-    , text >=1.2.4.0
+    , text >=1.2.5.0
     , unicode-show >=0.1.0.4
+    , unordered-containers >=0.2.14.0
   default-language: Haskell2010

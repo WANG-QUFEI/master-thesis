@@ -13,7 +13,7 @@ import qualified Data.Map             as Map
 
 import           Classes
 import           Convertor
-import           Core.Abs
+import qualified Core.Abs             as Abs
 import           Core.Par
 import           Lang
 import           Message
@@ -28,8 +28,8 @@ data TypeCheckError
   = CannotInferType Exp
   | NotFunctionClos Exp
   | NoTypeBoundVar String
-  | TypeNotMatch Exp Val
-  | NotConvertible Val Val
+  | TypeNotMatch Exp QExp
+  | NotConvertible QExp QExp
   | ExtendedWithPos TypeCheckError Decl
   | ExtendedWithCtx TypeCheckError [String]
   deriving (Show)
@@ -45,7 +45,7 @@ instance InformativeError TypeCheckError where
   explain (ExtendedWithCtx terr ss) = ss ++ explain terr
 
 -- | check an expression is well typed and infer its type
-checkInferT :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM Val
+checkInferT :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
 checkInferT _ _ U = return U -- U has itself as its element
 checkInferT s c (Var x) = do
   case getType c x of
