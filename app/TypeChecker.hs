@@ -81,71 +81,44 @@ checkD s c (DSeg x sg) =
 checkT :: LockStrategy s => s -> Cont -> Exp -> QExp -> TypeCheckM ()
 checkT _ _ U U = return ()
 checkT s c (Var x) q = do
-  case typeOf c x of
-    Nothing -> throwError $ NoTypeBoundVar x
-    Just a  -> case a of
-      SegVar sg x' -> case sg of
-        SInst sg' ips -> do
-          let rpath = revSegPath sg'
-              c' = getSegByPath c rpath
-          c'' <- checkSegInst s c c' ips
-          checkT s c'' (Var x') q
-        _ -> error "error"
--- checkT s (c, ns) (Var x) q = do
---   case getType c x of
---     Just t -> do -- TODO: case analysis on if t is a segment reference expression
---       let qt = eval (getEnv s c) ns t
---       void (checkConvertI s (c, ns) qt q)
---     Nothing -> throwError $ NoTypeBoundVar x
--- checkT s (c, ns) (SegVar seg x) q =
---   case seg of
---     SInst sg ips -> do
---       let p  = revSegPath sg
---           c' = getSegByPath c p
---           r' = getEnv s c'
-
---       c1 <- checkSegInst s (c', ns ++ reverse p) qps -- locate and instantiate the segment 'seg'
---       checkT s (c1, ns ++ reverse p) (Var x) q
---     _ -> error "invalid operation"
--- checkT s (c, ns) e@App {} q = do
---   q' <- checkI s (c, ns) e
---   void (checkConvertI s (c, ns) q q')
--- checkT s (c, ns) (Abs x a b) U = do
---   checkT s (c, ns) a U
---   let c' = bindContT c x a
---   checkT s (c', ns) b U
--- checkT s (c, ns) (Abs x a b) (Closure (Abs x' a' b') (r', ns')) = do
---   checkT s (c, ns) a U
---   let r   = getEnv s c
---       qa  = eval r ns a
---       qa' = eval r' ns' a'
---   void $ checkConvertI s (c, ns) qa qa'
---   let qx  = getQualifiedName ns x
---       nr' = bindEnvQ r' x' (Var qx)
---       qb' = eval nr' ns' b'
---       c'  = bindContT c x a
---   checkT s (c', ns) b qb'
-
-
-
--- checkT s c (Abs (Dec x a) e) (Clos (Abs (Dec x' a') e') r) = do
---   checkT s c a U
---   let env = getEnv s c
---       va  = eval a env
---       va' = eval a' r
---   void $ checkEqualInferT s c va va'
---   let r' = consEVar r x' (Var x)
---       ve' = eval e' r'
---       c' = consCVar c x a
---   checkT s c' e ve'
--- checkT s c (Abs d@Def {} e) v = do
---   c' <- checkD s c d
---   checkT s c' e v
--- checkT _ _ e v = throwError $ TypeNotMatch e v
+  let t  = typeOf c x
+      qt = eval (getEnv s c) t
+  void (checkConvertI s c qt q)
+checkT s c (SegVar sg x) q = do
+  let (sg', ips) = breakSeg sg
+      rpath = revSegPath sg'
+      c' = getSegByPath c rpath
+  c'' <- checkSegInst s c c' ips
+  let t  = typeOf c'' x
+      qt = eval (getEnv s c'') t
+  void (checkConvertI s c'' qt q)
+checkT s c e@App {} q = do
+  q' <- checkI s c e
+  void (checkConvertI s c q q')
+checkT s c (Abs x a b) U = do
+  checkT s c a U
+  let c' = bindConT c x a
+  checkT s c' b U
+checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
+  checkT s c a U
+  let r  = getEnv s c
+      qa = eval r a
+      qa' = eval r' a'
+  void $ checkConvertI s c qa qa'
+  let y   = qualifiedName (cns c) x
+      r'' = bindEnvQ r' x' (Var y)
+      qb' = eval r'' b'
+      c'  = bindConT c x a
+  checkT s c' b qb'
+checkT s c (Let x a b e) q = do
+  c' <- checkD s c (Def x a b)
+  checkT s c' e q
+checkT _ _ e v = throwError $ TypeNotMatch e v
 
 -- |Check an expression is well typed and infer its type
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
 checkI = undefined
+
 -- checkInferT _ _ U = return U -- U has itself as its element
 -- checkInferT s c (Var x) = do
 --   case getType c x of
