@@ -8,7 +8,6 @@ Portability     : POSIX
 module Locking where
 
 import           Classes
-import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
@@ -28,8 +27,8 @@ data SimpleLock = LockAll
 instance LockStrategy SimpleLock where
   getEnv LockAll         = lockAll
   getEnv LockNone        = lockNone
-  getEnv (LockList ls)   = locklist (Set.fromList ls) []
-  getEnv (UnLockList ls) = unlocklist (Set.fromList ls) []
+  getEnv (LockList ls)   = locklist (Set.fromList ls)
+  getEnv (UnLockList ls) = unlocklist (Set.fromList ls)
 
   addLock LockAll        _  = LockAll
   addLock LockNone       xs = LockList xs
@@ -57,135 +56,135 @@ instance LockStrategy SimpleLock where
         s3 = Set.union s1 s2
     in UnLockList (Set.toList s3)
 
-  getNamesLocked = lockedNames []
+  getNamesLocked = lockedNames
 
-  getNamesUnLocked = unlockedNames []
+  getNamesUnLocked = unlockedNames
 
 lockAll :: Cont -> Env
-lockAll (Cont cm) = OrdM.foldrWithKey g emptyEnv cm
+lockAll (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
   where g :: Name -> CNode -> Env -> Env
-        g _ Ct {}    r = r
-        g _ Cd {}    r = r
-        g x cs@Cs {} r = lockSeg lockAll x cs r
+        g x cn@Cs {} r =
+          let c' = nodeToCont (ns ++ [x]) cn
+              r' = lockAll c'
+              en = Es (mapEnv r')
+          in bindEnvS r x en
+        g _ _ r = r
 
 lockNone :: Cont -> Env
-lockNone (Cont cm) = OrdM.foldrWithKey g emptyEnv cm
+lockNone (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
   where g :: Name -> CNode -> Env -> Env
-        g _ Ct {}    r = r
-        g x (Cd a b) r =
-          let en = Ed a b
-              rm = Map.insert x en (mapEnv r)
-          in Env rm
-        g x cs@Cs {} r = lockSeg lockNone x cs r
+        g _ Ct {} r = r
+        g x (Cd a b) r = bindEnvD r x a b
+        g x cn@Cs {} r =
+          let c' = nodeToCont (ns ++ [x]) cn
+              r' = lockNone c'
+              en = Es (mapEnv r')
+          in bindEnvS r x en
 
-locklist :: Set Name -> Namespace -> Cont -> Env
-locklist names ns (Cont cm) = OrdM.foldrWithKey g emptyEnv cm
+locklist :: Set Name -> Cont -> Env
+locklist lnames (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
   where g :: Name -> CNode -> Env -> Env
-        g _ Ct {}    r = r
+        g _ Ct {} r = r
         g x (Cd a b) r =
-          let x' = namespaceStr (ns ++ [x])
-          in if Set.member x' names
+          let x' = qualifiedName ns x
+          in if Set.member x' lnames
              then r
-             else let en = Ed a b
-                      rm = Map.insert x en (mapEnv r)
-                  in Env rm
-        g x cs@Cs {} r =
-          let x' = namespaceStr (ns ++ [x])
-          in if Set.member x' names -- lock on the whole segment
-             then lockSeg lockAll x cs r
-             else lockSeg (locklist names (ns ++ [x])) x cs r
+             else bindEnvD r x a b
+        g x cn@Cs {} r =
+          let x' = qualifiedName ns x
+              c' = nodeToCont (ns ++ [x]) cn
+          in if Set.member x' lnames
+             then let r' = lockAll c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+             else let r' = locklist lnames c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
 
-unlocklist :: Set Name -> Namespace -> Cont -> Env
-unlocklist names ns (Cont cm) = OrdM.foldrWithKey g emptyEnv cm
+unlocklist :: Set Name -> Cont -> Env
+unlocklist unames (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
   where g :: Name -> CNode -> Env -> Env
-        g _ Ct {}    r = r
+        g _ Ct {} r = r
         g x (Cd a b) r =
-          let x' = namespaceStr (ns ++ [x])
-          in if Set.notMember x' names
+          let x' = qualifiedName ns x
+          in if Set.notMember x' unames
              then r
-             else let en = Ed a b
-                      rm = Map.insert x en (mapEnv r)
-                  in Env rm
-        g x cs@Cs {} r =
-          let x' = namespaceStr (ns ++ [x])
-          in if Set.member x' names -- unlock on the whole segment
-             then lockSeg lockNone x cs r
-             else lockSeg (unlocklist names (ns ++ [x])) x cs r
+             else bindEnvD r x a b
+        g x cn@Cs {} r =
+          let x' = qualifiedName ns x
+              c' = nodeToCont (ns ++ [x]) cn
+          in if Set.member x' unames
+             then let r' = lockNone c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+             else let r' = unlocklist unames c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
 
-
-lockSeg :: (Cont -> Env) -> Name -> CNode -> Env -> Env
-lockSeg f x (Cs m) r =
-  let r' = f (Cont m)
-      en = Es (mapEnv r')
-      rm = Map.insert x en (mapEnv r)
-  in Env rm
-lockSeg _ _ _ _ = error "invalid operation"
-
-lockedNames :: Namespace -> SimpleLock -> Cont -> [Name]
-lockedNames ns LockAll cont = allNames ns cont
-lockedNames _  LockNone _ = []
-lockedNames ns ll@(LockList ls) (Cont cm) =
-  let names = Set.fromList ls
-  in OrdM.foldrWithKey (g names) [] cm
+lockedNames :: SimpleLock -> Cont -> [Name]
+lockedNames LockAll c = allNames c
+lockedNames LockNone _ = []
+lockedNames ll@(LockList ls) (Cont ns cm) =
+  let lnames = Set.fromList ls
+  in OrdM.foldrWithKey (g lnames) [] cm
   where
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
-      let x' = namespaceStr (ns ++ [x])
-      in if isSegCNode v
+      let x' = qualifiedName ns x
+      in if pSegnode v
          then if Set.member x' names
-              then let xs' = lockedNames (ns ++ [x]) LockAll (transNodeCont v) in xs' ++ xs
-              else let xs' = lockedNames (ns ++ [x]) ll (transNodeCont v) in xs' ++ xs
+              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              else let xs' = lockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if Set.member x' names
               then x' : xs else xs
-lockedNames ns ul@(UnLockList ls) (Cont cm) =
+lockedNames ul@(UnLockList ls) (Cont ns cm) =
   let names = Set.fromList ls
   in OrdM.foldrWithKey (g names) [] cm
   where
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
-      let x' = namespaceStr (ns ++ [x])
-      in if isSegCNode v
+      let x' = qualifiedName ns x
+      in if pSegnode v
          then if Set.member x' names
-              then  xs
-              else let xs' = lockedNames (ns ++ [x]) ul (transNodeCont v) in xs' ++ xs
+              then xs
+              else let xs' = lockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if not $ Set.member x' names
               then x' : xs else xs
 
-unlockedNames :: Namespace -> SimpleLock -> Cont -> [Name]
-unlockedNames ns LockNone cont = allNames ns cont
-unlockedNames _  LockAll _ = []
-unlockedNames ns ll@(LockList ls) (Cont cm) =
+unlockedNames :: SimpleLock -> Cont -> [Name]
+unlockedNames LockNone cont = allNames cont
+unlockedNames LockAll _ = []
+unlockedNames ll@(LockList ls) (Cont ns cm) =
   let names = Set.fromList ls
   in OrdM.foldrWithKey (g names) [] cm
   where
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
-      let x' = namespaceStr (ns ++ [x])
-      in if isSegCNode v
+      let x' = qualifiedName ns x
+      in if pSegnode v
          then if Set.member x' names -- segment is locked
               then xs
-              else let xs' = unlockedNames (ns ++ [x]) ll (transNodeCont v) in xs' ++ xs
+              else let xs' = unlockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if not $ Set.member x' names
               then x' : xs else xs
-unlockedNames ns ul@(UnLockList ls) (Cont cm) =
+unlockedNames ul@(UnLockList ls) (Cont ns cm) =
   let names = Set.fromList ls
   in OrdM.foldrWithKey (g names) [] cm
   where
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
-      let x' = namespaceStr (ns ++ [x])
-      in if isSegCNode v
+      let x' = qualifiedName ns x
+      in if pSegnode v
          then if Set.member x' names
-              then let xs' = unlockedNames (ns ++ [x]) LockNone (transNodeCont v) in xs' ++ xs
-              else let xs' = unlockedNames (ns ++ [x]) ul (transNodeCont v) in xs' ++ xs
+              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              else let xs' = unlockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if Set.member x' names
               then x' : xs else xs
 
-allNames :: Namespace -> Cont -> [Name]
-allNames ns (Cont cm) = OrdM.foldrWithKey g [] cm
+allNames :: Cont -> [Name]
+allNames (Cont ns cm) = OrdM.foldrWithKey g [] cm
   where g :: Name -> CNode -> [Name] -> [Name]
-        g x v xs =
-          let x' = namespaceStr (ns ++ [x])
-          in if isSegCNode v
-             then let xs' = allNames (ns ++ [x]) (transNodeCont v) in xs' ++ xs
-             else x' : xs
+        g x v xs = let x' = qualifiedName ns x in
+          if pSegnode v
+          then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+          else x' : xs

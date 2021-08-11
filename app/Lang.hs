@@ -8,7 +8,7 @@ module Lang where
 
 import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
-import           Text.Printf                (printf)
+import           Data.Maybe                 (fromJust)
 
 -- * BEGIN_SECTION: Basic Data types
 
@@ -26,6 +26,9 @@ type InstPair = (Exp, Name)
 
 type AbsContext = [Decl]
 
+class SegNest a where
+  matchSeg :: Name -> a -> Maybe a
+
 -- |Syntax for expressions and quasi-expressions
 data Exp = U                    -- ^ The type of all small types. U is an element of itself.
          | Var Name             -- ^ A variable or constant.
@@ -33,7 +36,7 @@ data Exp = U                    -- ^ The type of all small types. U is an elemen
          | App Exp Exp          -- ^ Function application.
          | Abs Name Exp Exp     -- ^ Function abstraction or dependent product type.
          | Let Name Exp Exp Exp -- ^ A let clause. e.g. let x : a = b in e could be expressed as 'Let x a b e'.
-         | Closure Exp (Env, Namespace)      -- ^ Function closure.
+         | Clos Exp Env      -- ^ Function closure.
          deriving Eq
 
 -- |Quasi-expression: the intermediate form of an expression during computation.
@@ -52,25 +55,29 @@ data Seg = SRef Name            -- ^ A segment could be referenced by a name
          | SDef [Decl]          -- ^ A segment could be defined as a list of declarations
          deriving Eq
 
--- |Nodes that keep the types or definitions of the constants and that of the sub segments
--- A map of these nodes constitute a type checking context
+-- |A context node keeps either (1) the type or definition of a constant or (2) a context of a sub-segment
 data CNode = Ct Exp                                    -- ^ a node that keeps the type of a constant
            | Cd Exp Exp                                -- ^ a node that keeps the definition of a constant
-           | Cs {cnm :: OrdM.InsOrdHashMap Name CNode} -- ^ a node that keeps the content of a segment
+           | Cs {csm :: OrdM.InsOrdHashMap Name CNode} -- ^ a node that keeps the context of a segment
           deriving Eq
 
--- |Nodes that keep the value (a quasi-expression) or definitions of the constants and that of the sub segments
--- A map of these nodes constitute a computation environment
-data ENode = Ev Exp                             -- ^ a node that keeps the value of a constant
-           | Ed Exp Exp                         -- ^ a node that keeps the definition of a constant
-           | Es {enm :: Map.HashMap Name ENode} -- ^ a node that keeps the content of a segment
+-- |An environment node keeps the value (a quasi-expression) or definition of a constant
+data ENode = Ev QExp    -- ^ a node that keeps the value of a constant
+           | Ed Exp Exp -- ^ a node that keeps the definition of a constant
+           | Es {esm :: Map.HashMap Name ENode}
           deriving Eq
 
 -- |Type checking context, storing a map of Nodes
-newtype Cont = Cont { mapCont :: OrdM.InsOrdHashMap Name CNode } deriving Eq
+data Cont = Cont {
+  cns     :: Namespace, -- ^ namespace of the context
+  mapCont :: OrdM.InsOrdHashMap Name CNode -- ^ content of the context
+  } deriving Eq
 
--- |Evaluation context, similiar with Cont, storing a map of Nodes
-newtype Env  = Env { mapEnv :: Map.HashMap Name ENode } deriving Eq
+-- |Evaluation context
+data Env  = Env {
+  ens    :: Namespace,  -- ^ namespace of the environment
+  mapEnv :: Map.HashMap Name ENode
+  } deriving Eq
 
 -- * END_SECTION
 
@@ -101,7 +108,7 @@ instance Show Exp where
     in showParen (p > prec) s'
   showsPrec p (Abs x a e) = showParen (p > prec) $ showString "[ " . showsPrec p (Dec x a) . showString " ] " . showsPrec prec e
   showsPrec p (Let x a b e) = showParen (p > prec) $ showString "[ " . showsPrec p (Def x a b) . showString " ] " . showsPrec prec e
-  showsPrec _ (Closure e _) = showParen True $ showsPrec prec e . showString "(...)"
+  showsPrec _ (Clos e _) = showParen True $ showsPrec prec e . showString "(...)"
 
 instance Show Decl where
   showsPrec _ d = showDeclWithLayout 0 d
@@ -111,7 +118,7 @@ instance Show Seg where
 
 instance Show Cont where
   showsPrec _ c =
-    let ds  = contToAbsCont c
+    let ds  = restoreCont c
         dss = map (showDeclWithLayout 0) ds
         dsn = map (\s -> s . showString "\n") dss
     in foldr (.) (showString "") dsn
@@ -141,192 +148,178 @@ showSegWithLayout n seg = case seg of
   SNest seg' x  -> showSegWithLayout n seg' . showString " . " . showString x
 
 -- |Restore a cont to a list of declarations
-contToAbsCont :: Cont -> AbsContext
-contToAbsCont (Cont c) =
+restoreCont :: Cont -> AbsContext
+restoreCont (Cont ns c) =
   if OrdM.null c
   then []
-  else OrdM.foldrWithKey cnodeToDecl [] c
-
--- |Restore a node to a declaration
-cnodeToDecl :: Name -> CNode -> AbsContext -> AbsContext
-cnodeToDecl x n p = case n of
-  Ct a   -> Dec x a : p
-  Cd a b -> Def x a b : p
-  Cs m   -> let ac = contToAbsCont (Cont m)
-                s = SDef ac
-            in DSeg x s : p
+  else OrdM.foldrWithKey restoreCNode [] c
+  where
+    restoreCNode :: Name -> CNode -> AbsContext -> AbsContext
+    restoreCNode x (Ct a) ac = Dec x a : ac
+    restoreCNode x (Cd a b) ac = Def x a b : ac
+    restoreCNode x (Cs cm) ac =
+      let ac' = restoreCont (Cont (ns ++ [x]) cm)
+          ds  = SDef ac'
+      in DSeg x ds : ac
 
 -- * END_SECTION
 
+instance SegNest Cont where
+  matchSeg x (Cont ns cm) =
+    case OrdM.lookup x cm of
+      Just (Cs m) -> Just $ Cont (ns ++ [x]) m
+      _           -> Nothing
+
+instance SegNest Env where
+  matchSeg x (Env ns em) =
+    case Map.lookup x em of
+      Just (Es m) -> Just $ Env (ns ++ [x]) m
+      _           -> Nothing
+
 -- * BEGIN_SECTION: auxiliary functions
+-- |Map a function over the first element of a tuple
+mfst :: (a -> b) -> (a, c) -> (b, c)
+mfst f (a, c) = (f a, c)
 
-emptyCont :: Cont
-emptyCont = Cont OrdM.empty
+-- |Map a function over the second element of a tuple
+msnd :: (c -> d) -> (a, c) -> (a, d)
+msnd f (a, c) = (a, f c)
 
-emptyEnv :: Env
-emptyEnv = Env Map.empty
+-- |Get an empty context
+emptyCont :: Namespace -> Cont
+emptyCont ns = Cont ns OrdM.empty
 
-transNodeCont :: CNode -> Cont
-transNodeCont cn = Cont (cnm cn)
+-- |Get an empty environment
+emptyEnv :: Namespace -> Env
+emptyEnv ns = Env ns Map.empty
 
-transNodeEnv :: ENode -> Env
-transNodeEnv en = Env (enm en)
+-- |Transform a CNode that represents a segment into a value of context
+nodeToCont :: Namespace -> CNode -> Cont
+nodeToCont ns cn = Cont ns (csm cn)
 
--- |Check if a context node represents a segment
-isSegCNode :: CNode -> Bool
-isSegCNode Cs {} = True
-isSegCNode _     = False
+-- |A predicate checking whether a context node represents a segment
+pSegnode :: CNode -> Bool
+pSegnode Cs {} = True
+pSegnode _     = False
 
--- |Construct a value of segment from a reverse ordered path
-buildSegFromPath :: Namespace -> Seg
-buildSegFromPath []   = error "empty namesapce"
-buildSegFromPath [x]  = SRef x
-buildSegFromPath (x:xs) =
-  let s = buildSegFromPath xs
-  in SNest s x
+-- |Get the reversed path of a nested segment
+revSegPath :: Seg -> Namespace
+revSegPath (SRef x)      = [x]
+revSegPath (SNest seg x) = x : revSegPath seg
+revSegPath _             = error "error: revSegPath"
+
+-- |Get segment context by a reversed path
+getSegByPath :: SegNest a => a -> Namespace -> a
+getSegByPath = foldr (\n b -> fromJust (matchSeg n b))
 
 -- |Get the qualified form of a name with its namespace prepended.
-getQualifiedName :: Namespace -> Name -> Name
-getQualifiedName ns x = foldr (\a b -> a ++ "." ++ b) x ns
-
--- |Get the string representation of a namespace
-namespaceStr :: Namespace -> String
-namespaceStr []  = "(top level namespace)"
-namespaceStr [x] = x
-namespaceStr ns  = foldr1 (\a b -> a ++ "." ++ b) ns
+qualifiedName :: Namespace -> Name -> Name
+qualifiedName _ "" = ""
+qualifiedName ns x = foldr (\a b -> a ++ "." ++ b) x ns
 
 -- |Extend the environment by binding a variable with a q-expression
 -- Do nothing if the variable is a 'dummy variable' (with an empty name)
-bindEnvQexp :: Env -> Name -> QExp -> Env
-bindEnvQexp r "" _ = r
-bindEnvQexp r x  q =
+bindEnvQ :: Env -> Name -> QExp -> Env
+bindEnvQ r "" _ = r
+bindEnvQ r x  q =
   let v = Ev q
-  in Env $ Map.insert x v (mapEnv r)
+  in r {mapEnv = Map.insert x v (mapEnv r)}
 
 -- |Extend the environment with a constant definition
-bindEnvDef :: Env -> Name -> Exp -> Exp -> Env
-bindEnvDef r x a b =
+bindEnvD :: Env -> Name -> Exp -> Exp -> Env
+bindEnvD r x a b =
   let v = Ed a b
-  in Env $ Map.insert x v (mapEnv r)
+  in r {mapEnv = Map.insert x v (mapEnv r)}
+
+-- |Extend the environment with a sub-segment
+bindEnvS :: Env -> Name -> ENode -> Env
+bindEnvS r x es@Es {} = r {mapEnv = Map.insert x es (mapEnv r)}
+bindEnvS _ _ _        = error "error: bindEnvS"
+
+-- |Break up an instantiated segment
+breakSeg :: Seg -> (Seg, [InstPair])
+breakSeg (SInst sg ips) = (sg, ips)
+breakSeg _              = error "error:breakSeg"
 
 -- |Extend the type checking context with a variable and its type
-bindContType :: Cont -> Name -> Exp -> Cont
-bindContType c "" _ = c
-bindContType c x  t =
+-- Do nothing if the variable is a 'dummy variable' (with an empty name)
+bindConT :: Cont -> Name -> Exp -> Cont
+bindConT c "" _ = c
+bindConT c x  t =
   let v = Ct t
-  in Cont $ OrdM.insert x v (mapCont c)
+  in c {mapCont = OrdM.insert x v (mapCont c)}
 
--- | get the type of a variable in a given context
-getType :: Cont -> Name -> Maybe Exp
-getType c x = case OrdM.lookup x (mapCont c) of
-  Nothing       -> Nothing
-  Just (Ct t)   -> Just t
-  Just (Cd t _) -> Just t
-  _             -> error "segment has no type"
+-- |Extend the type checking context with a constant definition
+bindConD :: Cont -> Name -> Exp -> Exp -> Cont
+bindConD c x a b =
+  let v = Cd a b
+  in c {mapCont = OrdM.insert x v (mapCont c)}
 
--- |Get the names of constants from a type checking context (excluding the
--- names of the sub-segments)
+-- |Extend the type checking context with a context of segment
+bindConS :: Cont -> Name -> CNode -> Cont
+bindConS c x cs@Cs {} = c {mapCont = OrdM.insert x cs (mapCont c)}
+bindConS _ _ _        = error "error: bindConS"
+
+-- |Get the type of a variable in a given context
+typeOf :: Cont -> Name -> Exp
+typeOf c x =
+  let mn = OrdM.lookup x (mapCont c)
+  in case fromJust mn of
+    Ct t   -> t
+    Cd t _ -> t
+    Cs {}  -> error "cannot get the type of segment"
+
+-- |Get the names of a type checking context
 namesCont :: Cont -> [Name]
-namesCont c = OrdM.foldrWithKey
-  (\k v a ->
-      if not $ isSegCNode v
-      then k : a
-      else a) [] (mapCont c)
+namesCont (Cont _ cm) = OrdM.keys cm
 
 -- |Generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String
 freshVar x xs
   | x `elem` xs = freshVar (x ++ "'") xs
-  | x == "" = freshVar "var" xs
+  | x == "" = freshVar "_x" xs
   | otherwise = x
 
 -- * END_SECTION
 
 -- * BEGIN_SECTION: functions related with evaluation
 
--- |Evaluate an expression into a quasi-expression under a given local environment (a segment).
--- A global environment is not needed here because expressions in a local environment
--- are not allowed to refer to variables or constants out of its scope.
--- However, the namespace of the local environment is needed to clear off the ambiguity
--- caused by variables of the same name from different environments (segments).
-eval :: Env       -- ^ the local environment
-     -> Namespace -- ^ namespace to the local environment
-     -> Exp       -- ^ the expression to be evaluated
+-- |Evaluate an expression into a quasi-expression under a given environment
+eval :: Env  -- ^ the local environment
+     -> Exp  -- ^ the expression to be evaluated
      -> QExp
-eval _ _  U             = U
-eval r ns (Var x)       = getVal r ns x
-eval r ns (SegVar s x)  = getSegVal r ns s x
-eval r ns (App e1 e2)   = appVal (eval r ns e1) (eval r ns e2)
-eval r ns e@Abs {}      = Closure e (r, ns)
-eval r ns (Let x a b e) = let r' = bindEnvDef r x a b in eval r' ns e
-eval _ _   q@Closure {} = q
+eval _ U             = U
+eval r (Var x)       = valueOf r x
+eval r (SegVar sg x) = let r' = evalSeg r sg in eval r' (Var x)
+eval r (App e1 e2)   = appVal (eval r e1) (eval r e2)
+eval r e@Abs {}      = Clos e r
+eval r (Let x a b e) = let r' = bindEnvD r x a b in eval r' e
+eval _ q@Clos {}     = q
 
 -- |Get the quasi-expression bound to a variable.
-getVal :: Env       -- ^ the local environment
-       -> Namespace -- ^ namespace to the local environment
-       -> Name      -- ^ name of the variable
-       -> QExp
-getVal r ns x =
+valueOf :: Env  -- ^ the local environment
+        -> Name -- ^ name of the variable
+        -> QExp
+valueOf r x =
   case Map.lookup x (mapEnv r) of
-    Nothing        -> Var (getQualifiedName ns x)
-    Just (Ev q)    -> q
-    Just (Ed _ e)  -> eval r ns e
-    Just (Es _)    -> error $ "cannot evaluate a segment with name: " ++ getQualifiedName ns x
-
--- |Get the quasi-expression bound to a constant in a segment.
-getSegVal :: Env       -- ^ the local environment
-          -> Namespace -- ^ namespace to the local environment
-          -> Seg       -- ^ the segment to which the constant belongs
-          -> Name      -- ^ name of the constant
-          -> QExp
-getSegVal rtop nsInit s var = case s of
-  -- the segment 's' in this case must be in the form of 'SInst', this is
-  -- imposed by the source code syntax of the language and checked by the lexer
-  SInst s' ips ->
-    let (rSeg, ns') = locateSeg rtop nsInit s'
-        rSegNew     = instSeg rSeg ips
-    in eval rSegNew ns' (Var var)
-  _            -> error "syntax error"
-  where
-    -- ^ locate the segment from the local environment and return its path
-    locateSeg :: Env -> Namespace -> Seg -> (Env, Namespace)
-    locateSeg rho ns' s' = case s' of
-      SRef n    -> (matchSegName rho n, ns' ++ [n])
-      SNest {}  -> let sp   = reverse $ getSegPathReversed s'
-                       rSeg = foldl matchSegName rho sp
-                   in (rSeg, ns' ++ sp)
-      _         -> error "syntax error"
-
-    -- ^ match a segment with the given name in the environment
-    matchSegName :: Env -> Name -> Env
-    matchSegName rho n =
-      case Map.lookup n (mapEnv rho) of
-        Just (Es m) -> Env m
-        _           -> error $ "cannot locate segment with name: " ++ n
-
-    -- ^ for nested segment, get its relative path in reverse order
-    getSegPathReversed :: Seg -> Namespace
-    getSegPathReversed (SRef n)     = [n]
-    getSegPathReversed (SNest s' n) = n : getSegPathReversed s'
-    getSegPathReversed _            = error "syntax error"
-
-    -- ^ instantiate a segment
-    instSeg :: Env -> [InstPair] -> Env
-    instSeg rho ips = foldl attachQexp rho ips
-
-    -- ^ attach the name of a declaration with a quasi-expression as its definition
-    attachQexp :: Env -> InstPair -> Env
-    attachQexp rho (e, n) =
-      case Map.lookup n (mapEnv rho) of
-        Nothing ->
-          let q = eval rtop nsInit e              -- note that here we need to evaluate the binding expression in the top local environment
-          in bindEnvQexp rho n q
-        _       -> error $ printf "cannot instantiate variable, already bound with some term. Name: %s" n
+    Nothing       -> Var (qualifiedName (ens r) x)
+    Just (Ev q)   -> q
+    Just (Ed _ e) -> eval r e
+    Just _        -> error "error: valueOf"
 
 -- |Rules for function application
 appVal :: QExp -> QExp -> QExp
 appVal q1 q2 = case q1 of
-  Closure (Abs x _ e) (r, ns) -> let r' = bindEnvQexp r x q2 in eval r' ns e
-  _                           -> App q1 q2
+  Clos (Abs x _ e) r -> let r' = bindEnvQ r x q2 in eval r' e
+  _                  -> App q1 q2
+
+evalSeg :: Env -> Seg -> Env
+evalSeg r sg =
+  let (sg', ips) = breakSeg sg     -- sg will always be a nested segment, ensured by the syntax
+      qps = map (mfst $ eval r) ips
+      rpath = revSegPath sg'
+      r' = getSegByPath r rpath
+  in foldr (\(q, n) r0 -> bindEnvQ r0 n q) r' qps
+
 
 -- * END_SECTION
