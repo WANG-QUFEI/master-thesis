@@ -260,16 +260,25 @@ bindConS :: Cont -> Name -> CNode -> Cont
 bindConS c x cs@Cs {} = c {mapCont = OrdM.insert x cs (mapCont c)}
 bindConS _ _ _        = error "error: bindConS"
 
--- |Get the type of a variable in a given context
-typeOf :: Cont -> Name -> Exp
-typeOf c x =
+-- |Get the type of a variable from a context
+getType :: Cont -> Name -> Exp
+getType c x =
   let mn = OrdM.lookup x (mapCont c)
   in case fromJust mn of
     Ct t   -> t
     Cd t _ -> t
-    Cs {}  -> error "cannot get the type of segment"
+    Cs {}  -> error "cannot get the type of a segment"
 
--- |Get the names of a type checking context
+-- |Get the definition of a variable from a context
+getDef :: Cont -> Name -> Exp
+getDef c x =
+  let mn = OrdM.lookup x (mapCont c)
+  in case fromJust mn of
+    Ct _   -> Var x
+    Cd _ d -> d
+    Cs _   -> error "cannot get the def of a segment"
+
+-- |Get the names of a type checking context (excluding the potential sub-segments)
 namesCont :: Cont -> [Name]
 namesCont (Cont _ cm) = OrdM.keys cm
 

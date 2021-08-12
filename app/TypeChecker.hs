@@ -9,19 +9,17 @@ module TypeChecker where
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 
 import           Classes
 import qualified Convertor                  as Con
-import qualified Core.Abs                   as Abs
 import           Core.Par
 import           Lang
 import           Message
 import           Monads
 
 -- | monad for type-checking
-type TypeCheckM a = G TypeCheckError (Cont, Namespace) a
+type TypeCheckM a = G TypeCheckError Cont a
 
 -- | a datatype used as exception in an ExceptT monad
 data TypeCheckError
@@ -81,7 +79,7 @@ checkD s c (DSeg x sg) =
 checkT :: LockStrategy s => s -> Cont -> Exp -> QExp -> TypeCheckM ()
 checkT _ _ U U = return ()
 checkT s c (Var x) q = do
-  let t  = typeOf c x
+  let t  = getType c x
       qt = eval (getEnv s c) t
   void (checkConvertI s c qt q)
 checkT s c (SegVar sg x) q = do
@@ -89,7 +87,7 @@ checkT s c (SegVar sg x) q = do
       rpath = revSegPath sg'
       c' = getSegByPath c rpath
   c'' <- checkSegInst s c c' ips
-  let t  = typeOf c'' x
+  let t  = getType c'' x
       qt = eval (getEnv s c'') t
   void (checkConvertI s c'' qt q)
 checkT s c e@App {} q = do
@@ -115,35 +113,90 @@ checkT s c (Let x a b e) q = do
   checkT s c' e q
 checkT _ _ e v = throwError $ TypeNotMatch e v
 
--- |Check an expression is well typed and infer its type
+-- |Check that an expression is well typed and infer its type
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
-checkI = undefined
-
--- checkInferT _ _ U = return U -- U has itself as its element
--- checkInferT s c (Var x) = do
---   case getType c x of
---     Just t -> let env = getEnv s c
---               in return $ eval t env
---     Nothing -> throwError $ NoTypeBoundVar x
--- checkInferT s c (App m n) = do
---   tm <- checkInferT s c m
---   case tm of
---     Clos (Abs (Dec x a) b) r -> do
---       let va = eval a r
---       checkT s c n va
---       let env = getEnv s c
---           vn = eval n env
---           r' = consEVar r x vn
---       return (eval b r')
---     _ -> throwError (NotFunctionClos tm)
--- checkInferT s c (Abs d@Def {} e) = do
---   c' <- checkD s c d
---   checkInferT s c' e
--- checkInferT _ _ e = throwError $ CannotInferType e
+checkI s c (Var x) = do
+  let t = getType c x
+      r = getEnv s c
+  return $ eval r t
+checkI s c (SegVar sg x) = do
+  let (sg', ips) = breakSeg sg
+      rpath = revSegPath sg'
+      c' = getSegByPath c rpath
+  c'' <- checkSegInst s c c' ips
+  let t   = getType c'' x
+      r'' = getEnv s c''
+  return $ eval r'' t
+checkI s c (App m n) = do
+  qm <- checkI s c m
+  case qm of
+    Clos (Abs x a b) r -> do
+      let qa = eval r a
+      checkT s c n qa
+      let r0 = getEnv s c
+          ns = cns c
+          qn = eval r0 n
+          r' = bindEnvQ r (qualifiedName ns x) qn
+      return $ eval r' b
+    _ -> throwError (NotFunctionClos qm)
+checkI s c (Let x a b e) = do
+  c' <- checkD s c (Def x a b)
+  checkI s c' e
+checkI _ _ e = throwError $ CannotInferType e
 
 -- |Check that two q-exps are convertible and infer their type
 checkConvertI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
-checkConvertI = undefined
+checkConvertI _ _ U U = return U
+checkConvertI s c (Var x) (Var y)
+  | x == y = let t  = getType c x
+                 r  = getEnv s c
+                 qt = eval r t
+             in return qt
+  | otherwise = throwError $ NotConvertible (Var x) (Var y)
+checkConvertI s c (App m1 n1) (App m2 n2) = do
+  q <- checkConvertI s c m1 m2
+  case q of
+    Clos (Abs x a b) r' -> do
+      let qa = eval r' a
+      checkConvertT s c n1 n2 qa
+      let r  = getEnv s c
+          qn = eval r n1
+          r1 = bindEnvQ r' x qn
+      return $ eval r1 b
+    _ -> throwError $ NotFunctionClos q
+checkConvertI s c q1@Clos {} q2@Clos {} = do
+  checkConvertT s c q1 q2 U
+  return U
+checkConvertI _ _ q1 q2 = throwError $ NotConvertible q1 q2
+
+-- |Check that two q-expressions are convertible under a given type
+checkConvertT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
+checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do
+  let names = namesCont c
+      y     = freshVar x names
+      qa    = eval r' a
+      c'    = bindConT c y qa
+      r     = getEnv s c
+      qm    = eval r (App q1 (Var y))
+      qn    = eval r (App q2 (Var y))
+      r''   = bindEnvQ r' x (Var y)
+      qb    = eval r'' b
+  checkConvertT s c' qm qn qb
+checkConvertT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
+  let qa1 = eval r1 a1
+      qa2 = eval r2 a2
+  checkConvertT s c qa1 qa2 U
+  let names = namesCont c
+      y     = freshVar x1 names
+      c'    = bindConT c y qa1
+      r1'   = bindEnvQ r1 x1 (Var y)
+      r2'   = bindEnvQ r2 x2 (Var y)
+      qb1   = eval r1' b1
+      qb2   = eval r2' b2
+  checkConvertT s c' qb1 qb2 U
+checkConvertT s c q1 q2 t = do
+  t' <- checkConvertI s c q1 q2
+  void $ checkConvertI s c t t'
 
 -- |Check that the instantiation of a segment is type checked, namely the expressions provided
 -- match the type of the constant
@@ -165,70 +218,30 @@ checkSegInst s cp cc ips = foldM g cc ips
               c' = bindConD c x t qe -- bind the q-expression of 'e' to variable 'x' in the context 'c'
           return c'
 
--- -- | check that two values are equal and infer their type
--- checkEqualInferT :: LockStrategy s => s -> Cont -> Val -> Val -> TypeCheckM Val
--- checkEqualInferT _ _ U U = return U
--- checkEqualInferT s c (Var x) (Var x') =
---   if x == x'
---   then case getType c x of
---          Just t -> do
---            let env = getEnv s c
---            return $ eval t env
---          Nothing -> throwError $ NoTypeBoundVar x
---   else throwError $ NotConvertible (Var x) (Var x')
--- checkEqualInferT s c (App m1 n1) (App m2 n2) = do
---   v <- checkEqualInferT s c m1 m2
---   case v of
---     Clos (Abs (Dec x a) b) r -> do
---       let va = eval a r
---       checkEqualWithT s c n1 n2 va
---       let nv = eval n1 (getEnv s c)
---           r' = consEVar r x nv
---       return $ eval b r'
---     _ -> throwError $ NotFunctionClos v
--- checkEqualInferT s c v1@Clos {} v2@Clos {} = do
---   checkEqualWithT s c v1 v2 U
---   return U
--- checkEqualInferT _ _ v v' = throwError $ NotConvertible v v'
+-- |Parse and type check a file
+parseAndCheck :: LockStrategy s => s -> String -> Either [String] Cont
+parseAndCheck s str = case pContext (myLexer str) of
+  Left err -> Left (map errorMsg ["failed to parse the file", err])
+  Right ccxt -> case runG (Con.absCtx ccxt) Con.initTree of
+    Left err -> Left $ explain err
+    Right acxt -> case runG (typeCheck acxt) (emptyCont []) of
+      Left err -> Left $ explain err
+      Right c  -> Right c
+  where
+    typeCheck :: AbsContext -> TypeCheckM Cont
+    typeCheck acxt = do
+      mapM_ checkDecl acxt
+      get
 
--- -- | check that two values are equal under a given type
--- checkEqualWithT  :: LockStrategy s => s -> Cont -> Val -> Val -> Val -> TypeCheckM ()
--- checkEqualWithT s c v1 v2 (Clos (Abs (Dec x a) b) r) = do
---   let x' = freshVar x (varsCont c)
---       var = Var x'
---       r' = consEVar r x var
---       vb = eval b r'
---       r0 = getEnv s c
---       m = eval (App v1 var) r0
---       n = eval (App v2 var) r0
---       va = eval a r
---       c' = consCVar c x' va
---   checkEqualWithT s c' m n vb
--- checkEqualWithT s c (Clos (Abs (Dec x1 a1) b1) r1) (Clos (Abs (Dec x2 a2) b2) r2) U = do
---   let va1 = eval a1 r1
---       va2 = eval a2 r2
---   checkEqualWithT s c va1 va2 U
---   let x' = freshVar x1 (varsCont c)
---       var = Var x'
---       vb1 = eval b1 (consEVar r1 x1 var)
---       vb2 = eval b2 (consEVar r2 x2 var)
---       c' = consCVar c x' va1
---   checkEqualWithT s c' vb1 vb2 U
--- checkEqualWithT s c v1 v2 t = do
---   t' <- checkEqualInferT s c v1 v2
---   void $ checkEqualInferT s c t t'
+    checkDecl :: Decl -> TypeCheckM ()
+    checkDecl d = do
+      c <- get
+      c' <- checkD s c d
+      put c'
+      `catchError` (\e -> throwError $ ExtendedWithPos e d)
 
--- -- | parse and type check a file
--- parseCheckFile :: LockStrategy s => s -> String -> Either String (Context, Cont)
--- parseCheckFile s text = case pContext (myLexer text) of
---   Left parseError -> Left (unlines (map errorMsg ["failed to parse the file", parseError]))
---   Right cx ->
---     case runTypeCheckCtx s cx of
---       Left ss  -> Left (unlines (map errorMsg ss))
---       Right ax -> Right (cx, ax)
-
--- -- | type check an expression under given context and locking strategy
--- convertCheckExpr :: LockStrategy s => s -> Context -> Cont -> CExp -> Either String Exp
+-- -- |Type check an expression under given context and locking strategy
+-- convertCheckExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
 -- convertCheckExpr s cc ac ce =
 --   let m = toMap cc in
 --   case runG (absExp ce) m of
@@ -237,8 +250,8 @@ checkSegInst s cp cc ips = foldM g cc ips
 --                   Left err -> Left $ unlines . map errorMsg $ explain err
 --                   Right _  -> Right e
 
--- -- | type check an declaration/definition under given context and locking strategy
--- convertCheckDecl :: LockStrategy s => s -> Context -> Cont -> CDecl -> Either String Decl
+-- -- |Type check an declaration/definition under given context and locking strategy
+-- convertCheckDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Decl
 -- convertCheckDecl s cc ac cd =
 --   let m = toMap cc in
 --   case runG (absDecl cd) m of
@@ -247,30 +260,10 @@ checkSegInst s cp cc ips = foldM g cc ips
 --                   Left err -> Left $ unlines . map errorMsg $ explain err
 --                   _        -> Right d
 
--- toMap :: Context -> Map.Map String Id
+-- toMap :: Abs.Context -> Map.Map String Id
 -- toMap (Ctx ds) = Map.unions (map toMapD ds)
 
 -- toMapD :: CDecl -> Map.Map String Id
 -- toMapD (CDec x _)   = Map.singleton (idStr x) x
 -- toMapD (CDef x _ _) = Map.singleton (idStr x) x
 
--- runTypeCheckCtx :: LockStrategy s => s -> Context -> Either [String] Cont
--- runTypeCheckCtx s ctx@(Ctx _) =
---   case runG (absCtx ctx) Map.empty of
---     Left err -> Left $ explain err
---     Right ds ->
---       case runG (typeCheckCtx ds) CNil of
---         Left err -> Left $ explain err
---         Right c  -> Right c
---   where
---     typeCheckCtx :: [Decl] -> TypeCheckM Cont
---     typeCheckCtx ds = do
---       mapM_ checkAndUpdateDecl ds
---       get
-
---     checkAndUpdateDecl :: Decl -> TypeCheckM ()
---     checkAndUpdateDecl d = do
---       c <- get
---       c' <- checkD s c d
---       put c'
---       `catchError` (\e -> throwError $ ExtendedWithPos e d)

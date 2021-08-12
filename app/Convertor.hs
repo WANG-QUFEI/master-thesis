@@ -76,6 +76,9 @@ instance InformativeError ConversionError where
         printf "  found at position: %s" (show pos),
         printf "  in namespace: %s" (strnsp ns)]
 
+initTree :: Tree
+initTree = Node TS (Abs.Id ((-1, -1), "_top_")) M.empty 
+
 -- |Name of an identifier
 idName :: Abs.Id -> String
 idName (Abs.Id (_, s)) = s

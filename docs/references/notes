@@ -32,8 +32,6 @@
 
       [ x : Nat] [ y : Nat ] [x : Bool] ... x....
 
-
-
  G =  [x : Nat] [y : Nat = x] [z: Bool]
 
  G context
