@@ -6,11 +6,9 @@ Portability     : POSIX
 -}
 module Main (main) where
 
-import           Classes
 import           Commands
-import           Core.Abs
+import qualified Core.Abs                 as Abs
 import           Lang
-import qualified Locking                  as L
 import           Message
 import           TypeChecker
 
@@ -27,15 +25,15 @@ import qualified Text.Show.Unicode        as U
 data ReplState = ReplState
   { filePath     :: FilePath,            -- path of the loaded file
     fileContent  :: T.Text,              -- content of the loaded file
-    concretCtx   :: Context,             -- concret context of the loaded file
+    concretCtx   :: Abs.Context,         -- concret context of the loaded file
     context      :: Cont,                -- abstract context of the loaded file
-    lockStrategy :: L.SimpleLock,        -- locking/unlocking variables
+    lockStrategy :: SimpleLock,          -- locking/unlocking variables
     bindMap      :: Map.Map String Exp,  -- a map binds well-typed expressions to names
     continue     :: Bool                 -- whether to continue execution
   }
 
 initState :: ReplState
-initState = ReplState "" T.empty (Ctx []) CNil L.LockNone (Map.fromList [("it", U)]) True
+initState = ReplState "" T.empty (Abs.Ctx []) (emptyCont []) LockNone (Map.fromList [("it", U)]) True
 
 main :: IO ()
 main = do
@@ -88,8 +86,8 @@ handleLoad fp = do
     ls <- lift . gets $ lockStrategy
     t  <- liftIO (TI.readFile fp)
     let ts = T.unpack t
-    case parseCheckFile ls ts of
-      Left err -> outputStrLn err
+    case parseAndCheck ls ts of
+      Left err -> outputStrLn (unlines err)
       Right (cx, ac) -> do
         outputStrLn $ okayMsg "file loaded!"
         lift $ modify (\s -> s {filePath    = fp,
@@ -108,18 +106,18 @@ handleShow SFileContent = do
   outputStrLn (T.unpack fc)
 handleShow SConsants = do
   ac <- lift $ gets context
-  outputStrLn $ U.ushow (varsCont ac)
+  outputStrLn $ U.ushow (namesCont ac)
 handleShow SLocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
-  let sl = getConstsLocked ls ac
+  let sl = lockedNames ls ac
   outputStrLn . U.ushow $ sl
   outputStrLn $ "Lock strategy: " ++ U.ushow ls
 
 handleShow SUnlocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
-  let su = getConstsUnLocked ls ac
+  let su = unlockedNames ls ac
   outputStrLn . U.ushow $ su
   outputStrLn $ "Lock strategy: " ++ U.ushow ls
 
@@ -133,33 +131,33 @@ handleShow (SName name) = do
     Just e  -> outputStrLn (U.ushow e)
 
 handleLock :: LockOption -> InputT (StateT ReplState IO) ()
-handleLock LockAll = do
-  let ls = L.LockAll
+handleLock AllLock = do
+  let ls = LockAll
   showChangeOfLock ls
   lift . modify $ \s -> s {lockStrategy = ls}
 
-handleLock LockNone = do
-  let ls = L.LockNone
+handleLock NoneLock = do
+  let ls = LockNone
   showChangeOfLock ls
   lift . modify $ \s -> s {lockStrategy = ls}
-handleLock (LockAdd ss) = do
+handleLock (AddLock ss) = do
   ls <- lift . gets $ lockStrategy
   let ls' = addLock ls ss
   showChangeOfLock ls'
   lift . modify $ \s -> s {lockStrategy = ls'}
-handleLock (LockRemove ss) = do
+handleLock (RemoveLock ss) = do
   ls <- lift . gets $ lockStrategy
   let ls' = removeLock ls ss
   showChangeOfLock ls'
   lift . modify $ \s -> s {lockStrategy = ls'}
 
-handleBind :: String -> CExp -> InputT (StateT ReplState IO) ()
+handleBind :: String -> Abs.Exp -> InputT (StateT ReplState IO) ()
 handleBind x cexp = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
-  case convertCheckExpr ls cx ac cexp of
+  case checkExpr ls cx ac cexp of
     Left err -> outputStr err
     Right e  ->
       let m' = Map.insert x e m
@@ -170,7 +168,7 @@ handleCheck (CExp cexp) = do
   ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
   ac <- lift $ gets context
-  case convertCheckExpr ls cx ac cexp of
+  case checkExpr ls cx ac cexp of
     Left err -> do
       outputStrLn (errorMsg "error: invalid expression!")
       outputStr err
@@ -193,12 +191,12 @@ handleCheck (CDecl cdecl) = do
       lift $ modify (\s -> s {concretCtx = cx',
                               context = ac'})
   where
-    expandContext :: (Context, Cont) -> (CDecl, Decl) -> (Context, Cont)
-    expandContext (Ctx ds, ac) (cd, d) =
-      let cx = Ctx (ds ++ [cd])
+    expandContext :: (Abs.Context, Cont) -> (Abs.Decl, Decl) -> (Abs.Context, Cont)
+    expandContext (Abs.Ctx ds, ac) (cd, d) =
+      let cx = Abs.Ctx (ds ++ [cd])
           ac' = case d of
-            Dec x a   -> CConsVar ac x a
-            Def x a b -> CConsDef ac x a b
+            Dec x a   -> bindConT ac x a
+            Def x a b -> bindConD ac x a b
       in (cx, ac')
 handleCheck (Const var) = do
   ls <- lift . gets $ lockStrategy
@@ -207,7 +205,7 @@ handleCheck (Const var) = do
     Left errmsg -> outputStr errmsg
     Right _     -> outputStrLn "okay~"
 
-handleTypeOf :: Either String CExp -> InputT (StateT ReplState IO) ()
+handleTypeOf :: Either String Abs.Exp -> InputT (StateT ReplState IO) ()
 handleTypeOf (Left name) = do
   ac <- lift . gets $ context
   m <- lift . gets $ bindMap
@@ -220,7 +218,7 @@ handleTypeOf (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
-  case convertCheckExpr ls cx ac cexp of
+  case checkExpr ls cx ac cexp of
     Left err -> outputStrLn err
     Right e  ->
       let te = typeOf ac e
@@ -231,12 +229,12 @@ handleHeadRed = do
   ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
   let Just e = Map.lookup "it" m
-      e' = headRed ac e
+      e' = hReduct ac e
   outputStrLn . U.ushow $ e'
   let m' = Map.insert "it" e' m
   lift . modify $ \s -> s {bindMap = m'}
 
-handleUnfold :: Either String CExp -> InputT (StateT ReplState IO) ()
+handleUnfold :: Either String Abs.Exp -> InputT (StateT ReplState IO) ()
 handleUnfold (Left name) = do
   ls <- lift . gets $ lockStrategy
   ac <- lift . gets $ context
@@ -250,13 +248,13 @@ handleUnfold (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
-  case convertCheckExpr ls cx ac cexp of
+  case checkExpr ls cx ac cexp of
     Left err -> outputStrLn err
     Right e  ->
       let e' = unfold ls ac e
       in outputStrLn (U.ushow e')
 
-showChangeOfLock :: L.SimpleLock -> InputT (StateT ReplState IO) ()
+showChangeOfLock :: SimpleLock -> InputT (StateT ReplState IO) ()
 showChangeOfLock lockNew = do
   lockNow <- lift . gets $ lockStrategy
   outputStrLn "Change lock strategy"
@@ -264,11 +262,11 @@ showChangeOfLock lockNew = do
   outputStrLn $ "  to: " ++ U.ushow lockNew
 
 handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
-handleFindMiniConsts x = do
-  ac <- lift . gets $ context
-  case minimumConsts ac x of
-    Left err -> outputStrLn err
-    Right ss -> outputStrLn (U.ushow ss)
+handleFindMiniConsts x = undefined
+  -- ac <- lift . gets $ context
+  -- case minimumConsts ac x of
+  --   Left err -> outputStrLn err
+  --   Right ss -> outputStrLn (U.ushow ss)
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"

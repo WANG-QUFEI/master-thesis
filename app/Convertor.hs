@@ -10,7 +10,6 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.HashMap.Strict.InsOrd as M
 
-import           Classes
 import           Core.Abs                   (Id (..))
 import qualified Core.Abs                   as Abs
 import           Core.Print                 (printTree)
@@ -47,7 +46,7 @@ data ConversionError
   | InvalidSegConstRef Namespace [Id] Id
   deriving (Show)
 
-instance InformativeError ConversionError where
+instance Lang.InformativeError ConversionError where
   explain (DuplicateName ns id1 id2) =
     ["Duplicated declaration of name!",
      printf "  name '%s' has been declared at %s," (idName id1) (show $ idPos id1),
@@ -77,7 +76,7 @@ instance InformativeError ConversionError where
         printf "  in namespace: %s" (strnsp ns)]
 
 initTree :: Tree
-initTree = Node TS (Abs.Id ((-1, -1), "_top_")) M.empty 
+initTree = Node TS (Abs.Id ((-1, -1), "_top_")) M.empty
 
 -- |Name of an identifier
 idName :: Abs.Id -> String
@@ -174,6 +173,9 @@ segfromPath [x]  = Lang.SRef x
 segfromPath (x:xs) =
   let s = segfromPath xs
   in Lang.SNest s x
+
+ctxTree :: Abs.Context -> Tree
+ctxTree = undefined
 
 -- |Transform a concrete context into the abstract context.
 absCtx :: Abs.Context -> ConvertM Lang.AbsContext

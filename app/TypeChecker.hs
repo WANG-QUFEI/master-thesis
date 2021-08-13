@@ -11,8 +11,8 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 
-import           Classes
 import qualified Convertor                  as Con
+import qualified Core.Abs                   as Abs
 import           Core.Par
 import           Lang
 import           Message
@@ -219,14 +219,14 @@ checkSegInst s cp cc ips = foldM g cc ips
           return c'
 
 -- |Parse and type check a file
-parseAndCheck :: LockStrategy s => s -> String -> Either [String] Cont
+parseAndCheck :: LockStrategy s => s -> String -> Either [String] (Abs.Context, Cont)
 parseAndCheck s str = case pContext (myLexer str) of
   Left err -> Left (map errorMsg ["failed to parse the file", err])
-  Right ccxt -> case runG (Con.absCtx ccxt) Con.initTree of
+  Right cxt -> case runG (Con.absCtx cxt) Con.initTree of
     Left err -> Left $ explain err
-    Right acxt -> case runG (typeCheck acxt) (emptyCont []) of
+    Right axt -> case runG (typeCheck axt) (emptyCont []) of
       Left err -> Left $ explain err
-      Right c  -> Right c
+      Right c  -> Right (cxt, c)
   where
     typeCheck :: AbsContext -> TypeCheckM Cont
     typeCheck acxt = do
@@ -240,30 +240,12 @@ parseAndCheck s str = case pContext (myLexer str) of
       put c'
       `catchError` (\e -> throwError $ ExtendedWithPos e d)
 
--- -- |Type check an expression under given context and locking strategy
--- convertCheckExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
--- convertCheckExpr s cc ac ce =
---   let m = toMap cc in
---   case runG (absExp ce) m of
---     Left err -> Left $ unlines . map errorMsg $ explain err
---     Right e  -> case runG (checkInferT s ac e) CNil of
---                   Left err -> Left $ unlines . map errorMsg $ explain err
---                   Right _  -> Right e
+-- |Type check an expression under given context and locking strategy
+checkExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
+checkExpr s cc ac ce = undefined
 
--- -- |Type check an declaration/definition under given context and locking strategy
--- convertCheckDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Decl
--- convertCheckDecl s cc ac cd =
---   let m = toMap cc in
---   case runG (absDecl cd) m of
---     Left err -> Left $ unlines . map errorMsg $ explain err
---     Right d  -> case runG (checkD s ac d) CNil of
---                   Left err -> Left $ unlines . map errorMsg $ explain err
---                   _        -> Right d
+-- |Type check an declaration/definition under given context and locking strategy
+convertCheckDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Decl
+convertCheckDecl s cc ac cd = undefined
 
--- toMap :: Abs.Context -> Map.Map String Id
--- toMap (Ctx ds) = Map.unions (map toMapD ds)
-
--- toMapD :: CDecl -> Map.Map String Id
--- toMapD (CDec x _)   = Map.singleton (idStr x) x
--- toMapD (CDef x _ _) = Map.singleton (idStr x) x
 

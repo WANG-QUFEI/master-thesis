@@ -9,6 +9,8 @@ module Lang where
 import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 
 -- * BEGIN_SECTION: Basic Data types
 
@@ -78,6 +80,197 @@ data Env  = Env {
   ens    :: Namespace,  -- ^ namespace of the environment
   mapEnv :: Map.HashMap Name ENode
   } deriving Eq
+
+class InformativeError e where
+  explain :: e -> [Name]
+
+class LockStrategy s where
+  -- ^ get environment from a type checking context
+  getEnv           :: s -> Cont -> Env
+  -- ^ add a list of names to be locked
+  addLock          :: s -> [Name] -> s
+  -- ^ remove a list of names to be locked
+  removeLock       :: s -> [Name] -> s
+  -- ^ get the names locked from the context
+  getNamesLocked   :: s -> Cont -> [Name]
+  -- ^ get the names unlocked from the context
+  getNamesUnLocked :: s -> Cont -> [Name]
+
+-- | A simple locking/unlocking strategy for constants
+-- LockAll  : lock all constants
+-- LockNone : lock none constants
+-- LockList <varlist>   : a list of constants that are locked
+-- UnLockList <varlist> : a list of constants that are unlocked
+data SimpleLock = LockAll
+                | LockNone
+                | LockList [Name]
+                | UnLockList [Name]
+                deriving (Show)
+
+instance LockStrategy SimpleLock where
+  getEnv LockAll         = lockAll
+  getEnv LockNone        = lockNone
+  getEnv (LockList ls)   = locklist (Set.fromList ls)
+  getEnv (UnLockList ls) = unlocklist (Set.fromList ls)
+
+  addLock LockAll        _  = LockAll
+  addLock LockNone       xs = LockList xs
+  addLock (LockList xs') xs =
+    let s1 = Set.fromList xs'
+        s2 = Set.fromList xs
+        s3 = Set.union s1 s2
+    in LockList (Set.toList s3)
+  addLock (UnLockList xs') xs =
+    let s1 = Set.fromList xs'
+        s2 = Set.fromList xs
+        s3 = Set.difference s1 s2
+    in UnLockList (Set.toList s3)
+
+  removeLock LockAll xs = UnLockList xs
+  removeLock LockNone _ = LockNone
+  removeLock (LockList xs') xs =
+    let s1 = Set.fromList xs'
+        s2 = Set.fromList xs
+        s3 = Set.difference s1 s2
+    in LockList (Set.toList s3)
+  removeLock (UnLockList xs') xs =
+    let s1 = Set.fromList xs'
+        s2 = Set.fromList xs
+        s3 = Set.union s1 s2
+    in UnLockList (Set.toList s3)
+
+  getNamesLocked = lockedNames
+
+  getNamesUnLocked = unlockedNames
+
+lockAll :: Cont -> Env
+lockAll (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
+  where g :: Name -> CNode -> Env -> Env
+        g x cn@Cs {} r =
+          let c' = nodeToCont (ns ++ [x]) cn
+              r' = lockAll c'
+              en = Es (mapEnv r')
+          in bindEnvS r x en
+        g _ _ r = r
+
+lockNone :: Cont -> Env
+lockNone (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
+  where g :: Name -> CNode -> Env -> Env
+        g _ Ct {} r = r
+        g x (Cd a b) r = bindEnvD r x a b
+        g x cn@Cs {} r =
+          let c' = nodeToCont (ns ++ [x]) cn
+              r' = lockNone c'
+              en = Es (mapEnv r')
+          in bindEnvS r x en
+
+locklist :: Set Name -> Cont -> Env
+locklist lnames (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
+  where g :: Name -> CNode -> Env -> Env
+        g _ Ct {} r = r
+        g x (Cd a b) r =
+          let x' = qualifiedName ns x
+          in if Set.member x' lnames
+             then r
+             else bindEnvD r x a b
+        g x cn@Cs {} r =
+          let x' = qualifiedName ns x
+              c' = nodeToCont (ns ++ [x]) cn
+          in if Set.member x' lnames
+             then let r' = lockAll c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+             else let r' = locklist lnames c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+
+unlocklist :: Set Name -> Cont -> Env
+unlocklist unames (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
+  where g :: Name -> CNode -> Env -> Env
+        g _ Ct {} r = r
+        g x (Cd a b) r =
+          let x' = qualifiedName ns x
+          in if Set.notMember x' unames
+             then r
+             else bindEnvD r x a b
+        g x cn@Cs {} r =
+          let x' = qualifiedName ns x
+              c' = nodeToCont (ns ++ [x]) cn
+          in if Set.member x' unames
+             then let r' = lockNone c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+             else let r' = unlocklist unames c'
+                      en = Es (mapEnv r')
+                  in bindEnvS r x en
+
+lockedNames :: SimpleLock -> Cont -> [Name]
+lockedNames LockAll c = allNames c
+lockedNames LockNone _ = []
+lockedNames ll@(LockList ls) (Cont ns cm) =
+  let lnames = Set.fromList ls
+  in OrdM.foldrWithKey (g lnames) [] cm
+  where
+    g :: Set Name -> Name -> CNode -> [Name] -> [Name]
+    g names x v xs =
+      let x' = qualifiedName ns x
+      in if pSegnode v
+         then if Set.member x' names
+              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              else let xs' = lockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+         else if Set.member x' names
+              then x' : xs else xs
+lockedNames ul@(UnLockList ls) (Cont ns cm) =
+  let names = Set.fromList ls
+  in OrdM.foldrWithKey (g names) [] cm
+  where
+    g :: Set Name -> Name -> CNode -> [Name] -> [Name]
+    g names x v xs =
+      let x' = qualifiedName ns x
+      in if pSegnode v
+         then if Set.member x' names
+              then xs
+              else let xs' = lockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+         else if not $ Set.member x' names
+              then x' : xs else xs
+
+unlockedNames :: SimpleLock -> Cont -> [Name]
+unlockedNames LockNone cont = allNames cont
+unlockedNames LockAll _ = []
+unlockedNames ll@(LockList ls) (Cont ns cm) =
+  let names = Set.fromList ls
+  in OrdM.foldrWithKey (g names) [] cm
+  where
+    g :: Set Name -> Name -> CNode -> [Name] -> [Name]
+    g names x v xs =
+      let x' = qualifiedName ns x
+      in if pSegnode v
+         then if Set.member x' names -- segment is locked
+              then xs
+              else let xs' = unlockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+         else if not $ Set.member x' names
+              then x' : xs else xs
+unlockedNames ul@(UnLockList ls) (Cont ns cm) =
+  let names = Set.fromList ls
+  in OrdM.foldrWithKey (g names) [] cm
+  where
+    g :: Set Name -> Name -> CNode -> [Name] -> [Name]
+    g names x v xs =
+      let x' = qualifiedName ns x
+      in if pSegnode v
+         then if Set.member x' names
+              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              else let xs' = unlockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+         else if Set.member x' names
+              then x' : xs else xs
+
+allNames :: Cont -> [Name]
+allNames (Cont ns cm) = OrdM.foldrWithKey g [] cm
+  where g :: Name -> CNode -> [Name] -> [Name]
+        g x v xs = let x' = qualifiedName ns x in
+          if pSegnode v
+          then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+          else x' : xs
 
 -- * END_SECTION
 
@@ -267,7 +460,7 @@ getType c x =
   in case fromJust mn of
     Ct t   -> t
     Cd t _ -> t
-    Cs {}  -> error "cannot get the type of a segment"
+    Cs {}  -> error "error: getType"
 
 -- |Get the definition of a variable from a context
 getDef :: Cont -> Name -> Exp
@@ -276,18 +469,34 @@ getDef c x =
   in case fromJust mn of
     Ct _   -> Var x
     Cd _ d -> d
-    Cs _   -> error "cannot get the def of a segment"
+    Cs _   -> error "error: getDef"
+
+-- |Get the definition of a variable from an environment
+getDef' :: Env -> Name -> Exp
+getDef' r x =
+  case Map.lookup x (mapEnv r) of
+    Nothing       -> Var x
+    Just (Ed _ d) -> d
+    _             -> error "error: getDef'"
 
 -- |Get the names of a type checking context (excluding the potential sub-segments)
 namesCont :: Cont -> [Name]
 namesCont (Cont _ cm) = OrdM.keys cm
 
 -- |Generate a fresh name based on a list of names
-freshVar :: String -> [String] -> String
+freshVar :: Name -> [Name] -> Name
 freshVar x xs
   | x `elem` xs = freshVar (x ++ "'") xs
   | x == "" = freshVar "_x" xs
   | otherwise = x
+
+-- |Split a context by the name of a declaration
+splitCont :: Name -> Cont -> Cont
+splitCont x c =
+  let ns = cns c
+      ls = OrdM.toList (mapCont c)
+      ls' = takeWhile (\(x', _) -> x' /= x) ls
+  in Cont ns (OrdM.fromList ls')
 
 -- * END_SECTION
 
@@ -330,5 +539,18 @@ evalSeg r sg =
       r' = getSegByPath r rpath
   in foldr (\(q, n) r0 -> bindEnvQ r0 n q) r' qps
 
+-- |Instantiate a segment with expressions
+instSeg :: Cont -> Seg -> Cont
+instSeg c sg =
+  let (sg', ips) = breakSeg sg
+      r = getEnv LockNone c
+      qps = map (mfst $ eval r) ips
+      rpath = revSegPath sg'
+      c' = getSegByPath c rpath
+  in foldr g c' qps
+  where g :: (QExp, Name) -> Cont -> Cont
+        g (q, x) cont =
+          let Just (Ct t) = OrdM.lookup x (mapCont cont)
+          in bindConD cont x t q
 
 -- * END_SECTION

@@ -11,23 +11,22 @@ module Commands
   , LockOption(..)
   , getCommand
   , hReduct
-  -- , unfold
-  -- , typeOf
+  , typeOf
+  , unfold
+  , checkConstant
   -- , minimumConsts
-  -- , checkConstant
    ) where
 
-import           Classes
-import qualified Core.Abs as Abs
-import qualified Core.Par as Par
+import qualified Core.Abs                   as Abs
+import qualified Core.Par                   as Par
 import           Lang
-import qualified Locking as L
 import           Message
 import           Monads
 import           TypeChecker
 
 import           Control.Monad
 import           Control.Monad.Except
+import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
 import           Data.Maybe
 import           Debug.Trace
@@ -60,10 +59,10 @@ data CheckItem = CExp  Abs.Exp    -- check an expression
                | Const String     -- check a constant
                deriving (Show)
 
-data LockOption = LockAll
-                | LockNone
-                | LockAdd [String]
-                | LockRemove [String]
+data LockOption = AllLock
+                | NoneLock
+                | AddLock [String]
+                | RemoveLock [String]
                 deriving (Show)
 
 -- | Parse a string into a command, return an error message if no command
@@ -111,14 +110,14 @@ getCommand str =
 
     parseLock :: [String] -> Either String Cmd
     parseLock tws = case tws of
-      ["-all"]             -> return $ Lock LockAll
-      ["-none"]            -> return $ Lock LockNone
+      ["-all"]             -> return $ Lock AllLock
+      ["-none"]            -> return $ Lock NoneLock
       ["-add", varlist]    -> do
         ss <- parseList varlist
-        return $ Lock (LockAdd ss)
+        return $ Lock (AddLock ss)
       ["-remove", varlist] -> do
         ss <- parseList varlist
-        return $ Lock (LockRemove ss)
+        return $ Lock (RemoveLock ss)
       _ -> Left "invalid command, type ':?' for a detailed description of the command"
 
     parseBind :: [String] -> Either String Cmd
@@ -174,6 +173,23 @@ getCommand str =
     parseMiniConsts [var] = return $ FindMinimumConsts var
     parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
+-- |Read a quasi-expression back into an expression of the normal form
+readBack :: [String] -> QExp -> Exp
+readBack _  U = U
+readBack _  (Var x) = Var x
+readBack ss (App a b) = App (readBack ss a) (readBack ss b)
+readBack ss (Clos (Abs "" a b) r) =
+  let a' = readBack ss (eval r a)
+      b' = readBack ss (eval r b)
+  in Abs "" a' b'
+readBack ss (Clos (Abs x a b) r) =
+  let y  = freshVar x ss
+      a' = readBack ss (eval r a)
+      r' = bindEnvQ r x (Var y)
+      b' = readBack (y:ss) (eval r' b)
+  in Abs y a' b'
+readBack _ _ = error "error: readBack"
+
 -- |Apply head reduction on an expression
 hReduct :: Cont -> Exp -> Exp
 hReduct _ U = U
@@ -201,70 +217,61 @@ incrEval c (App e1 e2) =
       ns = cns c
       q2 = eval (emptyEnv ns) e2
   in appVal q1 q2
+incrEval c (SegVar seg x) =
+  let r  = getEnv LockNone c
+      r' = evalSeg r seg
+      dx = getDef' r' x
+  in eval (emptyEnv . ens $ r') dx
 incrEval _ _ = error "error: incrEval"
 
--- |Read a quasi-expression back into an expression of the normal form
-readBack :: [String] -> QExp -> Exp
-readBack _  U = U
-readBack _  (Var x) = Var x 
-readBack ss (App a b) = App (readBack ss a) (readBack ss b)
-readBack ss (Clos (Abs "" a b) r) =
-  let a' = readBack ss (eval r a)
-      b' = readBack ss (eval r b)
-  in Abs "" a' b' 
-readBack ss (Clos (Abs x a b) r) =
-  let y  = freshVar x ss
-      a' = readBack ss (eval r a)
-      r' = bindEnvQ r x (Var y)
-      b' = readBack (y:ss) (eval r' b)
-  in Abs y a' b'
-readBack _ _ = error "error: readBack"
+typeOf :: Cont -> Exp -> Exp
+typeOf c (Let x a b e) =
+  let c' = bindConD c x a b
+      e' = typeOf c' e
+  in Let x a b e'
+typeOf c e = readBack (namesCont  c) (typeOfV c e)
 
+typeOfV :: Cont -> Exp -> QExp
+typeOfV _ U = U
+typeOfV c (Var x) =
+  let t = getType c x
+  in eval (getEnv LockAll c) t
+typeOfV c (SegVar sg x) =
+  let c' = instSeg c sg
+      t  = getType c' x
+  in eval (getEnv LockAll c') t
+typeOfV c (App e1 e2) =
+  let t1 = typeOfV c e1
+      q2 = eval (emptyEnv (cns c)) e2
+  in appVal t1 q2
+typeOfV _ _ = error "error: typeOfV"
 
+unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
+unfold s c e =
+  let q = eval (getEnv s c) e
+  in readBack (namesCont c) q
 
--- typeOf :: Cont -> Exp -> Exp
--- typeOf c (Abs d@(Def x a b) e) =
---   let c' = CConsDef c x a b
---       e' = typeOf c' e
---   in Abs d e'
--- typeOf c e = readBack (varsCont c) (typeOfV c e)
+checkConstant :: LockStrategy l => l -> Cont -> String -> Either String ()
+checkConstant ls c s =
+  case locate s of
+    Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
+    Just (_, d) ->
+      case runG (checkD ls c d) (emptyCont (cns c)) of
+        Left err ->
+          let errmsg = explain err
+          in Left (unlines (map errorMsg errmsg))
+        Right _ -> return ()
+  where
+    locate :: String -> Maybe (Cont, Decl)
+    locate x = case OrdM.lookup x (mapCont c) of
+      Just (Ct a) ->
+        let c' = splitCont x c
+        in Just (c', Dec x a)
+      Just (Cd a b) ->
+        let c' = splitCont x c
+        in Just (c', Def x a b)
+      _ -> Nothing
 
--- typeOfV :: Cont -> Exp -> Val
--- typeOfV c (Var x)     =
---   let Just a = getType c x
---   in eval a (getEnv L.LockNone c)
--- typeOfV _ U           = U
--- typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
--- typeOfV _ e           = error ("not typeable expression: " ++ show e)
-
--- unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
--- unfold s c e =
---   let ve = eval e (getEnv s c)
---   in readBack (varsCont c) ve
-
--- checkConstant :: LockStrategy l => l -> Cont -> String -> Either String ()
--- checkConstant ls c s =
---   case locate c s of
---     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
---     Just (_, d) ->
---       case runG (checkDecl ls c d) CNil of
---         Left err ->
---           let errmsg = explain err
---           in Left (unlines (map errorMsg errmsg))
---         Right _ -> return ()
-
--- minimumConsts :: Cont -> String -> Either String [String]
--- minimumConsts c s =
---   case locate c s of
---     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
---     Just (c', d) ->
---       case runG (trialAndUnfold [] L.LockAll c' d) CNil of
---         Left err ->
---           let errmsg = explain err
---           in Left (unlines (map errorMsg errmsg))
---         Right ss -> Right ss
-
--- locate :: Cont -> String -> Maybe (Cont, Decl)
 -- locate c s = case c of
 --   CNil -> Nothing
 --   CConsVar c' x a ->
@@ -275,6 +282,17 @@ readBack _ _ = error "error: readBack"
 --     if x == s
 --     then Just (c', Def x a e)
 --     else locate c' s
+
+-- minimumConsts :: Cont -> String -> Either String [String]
+-- minimumConsts c s =
+--   case locate c s of
+--     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
+--     Just (c', d) ->
+--       case runG (trialAndUnfold [] LockAll c' d) CNil of
+--         Left err ->
+--           let errmsg = explain err
+--           in Left (unlines (map errorMsg errmsg))
+--         Right ss -> Right ss
 
 -- trialAndUnfold :: LockStrategy s => [String] -> s -> Cont -> Decl -> TypeCheckM [String]
 -- trialAndUnfold ss ls c d = do
