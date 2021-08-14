@@ -1,14 +1,16 @@
-Pow : * -> * =
-  [X : *] X -> * ;
+sg1 = seg
+  Pow : * -> * =
+    [X : *] X -> *
 
-T : * -> * =
-  [X : *] Pow (Pow X) ;
+  T : * -> * =
+    [X : *] Pow (Pow X)
 
-⊥ : * = [X : *] X ;
+⊥ : * = [X : *] X
 
-funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
+funT : [X : *] [Y : *] (X -> Y) -> sg1.T X -> sg1.T Y =
   [X : *][Y : *][f : X -> Y][t : T X][g : Y -> *] t ([x : X] g (f x)) ;
 
+{-
 ¬ : * -> * =
   [X : *] X -> ⊥ ;
 
@@ -45,3 +47,4 @@ loop : ⊥
   = lem2 lem3 ;
 
 delta2 : U -> U = [z : U] delta (delta z) ;
+-}

@@ -18,19 +18,22 @@ data Context = Ctx [Decl]
 
 data Exp
     = U
-    | Var Id
-    | SegVar Seg [Exp] Id
+    | Var Ref
+    | SegVar Ref [Exp] Id
     | App Exp Exp
     | Arr Exp Exp
     | Abs Id Exp Exp
     | Let Id Exp Exp Exp
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Decl = Dec Id Exp | Def Id Exp Exp | DSeg Id Seg
+data Decl
+    = Dec Id Exp
+    | Def Id Exp Exp
+    | Seg Id [Decl]
+    | SegInst Id Ref [Exp]
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
-data Seg
-    = SegRef Id | SegNest Seg Id | SegInst Seg [Exp] | SegDef [Decl]
+data Ref = Ri Id | Rn Ref Id
   deriving (C.Eq, C.Ord, C.Show, C.Read)
 
 newtype Id = Id ((C.Int, C.Int), String)

@@ -87,7 +87,7 @@ handleLoad fp = do
     t  <- liftIO (TI.readFile fp)
     let ts = T.unpack t
     case parseAndCheck ls ts of
-      Left err -> outputStrLn (unlines err)
+      Left err -> outputStr (unlines err)
       Right (cx, ac) -> do
         outputStrLn $ okayMsg "file loaded!"
         lift $ modify (\s -> s {filePath    = fp,
@@ -181,23 +181,18 @@ handleCheck (CDecl cdecl) = do
   ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
   ac <- lift $ gets context
-  case convertCheckDecl ls cx ac cdecl of
+  case checkDecl ls cx ac cdecl of
     Left err -> do
       outputStrLn (errorMsg "error: invalid declaration/definition!")
       outputStr err
-    Right d  -> do
+    Right ac'  -> do
       outputStrLn (okayMsg "okay~")
-      let (cx', ac') = expandContext (cx, ac) (cdecl, d)
-      lift $ modify (\s -> s {concretCtx = cx',
+      lift $ modify (\s -> s {concretCtx = addDecl cx cdecl,
                               context = ac'})
   where
-    expandContext :: (Abs.Context, Cont) -> (Abs.Decl, Decl) -> (Abs.Context, Cont)
-    expandContext (Abs.Ctx ds, ac) (cd, d) =
-      let cx = Abs.Ctx (ds ++ [cd])
-          ac' = case d of
-            Dec x a   -> bindConT ac x a
-            Def x a b -> bindConD ac x a b
-      in (cx, ac')
+    addDecl :: Abs.Context -> Abs.Decl -> Abs.Context
+    addDecl (Abs.Ctx ds) d = Abs.Ctx (ds ++ [d])
+
 handleCheck (Const var) = do
   ls <- lift . gets $ lockStrategy
   ac <- lift . gets $ context
@@ -262,7 +257,7 @@ showChangeOfLock lockNew = do
   outputStrLn $ "  to: " ++ U.ushow lockNew
 
 handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
-handleFindMiniConsts x = undefined
+handleFindMiniConsts _ = outputStrLn "not supported operation"
   -- ac <- lift . gets $ context
   -- case minimumConsts ac x of
   --   Left err -> outputStrLn err

@@ -13,9 +13,9 @@ import qualified Data.HashMap.Strict.InsOrd as OrdM
 
 import qualified Convertor                  as Con
 import qualified Core.Abs                   as Abs
+import           Core.Layout                (resolveLayout)
 import           Core.Par
 import           Lang
-import           Message
 import           Monads
 
 -- | monad for type-checking
@@ -115,6 +115,7 @@ checkT _ _ e v = throwError $ TypeNotMatch e v
 
 -- |Check that an expression is well typed and infer its type
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
+checkI _ _ U = return U
 checkI s c (Var x) = do
   let t = getType c x
       r = getEnv s c
@@ -220,7 +221,7 @@ checkSegInst s cp cc ips = foldM g cc ips
 
 -- |Parse and type check a file
 parseAndCheck :: LockStrategy s => s -> String -> Either [String] (Abs.Context, Cont)
-parseAndCheck s str = case pContext (myLexer str) of
+parseAndCheck s str = case pContext (resolveLayout True  $ myLexer str) of
   Left err -> Left (map errorMsg ["failed to parse the file", err])
   Right cxt -> case runG (Con.absCtx cxt) Con.initTree of
     Left err -> Left $ explain err
@@ -229,12 +230,12 @@ parseAndCheck s str = case pContext (myLexer str) of
       Right c  -> Right (cxt, c)
   where
     typeCheck :: AbsContext -> TypeCheckM Cont
-    typeCheck acxt = do
-      mapM_ checkDecl acxt
+    typeCheck axt = do
+      mapM_ checkUpdate axt
       get
 
-    checkDecl :: Decl -> TypeCheckM ()
-    checkDecl d = do
+    checkUpdate :: Decl -> TypeCheckM ()
+    checkUpdate d = do
       c <- get
       c' <- checkD s c d
       put c'
@@ -242,10 +243,27 @@ parseAndCheck s str = case pContext (myLexer str) of
 
 -- |Type check an expression under given context and locking strategy
 checkExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
-checkExpr s cc ac ce = undefined
+checkExpr s cc cont ce =
+  let Right tree = runG (Con.ctxTree cc) Con.initTree
+  in case runG (Con.absExp (cns cont) ce) tree of
+    Left err -> Left $ unlines . map errorMsg $ explain err
+    Right e  -> case runG (soundExpr cont e) (emptyCont (cns cont)) of
+                  Left err -> Left $ unlines . map errorMsg $ explain err
+                  Right _  -> Right e
+  where
+    soundExpr :: Cont -> Exp -> TypeCheckM ()
+    soundExpr c (Abs x a b) = do
+      checkT s c a U
+      let c' = bindConT c x a
+      void $ checkI s c' b
+    soundExpr c e = void $ checkI s c e
 
 -- |Type check an declaration/definition under given context and locking strategy
-convertCheckDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Decl
-convertCheckDecl s cc ac cd = undefined
-
-
+checkDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Cont
+checkDecl s cc cont cd =
+  let Right tree = runG (Con.ctxTree cc) Con.initTree
+  in case runG (Con.absDecl (cns cont) cd) tree of
+       Left err -> Left $ unlines . map errorMsg $ explain err
+       Right d  -> case runG (checkD s cont d) (emptyCont (cns cont)) of
+                  Left err    -> Left $ unlines . map errorMsg $ explain err
+                  Right cont' -> Right cont'

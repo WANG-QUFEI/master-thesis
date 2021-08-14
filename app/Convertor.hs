@@ -14,7 +14,7 @@ import           Core.Abs                   (Id (..))
 import qualified Core.Abs                   as Abs
 import           Core.Print                 (printTree)
 import           Data.Maybe                 (fromMaybe)
-import           Lang                       (Name, Namespace)
+import           Lang                       (Name, Namespace, buildRef, strnsp)
 import qualified Lang
 import           Monads
 import           Text.Printf                (printf)
@@ -54,7 +54,7 @@ instance Lang.InformativeError ConversionError where
      printf "  in namespace: %s" (strnsp ns)]
   explain (InvalidConstRef ns (Id (pos, s))) =
     ["Invalid variable reference!",
-     printf "  use of undeclared variable '%s' at %s," s (show pos),
+     printf "  use of undeclared variable '%s' at %s" s (show pos),
      printf "  in namespace: %s" (strnsp ns)]
   explain (InvalidSegRef ns ids) =
     let path = map idName ids
@@ -128,12 +128,16 @@ bindNode tg ident mmap pt =
        in pt {leaves = nl}
   else error "error: bindNode"
 
--- |Get the path of a nested segment in the reverse order
-reversePath :: Abs.Seg -> [Id]
-reversePath (Abs.SegRef ident) = [ident]
-reversePath (Abs.SegNest seg ident) =
-  ident : reversePath seg
-reversePath _ = error "error: reversePath"
+-- |Convert a Abs.Ref to a path of identifiers
+refPath :: Abs.Ref -> [Id]
+refPath (Abs.Ri i)    = [i]
+refPath (Abs.Rn rf i) = i : refPath rf
+
+-- |Get a segment by a path of identifiers
+findSeg :: Namespace -> [Id] -> ConvertM Tree
+findSeg ns path = do
+  (_, (_, segNode)) <- join $ gets (\t -> foldM matchSeg (ns, ([], t)) path)
+  return segNode
 
 -- |Match the name of a segment in a segment node
 matchSeg :: (Namespace, ([Id], Tree)) -> Id -> ConvertM (Namespace, ([Id], Tree))
@@ -145,41 +149,32 @@ matchSeg (ns, (ids, tree)) ident =
       then return (ns, (ids ++ [ident], node))
       else throwError $ InvalidSegRef ns ids
 
--- |Get a segment by a path of identifiers
-getSegByPath :: Namespace -> [Id] -> ConvertM Tree
-getSegByPath ns path = do
-  (_, (_, segNode)) <- join $ gets (\t -> foldM matchSeg (ns, ([], t)) path)
-  return segNode
-
 -- |Get the names of declarations in a segment
-segDecNames :: Tree -> [Name]
-segDecNames t =
+declNames :: Tree -> [Name]
+declNames t =
   if pSegnode t
   then let tm  = leaves t
            tm' = M.filter pDeclnode tm
        in M.keys tm'
-  else error "error: segDecNames"
+  else error "error: declNames"
 
--- |Get the string representation of a namespace
-strnsp :: Namespace -> String
-strnsp []  = "_root_"
-strnsp [x] = x
-strnsp ns  = foldr1 (\a b -> a ++ "." ++ b) ns
+-- |Check the duplicated declaration of names
+checkDup :: Namespace -> Abs.Id -> ConvertM ()
+checkDup ns ident = do
+  mnode <- gets (getNode ident)
+  case mnode of
+    Just n -> throwError $ DuplicateName ns (tid n) ident
+    _      -> return ()
 
--- |Construct a nested segment from a reversed path
-segfromPath :: Namespace -> Lang.Seg
-segfromPath []   = error "empty path"
-segfromPath [x]  = Lang.SRef x
-segfromPath (x:xs) =
-  let s = segfromPath xs
-  in Lang.SNest s x
-
-ctxTree :: Abs.Context -> Tree
-ctxTree = undefined
-
--- |Transform a concrete context into the abstract context.
-absCtx :: Abs.Context -> ConvertM Lang.AbsContext
+-- |Transform a concrete context into the abstract context
+absCtx :: Abs.Context -> ConvertM [Lang.Decl]
 absCtx (Abs.Ctx xs) = mapM (absDecl []) xs
+
+-- |Get the underlying tree structure after a successful conversion
+ctxTree :: Abs.Context -> ConvertM Tree
+ctxTree ctx = do
+  void $ absCtx ctx
+  get
 
 -- |Transform a concrete declaration into an abstract declaration
 absDecl :: Namespace -> Abs.Decl -> ConvertM Lang.Decl
@@ -194,85 +189,76 @@ absDecl ns (Abs.Def ident a b) = do
   b' <- absExp ns b
   modify $ bindNode TF ident Nothing
   return $ Lang.Def (idName ident) a' b'
-absDecl ns asg@(Abs.DSeg ident seg) = do
+absDecl ns (Abs.Seg ident ads) = do
   checkDup ns ident
-  case seg of
-     Abs.SegRef sid -> do
-       let path = [sid]
-       -- check that segment with id 'segId' exists
-       segNode <- getSegByPath ns path
-       modify $ bindNode TS ident (Just (leaves segNode))
-       return $ Lang.DSeg (idName ident) (Lang.SRef (idName sid))
-     Abs.SegNest sg sid -> do
-       let rpath = sid : reversePath sg
-           path  = reverse rpath
-           rns = map idName rpath
-       -- check that the nested segment 'sg.sid' exists
-       segNode <- getSegByPath ns path
-       modify $ bindNode TS ident (Just (leaves segNode))
-       return $ Lang.DSeg (idName ident) (segfromPath rns)
-     Abs.SegInst sg es -> do
-       let rpath = reversePath sg
-           path  = reverse rpath
-           rns = map idName rpath
-       segNode <- getSegByPath ns path
-       aes <- mapM (absExp ns) es
-       let dnames = segDecNames segNode
-       if length aes == length dnames
-         then let pairs = zip aes dnames
-                  sg' = segfromPath rns
-                  name = idName ident
-                  nl = M.map markInst (leaves segNode)
-              in do { modify $ bindNode TS ident (Just nl)
-                    ; return $ Lang.DSeg name (Lang.SInst sg' pairs)}
-         else throwError $ UnmatchedExps ns (printTree asg)
-     Abs.SegDef ads -> do
-       let name = idName ident
-       -- 1. retrieve the current segment node
-       pseg <- get
-       -- 2. put an empty segment node as the underlying conversion checking context
-       put (Node TS ident M.empty)
-       -- 3. do the conversion checking on the list of declarations 'ads'
-       ds <- mapM (absDecl (ns ++ [name])) ads
-       -- 4. retrieve the updated child segment node
-       segChild <- get
-       -- 5. back to the parent segment node
-       put pseg
-       -- 6. bind the identifier 'ident' to the child segment under the parent segment
-       modify $ bindNode TS ident (Just (leaves segChild))
-       -- return a declaration of segment in form 's = seg { d1; d2; ... ; dn}'
-       return $ Lang.DSeg name (Lang.SDef ds)
+  let name = idName ident
+  pt <- get
+  put $ Node TS ident M.empty
+  ds <- mapM (absDecl (ns ++ [name])) ads
+  ct <- get
+  put pt
+  modify $ bindNode TS ident (Just (leaves ct))
+  return $ Lang.Seg name ds
+absDecl ns agst@(Abs.SegInst ident ref es) = do
+  checkDup ns ident
+  let rp = refPath ref
+      rn = map idName rp
+  sg <- findSeg ns rp
+  ae <- mapM (absExp ns) es
+  let names = declNames sg
+  if length ae == length names
+    then let prs = zip ae names
+             rf  = buildRef rn
+             name = idName ident
+             lvs = M.map markInst (leaves sg)
+         in do { modify $ bindNode TS ident (Just lvs)
+               ; return $ Lang.SegInst name rf prs}
+    else throwError $ UnmatchedExps ns (printTree agst)
 
 -- |Transform a concrete expression into an abstract expression
 absExp :: Namespace -> Abs.Exp -> ConvertM Lang.Exp
 absExp _  Abs.U = return Lang.U
-absExp ns (Abs.Var ident) = do
-  mnode <- gets (getNode ident)
-  case mnode of
-    Nothing   -> throwError $ InvalidConstRef ns ident
-    Just node ->
-      if pSegnode node
-      then throwError $ InvalidConstRef ns ident
-      else return (Lang.Var (idName ident))
-absExp ns ae@(Abs.SegVar seg es ident) = do
-  let rpath = reversePath seg
-      path = reverse rpath
-      rns = map idName rpath
+absExp ns (Abs.Var ref) =
+  case ref of
+    Abs.Ri ident -> do
+      mnode <- gets (getNode ident)
+      case mnode of
+        Nothing -> throwError $ InvalidConstRef ns ident
+        Just node ->
+          if pSegnode node
+          then throwError $ InvalidConstRef ns ident
+          else return $ Lang.Var (idName ident)
+    Abs.Rn rf ident -> do
+      let rp = refPath rf
+          rn = map idName rp
+      sg <- findSeg ns rp
+      case getNode ident sg of
+        Nothing -> throwError $ InvalidSegConstRef ns (reverse rp) ident
+        Just node ->
+          if pSegnode node
+          then throwError $ InvalidSegConstRef ns (reverse rp) ident
+          else let rf' = buildRef $ idName ident : rn
+               in return $ Lang.SegVar rf' []
+absExp ns (Abs.SegVar ref [] ident) =
+  let ref' = Abs.Rn ref ident
+  in absExp ns (Abs.Var ref')
+absExp ns aev@(Abs.SegVar ref es ident) = do
+  let rp = refPath ref
+      rn = map idName rp
       name = idName ident
-  segNode <- getSegByPath ns path
-  aes <- mapM (absExp ns) es
-  let dnames = segDecNames segNode
-  if length dnames /= length aes
-    then throwError $ UnmatchedExps ns (printTree ae)
-    else case getNode ident segNode of
-           Nothing -> throwError $ InvalidSegConstRef ns path ident
+  sg <- findSeg ns rp
+  ae <- mapM (absExp ns) es
+  let names = declNames sg
+  if length names /= length ae
+    then throwError $ UnmatchedExps ns (printTree aev)
+    else case getNode ident sg of
+           Nothing -> throwError $ InvalidSegConstRef ns (reverse rp) ident
            Just node ->
              if pSegnode node
-             then throwError $ InvalidSegConstRef ns path ident
-             else let pairs = zip aes dnames
-                      sg  = segfromPath rns
-                      sg' = Lang.SInst sg pairs
-                  in return $ Lang.SegVar sg' name
+             then throwError $ InvalidSegConstRef ns (reverse rp) ident
+             else let prs = zip ae names
+                      rf  = buildRef $ name : rn
+                  in return $ Lang.SegVar rf prs
 absExp ns (Abs.App e1 e2) = do
   e1' <- absExp ns e1
   e2' <- absExp ns e2
@@ -299,10 +285,3 @@ absExp ns (Abs.Let ident a b e) = do
   put t
   return $ Lang.Let (idName ident) a' b' e'
 
--- |Check the duplicated declaration of names
-checkDup :: Namespace -> Abs.Id -> ConvertM ()
-checkDup ns ident = do
-  mnode <- gets (getNode ident)
-  case mnode of
-    Just n -> throwError $ DuplicateName ns (tid n) ident
-    _      -> return ()

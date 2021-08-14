@@ -20,16 +20,11 @@ module Commands
 import qualified Core.Abs                   as Abs
 import qualified Core.Par                   as Par
 import           Lang
-import           Message
 import           Monads
 import           TypeChecker
 
-import           Control.Monad
-import           Control.Monad.Except
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
-import           Data.Maybe
-import           Debug.Trace
 
 -- |Data type for the commands
 data Cmd = Help
@@ -229,6 +224,10 @@ typeOf c (Let x a b e) =
   let c' = bindConD c x a b
       e' = typeOf c' e
   in Let x a b e'
+typeOf c (Abs x a b) =
+  let c' = bindConT c x a
+      b' = typeOf c' b
+  in Abs x a b'
 typeOf c e = readBack (namesCont  c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
@@ -251,79 +250,23 @@ unfold s c e =
   let q = eval (getEnv s c) e
   in readBack (namesCont c) q
 
-checkConstant :: LockStrategy l => l -> Cont -> String -> Either String ()
-checkConstant ls c s =
-  case locate s of
-    Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
+checkConstant :: LockStrategy s => s -> Cont -> Name -> Either String ()
+checkConstant s c x =
+  case locate x of
+    Nothing -> Left . errorMsg $ "No constant with name '" ++ x ++ "' exists in the current context"
     Just (_, d) ->
-      case runG (checkD ls c d) (emptyCont (cns c)) of
+      case runG (checkD s c d) (emptyCont (cns c)) of
         Left err ->
           let errmsg = explain err
           in Left (unlines (map errorMsg errmsg))
         Right _ -> return ()
   where
-    locate :: String -> Maybe (Cont, Decl)
-    locate x = case OrdM.lookup x (mapCont c) of
+    locate :: Name -> Maybe (Cont, Decl)
+    locate n = case OrdM.lookup n (mapCont c) of
       Just (Ct a) ->
-        let c' = splitCont x c
-        in Just (c', Dec x a)
+        let c' = splitCont n c
+        in Just (c', Dec n a)
       Just (Cd a b) ->
-        let c' = splitCont x c
-        in Just (c', Def x a b)
+        let c' = splitCont n c
+        in Just (c', Def n a b)
       _ -> Nothing
-
--- locate c s = case c of
---   CNil -> Nothing
---   CConsVar c' x a ->
---     if x == s
---     then Just (c', Dec s a)
---     else locate c' s
---   CConsDef c' x a e ->
---     if x == s
---     then Just (c', Def x a e)
---     else locate c' s
-
--- minimumConsts :: Cont -> String -> Either String [String]
--- minimumConsts c s =
---   case locate c s of
---     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
---     Just (c', d) ->
---       case runG (trialAndUnfold [] LockAll c' d) CNil of
---         Left err ->
---           let errmsg = explain err
---           in Left (unlines (map errorMsg errmsg))
---         Right ss -> Right ss
-
--- trialAndUnfold :: LockStrategy s => [String] -> s -> Cont -> Decl -> TypeCheckM [String]
--- trialAndUnfold ss ls c d = do
---   void $ checkDecl ls c d
---   return $ getConstsUnLocked ls c
---   `catchError` h
---   where
---     h :: TypeCheckError -> TypeCheckM [String]
---     h err = case err of
---               TypeNotMatch _ v     -> tryNextConst err (v, U)
---               CannotInferType e    -> tryNextConst err (e, U)
---               NotFunctionClos v    -> tryNextConst err (v, U)
---               NotConvertible v1 v2 -> tryNextConst err (v1, v2)
---               _ -> throwError $ ExtendedWithCtx err ["Unexpected exception in trialAndUnfold"]
-
---     tryNextConst :: TypeCheckError -> (Exp, Exp) -> TypeCheckM [String]
---     tryNextConst err (e1, e2) =
---       let mx1 = constExp e1
---           mx2 = constExp e2
---           xs  = catMaybes [mx1, mx2]
---           xs' = filter (`notElem` ss) xs
---       in case xs' of
---            [] -> throwError $ ExtendedWithCtx err ["No further unfoldable constants could be found"]
---            x:_ -> let ls' = removeLock ls [x]
---                       ss' = x : ss
---                   in trialAndUnfold ss' ls' c d
-
---     constExp :: Exp -> Maybe String
---     constExp (Var x) = Just x
---     constExp (App e1 e2) =
---       case constExp e1 of
---         Just x  -> Just x
---         Nothing -> constExp e2
---     constExp _ = Nothing
