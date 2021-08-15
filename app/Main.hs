@@ -9,8 +9,8 @@ module Main (main) where
 import           Commands
 import qualified Core.Abs                 as Abs
 import           Lang
-import           Message
 import           TypeChecker
+import           Lock
 
 import           Control.Monad.State
 import           Data.Char
@@ -257,7 +257,7 @@ showChangeOfLock lockNew = do
   outputStrLn $ "  to: " ++ U.ushow lockNew
 
 handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
-handleFindMiniConsts _ = outputStrLn "not supported operation"
+handleFindMiniConsts _ = outputStrLn "not supported yet"
   -- ac <- lift . gets $ context
   -- case minimumConsts ac x of
   --   Left err -> outputStrLn err

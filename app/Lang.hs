@@ -4,11 +4,14 @@ Description     : Provides the syntax and semantics of the simple dependent type
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
+{-# LANGUAGE OverloadedStrings #-}
 module Lang where
 
 import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
+import qualified Data.Text                  as T
+import           Debug.Trace
 
 -- | == Basic Data types and Classes
 
@@ -97,6 +100,9 @@ strnsp ns  = foldr1 (\a b -> a ++ "." ++ b) ns
 showRef :: Ref -> String
 showRef ref = qualifiedName (rns ref) (rid ref)
 
+refnsp :: Ref -> Namespace
+refnsp (Ref xs x) = x : reverse xs
+
 -- |Get a value of Ref by a list of reversed names
 buildRef :: [Name] -> Ref
 buildRef []     = error "error: buildRef"
@@ -129,6 +135,13 @@ findSeg = foldr (\name a -> fromJust (matchSeg name a))
 qualifiedName :: Namespace -> Name -> Name
 qualifiedName _ "" = ""
 qualifiedName ns x = foldr (\a b -> a ++ "." ++ b) x ns
+
+-- |Get the short formed name without namespace
+shortName :: Name -> Name
+shortName n =
+  case T.splitOn "." (T.pack n) of
+    [n'] -> T.unpack n'
+    ns   -> T.unpack $ last ns
 
 -- |Extend the environment by binding a variable with a q-expression
 -- Do nothing if the variable is a 'dummy variable' (with an empty name)
@@ -169,13 +182,17 @@ bindConS c x cs@Cs {} = c {mapCont = OrdM.insert x cs (mapCont c)}
 bindConS _ _ _        = error "error: bindConS"
 
 -- |Get the type of a variable from a context
-getType :: Cont -> Name -> Exp
+getType :: Cont -> Name -> Maybe Exp
 getType c x =
-  let mn = OrdM.lookup x (mapCont c)
-  in case fromJust mn of
-    Ct t   -> t
-    Cd t _ -> t
-    Cs {}  -> error "error: getType"
+  let x' = shortName x in
+  case OrdM.lookup x' (mapCont c) of
+    Just (Ct t)   -> Just t
+    Just (Cd t _) -> Just t
+    Just Cs {}    -> error "error: getType"
+    Nothing       -> Nothing
+
+getType' :: Cont -> Name -> Exp
+getType' c x = fromJust $ getType c x
 
 -- |Get the definition of a variable from a context
 getDef :: Cont -> Name -> Exp
@@ -261,15 +278,15 @@ instance Show Decl where
 
 -- |Show declarations with indentation
 showIndentD :: Int   -- ^ The number of spaces to be indented from the left
-                   -> Decl  -- ^ The declaration to be showed
-                   -> ShowS
+            -> Decl  -- ^ The declaration to be showed
+            -> ShowS
 showIndentD n d =
   let indent = replicate n ' '
       n' = n + 2
   in case d of
     Dec x a   -> showString indent . showString (x ++ " : ") . showsPrec prec a
     Def x a b -> showString indent . showString (x ++ " : ") . showsPrec prec a . showString " = " . showsPrec prec b
-    Seg x ds  -> let sub = foldr1 (.) (map (showIndentD n') ds)
+    Seg x ds  -> let sub = foldr1 (\a b -> a . showString "\n" . b) (map (showIndentD n') ds)
                  in showString indent . showString (x ++ " = seg {\n") . sub . showString ("\n" ++ indent ++ "}")
     SegInst x ref eps -> showString indent . showString (x ++ " = ") . showString (showRef ref) .
                          showString " " . showList (map fst eps)
@@ -316,8 +333,10 @@ eval :: Env  -- ^ the local environment
 eval _ U                = U
 eval r (Var x)          = valueOf r x
 eval r (SegVar ref eps) =
-  let r' = segEnv r (reverse $ rns ref) eps
-  in eval r' (Var $ rid ref)
+  let pr = reverse (rns ref)
+      r' = segEnv r pr eps
+      x  = rid ref
+  in eval r' (Var x)
 eval r (App e1 e2)   = appVal (eval r e1) (eval r e2)
 eval r e@Abs {}      = Clos e r
 eval r (Let x a b e) = let r' = bindEnvD r x a b in eval r' e
@@ -333,7 +352,7 @@ valueOf r x =
     Just (Ev q)   -> q
     Just (Ed _ e) -> eval r e
     Just _        -> error "error: valueOf"
-
+  
 -- |Rules for function application
 appVal :: QExp -> QExp -> QExp
 appVal q1 q2 = case q1 of
@@ -346,17 +365,3 @@ segEnv r ps eps =
   let qps = map (mfst $ eval r) eps
       r' = findSeg r ps
   in foldr (\(q, n) r0 -> bindEnvQ r0 n q) r' qps
-
--- -- |Instantiate a segment with expressions
--- instSeg :: Cont -> Seg -> Cont
--- instSeg c sg =
---   let (sg', ips) = breakSeg sg
---       r = getEnv LockNone c
---       qps = map (mfst $ eval r) ips
---       rpath = revSegPath sg'
---       c' = findSeg c rpath
---   in foldr g c' qps
---   where g :: (QExp, Name) -> Cont -> Cont
---         g (q, x) cont =
---           let Just (Ct t) = OrdM.lookup x (mapCont cont)
---           in bindConD cont x t q

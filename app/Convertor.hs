@@ -143,11 +143,11 @@ findSeg ns path = do
 matchSeg :: (Namespace, ([Id], Tree)) -> Id -> ConvertM (Namespace, ([Id], Tree))
 matchSeg (ns, (ids, tree)) ident =
   case getNode ident tree of
-    Nothing -> throwError $ InvalidSegRef ns ids
+    Nothing -> throwError $ InvalidSegRef ns (ids ++ [ident])
     Just node ->
       if pSegnode node
       then return (ns, (ids ++ [ident], node))
-      else throwError $ InvalidSegRef ns ids
+      else throwError $ InvalidSegRef ns (ids ++ [ident])
 
 -- |Get the names of declarations in a segment
 declNames :: Tree -> [Name]

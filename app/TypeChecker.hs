@@ -9,14 +9,16 @@ module TypeChecker where
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
-import qualified Data.HashMap.Strict.InsOrd as OrdM
 
+import           Debug.Trace
 import qualified Convertor                  as Con
 import qualified Core.Abs                   as Abs
 import           Core.Layout                (resolveLayout)
 import           Core.Par
 import           Lang
 import           Monads
+import Lock
+import Text.Printf (printf)
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
@@ -39,57 +41,56 @@ instance InformativeError TypeCheckError where
   explain (NoTypeBoundVar x)        = ["Variable without a bound type (this exception normally should not happen)",
                                        "variable name: " ++ x]
   explain (TypeNotMatch e v)        = ["Expression does not have the given type", "exp: " ++ show e, "type: " ++ show v]
-  explain (ExtendedWithPos terr d)  = "Found type check error at: " : show d : explain terr
-  explain (ExtendedWithCtx terr ss) = ss ++ explain terr
+  explain (ExtendedWithPos err d)  = "Found type check error at: " : show d : explain err
+  explain (ExtendedWithCtx err ss) = ss ++ explain err
 
 -- |Check that a declaration is valid
 checkD :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
-checkD s c (Dec x a) = do
-  checkT s c a U
-  return $ bindConT c x a
-checkD s c (Def x a b) = do
-  checkT s c a U
-  let qa = eval (getEnv s c) a
-  checkT s c b qa
-  return $ bindConD c x a b
-checkD s c (DSeg x sg) =
-  case sg of
-    SRef sn ->
-      let c' = getSegByPath c [sn]
-          cn = Cs (mapCont c')
-      in return $ bindConS c x cn
-    SNest sg' sn ->
-      let rpath = sn : revSegPath sg'
-          c' = getSegByPath c rpath
-          cn = Cs (mapCont c')
-      in return $ bindConS c x cn
-    SInst sg' ips -> do
-      let rpath = revSegPath sg'
-          c' = getSegByPath c rpath
-      c'' <- checkSegInst s c c' ips
-      let cn = Cs (mapCont c'')
-      return $ bindConS c x cn
-    SDef ds ->
+checkD s c d = do
+  doCheck d
+  `catchError` (\e -> throwError $ ExtendedWithPos e d)
+  where
+    doCheck :: Decl -> TypeCheckM Cont
+    doCheck (Dec x a) = do
+      checkT s c a U
+      return $ bindConT c x a
+    doCheck (Def x a b) = do
+      checkT s c a U
+      let qa = eval (getEnv s c) a
+      checkT s c b qa
+      return $ bindConD c x a b
+    doCheck (Seg x ds) =
       let ns = cns c ++ [x]
       in do
         c' <- foldM (checkD s) (emptyCont ns) ds
         return $ bindConS c x (Cs (mapCont c'))
+    doCheck (SegInst x ref eps) = do
+      let c' = findSeg c (refnsp ref)
+      c'' <- checkSegInst s c c' eps
+      let cn = Cs (mapCont c'')
+      return $ bindConS c x cn
 
 -- |Check that an expression has a q-expression as type
 checkT :: LockStrategy s => s -> Cont -> Exp -> QExp -> TypeCheckM ()
 checkT _ _ U U = return ()
 checkT s c (Var x) q = do
-  let t  = getType c x
-      qt = eval (getEnv s c) t
-  void (checkConvertI s c qt q)
-checkT s c (SegVar sg x) q = do
-  let (sg', ips) = breakSeg sg
-      rpath = revSegPath sg'
-      c' = getSegByPath c rpath
-  c'' <- checkSegInst s c c' ips
-  let t  = getType c'' x
-      qt = eval (getEnv s c'') t
-  void (checkConvertI s c'' qt q)
+  let mt = getType c x
+  case mt of
+    Nothing -> throwError $ NoTypeBoundVar x
+    Just t  -> do
+      let qt = eval (getEnv s c) t
+      void (checkConvertI s c qt q)
+checkT s c (SegVar ref eps) q = do
+  let pr = reverse (rns ref)
+      c' = findSeg c pr
+      x  = rid ref
+  c'' <- checkSegInst s c c' eps
+  let mt = getType c'' x
+  case mt of
+    Nothing -> throwError $ NoTypeBoundVar x
+    Just t  -> do
+      let qt = eval (getEnv s c'') t
+      void $ checkConvertI s c'' qt q
 checkT s c e@App {} q = do
   q' <- checkI s c e
   void (checkConvertI s c q q')
@@ -103,7 +104,7 @@ checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
       qa = eval r a
       qa' = eval r' a'
   void $ checkConvertI s c qa qa'
-  let y   = qualifiedName (cns c) x
+  let y   = qualifiedName (cns c) x 
       r'' = bindEnvQ r' x' (Var y)
       qb' = eval r'' b'
       c'  = bindConT c x a
@@ -111,33 +112,37 @@ checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
 checkT s c (Let x a b e) q = do
   c' <- checkD s c (Def x a b)
   checkT s c' e q
-checkT _ _ e v = throwError $ TypeNotMatch e v
+checkT _ _ e q = throwError $ TypeNotMatch e q
 
 -- |Check that an expression is well typed and infer its type
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
 checkI _ _ U = return U
 checkI s c (Var x) = do
-  let t = getType c x
+  let mt = getType c x
       r = getEnv s c
-  return $ eval r t
-checkI s c (SegVar sg x) = do
-  let (sg', ips) = breakSeg sg
-      rpath = revSegPath sg'
-      c' = getSegByPath c rpath
-  c'' <- checkSegInst s c c' ips
-  let t   = getType c'' x
-      r'' = getEnv s c''
-  return $ eval r'' t
+  case mt of
+    Nothing -> throwError $ NoTypeBoundVar x
+    Just t  -> return $ eval r t
+checkI s c (SegVar ref eps) = do
+  let pr = reverse (rns ref)
+      c' = findSeg c pr
+      x  = rid ref
+  c'' <- checkSegInst s c c' eps
+  let mt = getType c'' x 
+  case mt of
+    Nothing -> throwError $ NoTypeBoundVar x
+    Just t  -> do
+      let r = getEnv s c''
+      return $ eval r t 
 checkI s c (App m n) = do
   qm <- checkI s c m
   case qm of
     Clos (Abs x a b) r -> do
       let qa = eval r a
       checkT s c n qa
-      let r0 = getEnv s c
-          ns = cns c
-          qn = eval r0 n
-          r' = bindEnvQ r (qualifiedName ns x) qn
+      let rp = getEnv s c
+          qn = eval rp n
+          r' = bindEnvQ r x qn
       return $ eval r' b
     _ -> throwError (NotFunctionClos qm)
 checkI s c (Let x a b e) = do
@@ -149,10 +154,13 @@ checkI _ _ e = throwError $ CannotInferType e
 checkConvertI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
 checkConvertI _ _ U U = return U
 checkConvertI s c (Var x) (Var y)
-  | x == y = let t  = getType c x
-                 r  = getEnv s c
-                 qt = eval r t
-             in return qt
+  | x == y = let tm  = getType c x
+                 r   = getEnv s c
+             in case tm of
+                  Nothing -> throwError $ NoTypeBoundVar x
+                  Just t  ->
+                    let qt = eval r t
+                    in return qt
   | otherwise = throwError $ NotConvertible (Var x) (Var y)
 checkConvertI s c (App m1 n1) (App m2 n2) = do
   q <- checkConvertI s c m1 m2
@@ -172,7 +180,7 @@ checkConvertI _ _ q1 q2 = throwError $ NotConvertible q1 q2
 
 -- |Check that two q-expressions are convertible under a given type
 checkConvertT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do
+checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do 
   let names = namesCont c
       y     = freshVar x names
       qa    = eval r' a
@@ -204,16 +212,16 @@ checkConvertT s c q1 q2 t = do
 checkSegInst :: LockStrategy s => s
              -> Cont -- ^ the context where the instantiation occurs
              -> Cont -- ^ the segment to which the instantiation applies
-             -> [InstPair] -- ^ a list of expressions and the corresponding names to be instantiated
+             -> [ExPos] -- ^ a list of expressions and the corresponding names to be instantiated
              -> TypeCheckM Cont -- ^ the segment after the instantiation
-checkSegInst _ _  ct []  = return ct
-checkSegInst s cp cc ips = foldM g cc ips
-  where g :: Cont -> InstPair -> TypeCheckM Cont
+checkSegInst _ _  cc []  = return cc
+checkSegInst s cp cc eps = foldM g cc eps
+  where g :: Cont -> ExPos -> TypeCheckM Cont
         g c (e, x) = do
-          let Just (Ct t) = OrdM.lookup x (mapCont c) -- get the type of 'x' in segment 'c'
-              rc = getEnv s c
-              qt = eval rc t
-          checkT s cp e qt      -- in context 'cp', check that the expression 'e' matches the type of 't'
+          let t = getType' c x -- get the type of 'x' in segment 'c'
+              r = getEnv s c
+              q = eval r t
+          checkT s cp e q      -- in context 'cp', check that the expression 'e' matches the type of 't'
           let rp = getEnv s cp
               qe = eval rp e    -- evaluate 'e' in the environment got from 'cp'
               c' = bindConD c x t qe -- bind the q-expression of 'e' to variable 'x' in the context 'c'
@@ -229,17 +237,16 @@ parseAndCheck s str = case pContext (resolveLayout True  $ myLexer str) of
       Left err -> Left $ explain err
       Right c  -> Right (cxt, c)
   where
-    typeCheck :: AbsContext -> TypeCheckM Cont
+    typeCheck :: [Decl] -> TypeCheckM Cont
     typeCheck axt = do
       mapM_ checkUpdate axt
       get
 
     checkUpdate :: Decl -> TypeCheckM ()
     checkUpdate d = do
-      c <- get
+      c  <- get
       c' <- checkD s c d
       put c'
-      `catchError` (\e -> throwError $ ExtendedWithPos e d)
 
 -- |Type check an expression under given context and locking strategy
 checkExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp

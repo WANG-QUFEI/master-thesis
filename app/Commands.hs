@@ -22,6 +22,7 @@ import qualified Core.Par                   as Par
 import           Lang
 import           Monads
 import           TypeChecker
+import           Lock
 
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
@@ -168,6 +169,18 @@ getCommand str =
     parseMiniConsts [var] = return $ FindMinimumConsts var
     parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
+-- |Instantiate a segment with expressions
+segCont :: Cont -> Namespace -> [ExPos] -> Cont
+segCont c pr eps =
+  let r   = getEnv LockNone c
+      qps = map (mfst $ eval r) eps
+      c'  = findSeg c pr
+  in foldr g c' qps
+  where g :: (QExp, Name) -> Cont -> Cont
+        g (q, x) cont =
+          let t = getType' cont x
+          in bindConD cont x t q
+
 -- |Read a quasi-expression back into an expression of the normal form
 readBack :: [String] -> QExp -> Exp
 readBack _  U = U
@@ -212,9 +225,11 @@ incrEval c (App e1 e2) =
       ns = cns c
       q2 = eval (emptyEnv ns) e2
   in appVal q1 q2
-incrEval c (SegVar seg x) =
+incrEval c (SegVar ref eps) =
   let r  = getEnv LockNone c
-      r' = evalSeg r seg
+      pr = reverse (rns ref)
+      x  = rid ref
+      r' = segEnv r pr eps
       dx = getDef' r' x
   in eval (emptyEnv . ens $ r') dx
 incrEval _ _ = error "error: incrEval"
@@ -233,11 +248,13 @@ typeOf c e = readBack (namesCont  c) (typeOfV c e)
 typeOfV :: Cont -> Exp -> QExp
 typeOfV _ U = U
 typeOfV c (Var x) =
-  let t = getType c x
+  let t = getType' c x
   in eval (getEnv LockAll c) t
-typeOfV c (SegVar sg x) =
-  let c' = instSeg c sg
-      t  = getType c' x
+typeOfV c (SegVar ref eps) =
+  let pr = reverse (rns ref)
+      x  = rid ref
+      c' = segCont c pr eps
+      t  = getType' c' x
   in eval (getEnv LockAll c') t
 typeOfV c (App e1 e2) =
   let t1 = typeOfV c e1
