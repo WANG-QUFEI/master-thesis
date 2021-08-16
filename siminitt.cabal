@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b3696ba1bc728d8a9ee6aa1fa159c541b557e89a83b4c472b85f5d6624d18f79
+-- hash: 78e8e622ab4288b1f2a54d68f4ad5ace79fa9aceae35b53589c6f942d0bcf417
 
 name:           siminitt
 version:        0.1.0.0
@@ -27,6 +27,7 @@ extra-source-files:
     extra-sources/loop2.smtt
     extra-sources/loop4.smtt
     extra-sources/Makefile
+    extra-sources/seg.smtt
     extra-sources/Test.hs
     extra-sources/test.sh
     extra-sources/test.smtt

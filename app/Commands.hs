@@ -20,9 +20,9 @@ module Commands
 import qualified Core.Abs                   as Abs
 import qualified Core.Par                   as Par
 import           Lang
+import           Lock
 import           Monads
 import           TypeChecker
-import           Lock
 
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
@@ -178,7 +178,7 @@ segCont c pr eps =
   in foldr g c' qps
   where g :: (QExp, Name) -> Cont -> Cont
         g (q, x) cont =
-          let t = getType' cont x
+          let t = getType cont x
           in bindConD cont x t q
 
 -- |Read a quasi-expression back into an expression of the normal form
@@ -248,13 +248,13 @@ typeOf c e = readBack (namesCont  c) (typeOfV c e)
 typeOfV :: Cont -> Exp -> QExp
 typeOfV _ U = U
 typeOfV c (Var x) =
-  let t = getType' c x
+  let t = getType c x
   in eval (getEnv LockAll c) t
 typeOfV c (SegVar ref eps) =
   let pr = reverse (rns ref)
       x  = rid ref
       c' = segCont c pr eps
-      t  = getType' c' x
+      t  = getType c' x
   in eval (getEnv LockAll c') t
 typeOfV c (App e1 e2) =
   let t1 = typeOfV c e1

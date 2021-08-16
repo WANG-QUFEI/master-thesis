@@ -14,6 +14,7 @@ import           Core.Abs                   (Id (..))
 import qualified Core.Abs                   as Abs
 import           Core.Print                 (printTree)
 import           Data.Maybe                 (fromMaybe)
+--import           Debug.Trace
 import           Lang                       (Name, Namespace, buildRef, strnsp)
 import qualified Lang
 import           Monads
@@ -23,6 +24,7 @@ import           Text.Printf                (printf)
 data Tag = TD -- ^ a tag for declaration
          | TF -- ^ a tag for definition
          | TS -- ^ a tag for segment
+         deriving Show
 
 -- |Data structure used to keep track of the declarations of the source program.
 -- Used as the underlying state in the conversion procedure
@@ -32,7 +34,7 @@ data Tree = Node {
               -- | source code identifier bound to this node
               tid    :: Id,
               -- | for a node of segment, it has a map of nodes as its children
-              leaves :: M.InsOrdHashMap Name Tree}
+              leaves :: M.InsOrdHashMap Name Tree} deriving Show
 
 -- |Monad for conversion checking
 type ConvertM a = G ConversionError Tree a
@@ -136,7 +138,7 @@ refPath (Abs.Rn rf i) = i : refPath rf
 -- |Get a segment by a path of identifiers
 findSeg :: Namespace -> [Id] -> ConvertM Tree
 findSeg ns path = do
-  (_, (_, segNode)) <- join $ gets (\t -> foldM matchSeg (ns, ([], t)) path)
+  (_, (_, segNode)) <- join $ gets (\t -> foldM matchSeg (ns, ([], t)) (reverse path))
   return segNode
 
 -- |Match the name of a segment in a segment node

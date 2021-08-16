@@ -4,6 +4,7 @@ Description     : Provides the syntax and semantics of the simple dependent type
 Maintainer      : wangqufei2009@gmail.com
 Portability     : POSIX
 -}
+{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Lang where
 
@@ -11,7 +12,7 @@ import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
 import qualified Data.Text                  as T
--- import           Debug.Trace
+--import           Debug.Trace
 
 -- | == Basic Data types and Classes
 
@@ -191,18 +192,38 @@ bindConS :: Cont -> Name -> CNode -> Cont
 bindConS c x cs@Cs {} = c {mapCont = OrdM.insert x cs (mapCont c)}
 bindConS _ _ _        = error "error: bindConS"
 
--- |Get the type of a variable from a context
-getType :: Cont -> Name -> Maybe Exp
-getType c x =
-  let x' = shortName x in
-  case OrdM.lookup x' (mapCont c) of
-    Just (Ct t)   -> Just t
-    Just (Cd t _) -> Just t
-    Just Cs {}    -> error "error: getType"
-    Nothing       -> Nothing
+-- |Get the name of a context
+contName :: Cont -> Name
+contName (Cont [] _) = ""
+contName (Cont ns _) = last ns
 
-getType' :: Cont -> Name -> Exp
-getType' c x = fromJust $ getType c x
+-- |Find the path from the current context to the variable
+varPath :: Name -> Name -> (Namespace, Name)
+varPath cn vn =
+  let ts = T.splitOn "." (T.pack vn)
+      ns = map T.unpack (reverse ts)
+  in case ns of
+    [x] -> ([], x)
+    _   -> let x   = head ns
+               ns' = filter (/="") (tail ns)
+               pr  = takeWhile (/= cn) ns'
+           in (pr, x)
+
+-- |Strictly get the type bound to a variable
+getType :: Cont -> Name -> Exp
+getType c x = fromJust $ getType' c x
+
+-- |Try to get the type bound to a variable
+getType' :: Cont -> Name -> Maybe Exp
+getType' c x =
+  let cn = contName c
+      (pr, x') = varPath cn x
+      c' = findSeg c pr
+  in case OrdM.lookup x' (mapCont c') of
+       Just (Ct t)   -> Just t
+       Just (Cd t _) -> Just t
+       Just Cs {}    -> error "error: getType'"
+       Nothing       -> Nothing
 
 -- |Get the definition of a variable from a context
 getDef :: Cont -> Name -> Exp
@@ -281,7 +302,7 @@ instance Show Exp where
     in showParen (p > prec) s'
   showsPrec p (Abs x a e) = showParen (p > prec) $ showString "[ " . showsPrec p (Dec x a) . showString " ] " . showsPrec prec e
   showsPrec p (Let x a b e) = showParen (p > prec) $ showString "[ " . showsPrec p (Def x a b) . showString " ] " . showsPrec prec e
-  showsPrec _ (Clos e _) = showParen True $ showsPrec prec e . showString "(...)"
+  showsPrec _ (Clos e _) = showParen True (showsPrec prec e) . showString "(...)"
 
 instance Show Decl where
   showsPrec _ d = showIndentD 0 d

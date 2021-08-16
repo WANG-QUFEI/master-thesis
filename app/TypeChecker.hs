@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-|
 Module          : TypeChecker
 Description     : providing functions that type check the abstract syntax
@@ -14,11 +15,12 @@ import qualified Convertor            as Con
 import qualified Core.Abs             as Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
--- import           Debug.Trace
+import           Data.Maybe           (fromJust)
+--import           Debug.Trace
 import           Lang
 import           Lock
 import           Monads
--- import           Text.Printf          (printf)
+import           Text.Printf          (printf)
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
@@ -35,14 +37,13 @@ data TypeCheckError
   deriving (Show)
 
 instance InformativeError TypeCheckError where
-  explain (CannotInferType e)       = ["Cannot infer type for expression: " ++ show e]
-  explain (NotFunctionClos v)       = ["Value supposed to be a function closure, but it isn't", show v]
-  explain (NotConvertible v1 v2)    = ["Values not convertible", "v1: " ++ show v1, "v2: " ++ show v2]
-  explain (NoTypeBoundVar x)        = ["Variable without a bound type (this exception normally should not happen)",
-                                       "variable name: " ++ x]
-  explain (TypeNotMatch e v)        = ["Expression does not have the given type", "exp: " ++ show e, "type: " ++ show v]
-  explain (ExtendedWithPos err d)  = "Found type check error at: " : show d : explain err
-  explain (ExtendedWithCtx err ss) = ss ++ explain err
+  explain (CannotInferType e)       = ["cannot infer type!", printf "exp: %s" (show e)]
+  explain (NotFunctionClos v)       = ["not a function closure!", show v]
+  explain (NotConvertible v1 v2)    = ["values not convertible!", "v1: " ++ show v1, "v2: " ++ show v2]
+  explain (NoTypeBoundVar x)        = ["no bound type!", "var: " ++ x]
+  explain (TypeNotMatch e v)        = ["type mismatch", "exp: " ++ show e, "type: " ++ show v]
+  explain (ExtendedWithPos err d)   = "detect type check error at: " : show d : explain err
+  explain (ExtendedWithCtx err ss)  = ss ++ explain err
 
 -- |Check that a declaration is valid
 checkD :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
@@ -74,23 +75,17 @@ checkD s c d = do
 checkT :: LockStrategy s => s -> Cont -> Exp -> QExp -> TypeCheckM ()
 checkT _ _ U U = return ()
 checkT s c (Var x) q = do
-  let mt = getType c x
-  case mt of
-    Nothing -> throwError $ NoTypeBoundVar x
-    Just t  -> do
-      let qt = eval (getEnv s c) t
-      void (checkConvertI s c qt q)
+  let t = getType c x
+      qt = eval (getEnv s c) t
+  void (checkConvertI s c qt q)
 checkT s c (SegVar ref eps) q = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
   c'' <- checkSegInst s c c' eps
-  let mt = getType c'' x
-  case mt of
-    Nothing -> throwError $ NoTypeBoundVar x
-    Just t  -> do
-      let qt = eval (getEnv s c'') t
-      void $ checkConvertI s c'' qt q
+  let t = getType c'' x
+      qt = eval (getEnv s c'') t
+  void $ checkConvertI s c'' qt q
 checkT s c e@App {} q = do
   q' <- checkI s c e
   void (checkConvertI s c q q')
@@ -118,22 +113,19 @@ checkT _ _ e q = throwError $ TypeNotMatch e q
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
 checkI _ _ U = return U
 checkI s c (Var x) = do
-  let mt = getType c x
+  let mt = getType' c x
+      t  = fromJust mt
       r = getEnv s c
-  case mt of
-    Nothing -> throwError $ NoTypeBoundVar x
-    Just t  -> return $ eval r t
+  return $ eval r t
 checkI s c (SegVar ref eps) = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
   c'' <- checkSegInst s c c' eps
-  let mt = getType c'' x
-  case mt of
-    Nothing -> throwError $ NoTypeBoundVar x
-    Just t  -> do
-      let r = getEnv s c''
-      return $ eval r t
+  let mt = getType' c'' x
+      t = fromJust mt
+      r = getEnv s c''
+  return $ eval r t
 checkI s c (App m n) = do
   qm <- checkI s c m
   case qm of
@@ -154,13 +146,11 @@ checkI _ _ e = throwError $ CannotInferType e
 checkConvertI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
 checkConvertI _ _ U U = return U
 checkConvertI s c (Var x) (Var y)
-  | x == y = let tm  = getType c x
-                 r   = getEnv s c
-             in case tm of
-                  Nothing -> throwError $ NoTypeBoundVar x
-                  Just t  ->
-                    let qt = eval r t
-                    in return qt
+  | x == y =
+    let mt = getType' c x
+        t = fromJust mt
+        r = getEnv s c
+    in let qt = eval r t in return qt
   | otherwise = throwError $ NotConvertible (Var x) (Var y)
 checkConvertI s c (App m1 n1) (App m2 n2) = do
   q <- checkConvertI s c m1 m2
@@ -198,9 +188,10 @@ checkConvertT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   checkConvertT s c qa1 qa2 U
   let names = namesCont c
       y     = freshVar x1 names
+      y'    = qualifiedName' (cns c) y
       c'    = bindConT c y qa1
-      r1'   = bindEnvQ r1 x1 (Var y)
-      r2'   = bindEnvQ r2 x2 (Var y)
+      r1'   = bindEnvQ r1 x1 (Var y')
+      r2'   = bindEnvQ r2 x2 (Var y')
       qb1   = eval r1' b1
       qb2   = eval r2' b2
   checkConvertT s c' qb1 qb2 U
@@ -219,7 +210,7 @@ checkSegInst _ _  cc []  = return cc
 checkSegInst s cp cc eps = foldM g cc eps
   where g :: Cont -> ExPos -> TypeCheckM Cont
         g c (e, x) = do
-          let t = getType' c x -- get the type of 'x' in segment 'c'
+          let t = getType c x -- get the type of 'x' in segment 'c'
               r = getEnv s c
               q = eval r t
           checkT s cp e q      -- in context 'cp', check that the expression 'e' matches the type of 't'

@@ -9,8 +9,8 @@ module Main (main) where
 import           Commands
 import qualified Core.Abs                 as Abs
 import           Lang
-import           TypeChecker
 import           Lock
+import           TypeChecker
 
 import           Control.Monad.State
 import           Data.Char
@@ -113,17 +113,15 @@ handleShow SLocked = do
   let sl = lockedNames ls ac
   outputStrLn . U.ushow $ sl
   outputStrLn $ "Lock strategy: " ++ U.ushow ls
-
 handleShow SUnlocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
   let su = unlockedNames ls ac
   outputStrLn . U.ushow $ su
   outputStrLn $ "Lock strategy: " ++ U.ushow ls
-
 handleShow SContext = do
   ac <- lift $ gets context
-  outputStrLn $ U.ushow ac
+  outputStr $ U.ushow ac
 handleShow (SName name) = do
   m <- lift . gets $ bindMap
   case Map.lookup name m of
