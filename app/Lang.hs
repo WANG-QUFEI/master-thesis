@@ -11,7 +11,7 @@ import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
 import qualified Data.Text                  as T
-import           Debug.Trace
+-- import           Debug.Trace
 
 -- | == Basic Data types and Classes
 
@@ -136,12 +136,22 @@ qualifiedName :: Namespace -> Name -> Name
 qualifiedName _ "" = ""
 qualifiedName ns x = foldr (\a b -> a ++ "." ++ b) x ns
 
+-- |Append a qualifiedName with a '.' character to mark it as being a name to a neutral variable
+qualifiedName' :: Namespace -> Name -> Name
+qualifiedName' _ "" = ""
+qualifiedName' ns x = '.' : qualifiedName ns x
+
 -- |Get the short formed name without namespace
 shortName :: Name -> Name
 shortName n =
   case T.splitOn "." (T.pack n) of
     [n'] -> T.unpack n'
     ns   -> T.unpack $ last ns
+
+-- |A predicate testing whether a name is a neutral name
+neutralName :: Name -> Bool
+neutralName "" = False
+neutralName x  = head x == '.'
 
 -- |Extend the environment by binding a variable with a q-expression
 -- Do nothing if the variable is a 'dummy variable' (with an empty name)
@@ -312,6 +322,16 @@ restoreCont (Cont ns cm) =
       let ds' = restoreCont (Cont (ns ++ [x]) cnm)
       in Seg x ds' : ds
 
+instance Show Env where
+  showsPrec _ (Env ns em) =
+    let s1 = showString ("namespace: " ++ strnsp ns)
+    in Map.foldrWithKey semap s1 em
+
+semap :: Name -> ENode -> ShowS -> ShowS
+semap x (Ev q) ss   = ss . showString "\n" . showString (x ++ " = " ++ show q)
+semap x (Ed a b) ss = ss .showString "\n" . showString (show (Def x a b))
+semap x (Es _) ss   = ss . showString "\n" . showString (x ++ "(..)")
+
 instance SegNest Cont where
   matchSeg x (Cont ns cm) =
     case OrdM.lookup x cm of
@@ -342,17 +362,21 @@ eval r e@Abs {}      = Clos e r
 eval r (Let x a b e) = let r' = bindEnvD r x a b in eval r' e
 eval _ q@Clos {}     = q
 
--- |Get the quasi-expression bound to a variable.
+-- |Get the quasi-expression bound to a name
 valueOf :: Env  -- ^ the local environment
         -> Name -- ^ name of the variable
         -> QExp
 valueOf r x =
   case Map.lookup x (mapEnv r) of
-    Nothing       -> Var (qualifiedName (ens r) x)
+    Nothing       ->
+      if neutralName x
+      then Var x
+      else let x' = qualifiedName' (ens r) x
+           in Var x'
     Just (Ev q)   -> q
     Just (Ed _ e) -> eval r e
     Just _        -> error "error: valueOf"
-  
+
 -- |Rules for function application
 appVal :: QExp -> QExp -> QExp
 appVal q1 q2 = case q1 of

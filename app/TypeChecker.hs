@@ -10,15 +10,15 @@ import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
 
-import           Debug.Trace
-import qualified Convertor                  as Con
-import qualified Core.Abs                   as Abs
-import           Core.Layout                (resolveLayout)
+import qualified Convertor            as Con
+import qualified Core.Abs             as Abs
+import           Core.Layout          (resolveLayout)
 import           Core.Par
+-- import           Debug.Trace
 import           Lang
+import           Lock
 import           Monads
-import Lock
-import Text.Printf (printf)
+-- import           Text.Printf          (printf)
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
@@ -104,7 +104,7 @@ checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
       qa = eval r a
       qa' = eval r' a'
   void $ checkConvertI s c qa qa'
-  let y   = qualifiedName (cns c) x 
+  let y   = qualifiedName' (cns c) x
       r'' = bindEnvQ r' x' (Var y)
       qb' = eval r'' b'
       c'  = bindConT c x a
@@ -128,12 +128,12 @@ checkI s c (SegVar ref eps) = do
       c' = findSeg c pr
       x  = rid ref
   c'' <- checkSegInst s c c' eps
-  let mt = getType c'' x 
+  let mt = getType c'' x
   case mt of
     Nothing -> throwError $ NoTypeBoundVar x
     Just t  -> do
       let r = getEnv s c''
-      return $ eval r t 
+      return $ eval r t
 checkI s c (App m n) = do
   qm <- checkI s c m
   case qm of
@@ -180,15 +180,16 @@ checkConvertI _ _ q1 q2 = throwError $ NotConvertible q1 q2
 
 -- |Check that two q-expressions are convertible under a given type
 checkConvertT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do 
+checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do
   let names = namesCont c
       y     = freshVar x names
+      y'    = qualifiedName' (cns c) y
       qa    = eval r' a
       c'    = bindConT c y qa
       r     = getEnv s c
       qm    = eval r (App q1 (Var y))
       qn    = eval r (App q2 (Var y))
-      r''   = bindEnvQ r' x (Var y)
+      r''   = bindEnvQ r' x (Var y')
       qb    = eval r'' b
   checkConvertT s c' qm qn qb
 checkConvertT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do

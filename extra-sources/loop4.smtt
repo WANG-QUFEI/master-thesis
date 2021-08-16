@@ -35,7 +35,6 @@ sg1 = seg
       = [z : U] [k : sigma z B] [l : [p : Pow U] sigma z p -> p (delta z)] l B k ([p : Pow U] l ([z1 : U] p (delta z1)))
 
     A : * = [p : Pow U] Q p -> p C
-{-
 lem2 : sg1.¬ sg1.A
   = [h : sg1.A] h sg1.B sg1.lem1 ([p : sg1.Pow sg1.U] h ([z : sg1.U] p (sg1.delta z))) ;
 
@@ -44,4 +43,5 @@ lem3 : sg1.A
 
 loop : sg1.⊥
   = lem2 lem3 ;
+{-
 -}
