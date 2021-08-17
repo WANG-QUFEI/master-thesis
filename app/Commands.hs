@@ -26,6 +26,10 @@ import           TypeChecker
 
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
+import           Data.Map                   (Map, (!))
+import qualified Data.Map                   as M
+import           Debug.Trace
+import           Text.Printf                (printf)
 
 -- |Data type for the commands
 data Cmd = Help
@@ -61,31 +65,67 @@ data LockOption = AllLock
                 | RemoveLock [String]
                 deriving (Show)
 
+data CmdSelector = CmdSel { funs    :: Map String ([String] -> Either String Cmd)
+                          , prompts :: Map String String}
+
+selectCmd :: String -> CmdSelector -> Maybe ([String] -> Either String Cmd)
+selectCmd str sel =
+  let fm = funs sel
+      pm = prompts sel
+      xs = M.keys fm
+  in case matchCmd str xs of
+    []  -> Nothing
+    [x] -> M.lookup x fm
+    cms ->
+      let msg = "ambiguous input, possible commands:" : map (\x -> printf "  %s     %s" x (pm ! x)) cms
+          f'  = \_ -> Left $ unlines msg
+      in Just f'
+  where
+    matchCmd :: String -> [String] -> [String]
+    matchCmd s xs = foldl matchChar xs (zip s [0,1..])
+
+    matchChar :: [String] -> (Char, Int) -> [String]
+    matchChar xs (c, i) = filter (\x -> length x > i && x !! i == c) xs
+
 -- | Parse a string into a command, return an error message if no command
---   could be found
+-- could be found
 getCommand :: String -> Either String Cmd
 getCommand str =
   let ws  = words str
       tws = tail ws
-  in case head ws of
-    ":?"      -> return Help
-    ":help"   -> return Help
-    ":q"      -> return Quit
-    ":load"   -> parseLoad tws
-    ":show"   -> parseShow tws
-    ":lock"   -> parseLock tws
-    ":bind"   -> parseBind tws
-    ":check"  -> parseCheck tws
-    ":unfold" -> parseUnfold tws
-    ":typeOf" -> parseTypeof tws
-    ":hred"   -> return HeadReduct
-    ":fmc"    -> parseMiniConsts tws
-    _         -> Left "invalid command, type ':?' for a detailed description of the command"
+  in case selectCmd (head ws) (CmdSel fm pm) of
+    Nothing -> Left "invalid command, type ':?' for a detailed description of the command"
+    Just f -> f tws
   where
+    fm = M.fromList [(":?", \_ -> Right Help),
+                     (":help", \_ -> Right Help),
+                     (":quit", \_ -> Right Quit),
+                     (":load", parseLoad),
+                     (":show", parseShow),
+                     (":lock", parseLock),
+                     (":bind", parseBind),
+                     (":check", parseCheck),
+                     (":unfold", parseUnfold),
+                     (":typeOf", parseTypeof),
+                     (":hred", \_ -> Right HeadReduct),
+                     (":fmc", parseMiniConsts)]
+    pm = M.fromList [("?", "show the usage message"),
+                     (":help", "show the usage message"),
+                     (":quit", "stop the program"),
+                     (":load", "<filename>"),
+                     (":show", "{filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name>}"),
+                     (":lock", "{-all | -none | -add | -remove} [<varlist>]"),
+                     (":bind", "<name> = <expr>, bind a name <name> to expression <expr>"),
+                     (":check", "{-expr | -decl | -const}  { <expr> | <decl> | <constant>}"),
+                     (":unfold", "{-name | -expr} { <name> | <expr> }"),
+                     (":typeOf", "{-name | -expr} { <name> | <expr> }"),
+                     (":hred", "apply head reduction on the expression bound to name 'it'"),
+                     (":fmc", "<constant>, find the minimum set of constants that need to be unfolded")]
+
     parseLoad :: [String] -> Either String Cmd
     parseLoad tws = case tws of
-      [fp] -> return $ Load fp
-      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+      []  -> Left ":load <file>"
+      x:_ -> return $ Load x
 
     parseShow :: [String] -> Either String Cmd
     parseShow tws = case tws of
@@ -102,7 +142,7 @@ getCommand str =
       ["context"]        -> return (Show SContext)
       ["ctx"]            -> return (Show SContext)
       ["-name", n]       -> return (Show (SName n))
-      _                  -> Left "invalid command, type ':?' for a detailed description of the command"
+      _                  -> Left ":show {filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name>}"
 
     parseLock :: [String] -> Either String Cmd
     parseLock tws = case tws of
@@ -114,14 +154,14 @@ getCommand str =
       ["-remove", varlist] -> do
         ss <- parseList varlist
         return $ Lock (RemoveLock ss)
-      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+      _ -> Left ":lock {-all | -none | -add | -remove} [<varlist>]"
 
     parseBind :: [String] -> Either String Cmd
     parseBind tws = case tws of
       v : "=" : ws' -> do
         e <- parseExpr (unwords ws')
         return $ Bind v e
-      _ -> Left "invalid command, type ':?' for a detailed description of the command"
+      _ -> Left ":bind <name> = <expr>"
 
     parseCheck :: [String] -> Either String Cmd
     parseCheck tws = case tws of
@@ -132,7 +172,7 @@ getCommand str =
         d <- parseDecl (unwords ws')
         return $ Check (CDecl d)
       ["-const", var] -> return $ Check (Const var)
-      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
+      _ ->  Left ":check {-expr | -decl | -const}  {<expr> | <decl> | <constant>}"
 
     parseUnfold :: [String] -> Either String Cmd
     parseUnfold tws = case tws of
@@ -140,7 +180,7 @@ getCommand str =
       "-expr" : ws' -> do
         e <- parseExpr (unwords ws')
         return $ Unfold (Right e)
-      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
+      _ ->  Left ":unfold {-name | -expr} {<name> | <expr>}"
 
     parseTypeof :: [String] -> Either String Cmd
     parseTypeof tws = case tws of
@@ -148,26 +188,26 @@ getCommand str =
       "-expr" : ws' -> do
         e <- parseExpr (unwords ws')
         return $ TypeOf (Right e)
-      _ ->  Left "invalid command, type ':?' for a detailed description of the command"
+      _ ->  Left ":typeOf {-name | -expr} {<name> | <expr>}"
 
     parseList :: String -> Either String [String]
     parseList s =
       if head s == '[' && last s == ']'
       then let s' = init . tail $ s
            in Right (endBy "," s')
-      else Left "invalid command, type ':?' for a detailed description of the command"
+      else Left "<varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
 
     parseExpr :: String -> Either String Abs.Exp
-    parseExpr "" = Left "invalid command, type ':?' for a detailed description of the command"
+    parseExpr "" = Left "lack of expression"
     parseExpr s  = Par.pExp (Par.myLexer s)
 
     parseDecl :: String -> Either String Abs.Decl
-    parseDecl "" = Left "invalid command, type ':?' for a detailed description of the command"
+    parseDecl "" = Left "lack of declaration"
     parseDecl s  = Par.pDecl (Par.myLexer s)
 
     parseMiniConsts :: [String] -> Either String Cmd
-    parseMiniConsts [var] = return $ FindMinimumConsts var
-    parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
+    parseMiniConsts []    = Left "lack of constant"
+    parseMiniConsts (x:_) = return $ FindMinimumConsts x
 
 -- |Instantiate a segment with expressions
 segCont :: Cont -> Namespace -> [ExPos] -> Cont
@@ -202,11 +242,11 @@ readBack _ _ = error "error: readBack"
 hReduct :: Cont -> Exp -> Exp
 hReduct _ U = U
 hReduct c (Abs x a b) =
-  let ns = cns c
-      qa = eval (emptyEnv ns) a
+  let r  = getEnv LockAll c
+      qa = eval r a
+      a' = hReduct c a
       c' = bindConT c x qa
       b' = hReduct c' b
-      a' = hReduct c a
   in Abs x a' b'
 hReduct c (Let x a b e) =
   let c' = bindConD c x a b
@@ -217,21 +257,23 @@ hReduct c e = readBack (namesCont c) (incrEval c e)
 -- |Evaluate an expression in 'one small step'
 incrEval :: Cont -> Exp -> QExp
 incrEval c (Var x) =
-  let ns = cns c
-      dx = getDef c x
-  in eval (emptyEnv ns) dx
+  let (dx,c') = getDef c x
+      r  = getEnv LockAll c'
+  in eval r dx
 incrEval c (App e1 e2) =
-  let q1 = incrEval c e1
-      ns = cns c
-      q2 = eval (emptyEnv ns) e2
+  let r  = getEnv LockAll c
+      q1 = incrEval c e1
+      q2 = eval r e2
   in appVal q1 q2
 incrEval c (SegVar ref eps) =
-  let r  = getEnv LockNone c
-      pr = reverse (rns ref)
+  let pr = reverse (rns ref)
       x  = rid ref
+      r  = getEnv LockNone c
       r' = segEnv r pr eps
       dx = getDef' r' x
-  in eval (emptyEnv . ens $ r') dx
+      c' = findSeg c pr
+      re = getEnv LockAll c'
+  in eval re dx
 incrEval _ _ = error "error: incrEval"
 
 typeOf :: Cont -> Exp -> Exp
@@ -243,7 +285,7 @@ typeOf c (Abs x a b) =
   let c' = bindConT c x a
       b' = typeOf c' b
   in Abs x a b'
-typeOf c e = readBack (namesCont  c) (typeOfV c e)
+typeOf c e = readBack (namesCont c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
 typeOfV _ U = U

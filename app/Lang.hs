@@ -12,7 +12,7 @@ import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
 import qualified Data.Text                  as T
---import           Debug.Trace
+import           Debug.Trace
 
 -- | == Basic Data types and Classes
 
@@ -226,12 +226,15 @@ getType' c x =
        Nothing       -> Nothing
 
 -- |Get the definition of a variable from a context
-getDef :: Cont -> Name -> Exp
+getDef :: Cont -> Name -> (Exp, Cont)
 getDef c x =
-  let mn = OrdM.lookup x (mapCont c)
+  let cn = contName c
+      (pr, x') = varPath cn x
+      c' = findSeg c pr
+      mn = OrdM.lookup x' (mapCont c')
   in case fromJust mn of
-    Ct _   -> Var x
-    Cd _ d -> d
+    Ct _   -> (Var x,c')
+    Cd _ d -> (d,c')
     Cs _   -> error "error: getDef"
 
 -- |Get the definition of a variable from an environment
@@ -242,9 +245,18 @@ getDef' r x =
     Just (Ed _ d) -> d
     _             -> error "error: getDef'"
 
--- |Get the names of a type checking context (excluding the potential sub-segments)
+-- |Get the names of a context (excluding the names of sub-segments)
 namesCont :: Cont -> [Name]
 namesCont (Cont _ cm) = OrdM.keys cm
+
+-- |Get the names of a context (including the names of sub-segments)
+allNames :: Cont -> [Name]
+allNames (Cont ns cm) = OrdM.foldrWithKey g [] cm
+  where g :: Name -> CNode -> [Name] -> [Name]
+        g x v xs = let x' = qualifiedName ns x in
+          if pSegnode v
+          then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+          else x' : xs
 
 -- |Generate a fresh name based on a list of names
 freshVar :: Name -> [Name] -> Name
@@ -280,7 +292,7 @@ prec = 10
 
 instance Show Exp where
   showsPrec _ U       = showString "*"
-  showsPrec _ (Var x) = showString x
+  showsPrec _ (Var x) = let x' = if neutralName x then tail x else x in showString x'
   showsPrec _ (SegVar ref [])  = showString $ showRef ref
   showsPrec p (SegVar ref eps) = showParen (p > prec) $ showString (strnsp (rns ref)) . showString " " .
                                  showList (map fst eps) . showString " . " . showString (rid ref)
@@ -401,7 +413,9 @@ valueOf r x =
 -- |Rules for function application
 appVal :: QExp -> QExp -> QExp
 appVal q1 q2 = case q1 of
-  Clos (Abs x _ e) r -> let r' = bindEnvQ r x q2 in eval r' e
+  Clos (Abs x _ e) r -> let r' = bindEnvQ r x q2
+                            q  = eval r' e
+                        in q
   _                  -> App q1 q2
 
 -- |Get the environment of an instantiated segment

@@ -183,10 +183,3 @@ unlockedNames ul@(UnLockList ls) (Cont ns cm) =
          else if Set.member x' names
               then x' : xs else xs
 
-allNames :: Cont -> [Name]
-allNames (Cont ns cm) = OrdM.foldrWithKey g [] cm
-  where g :: Name -> CNode -> [Name] -> [Name]
-        g x v xs = let x' = qualifiedName ns x in
-          if pSegnode v
-          then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
-          else x' : xs
