@@ -1,0 +1,42 @@
+% CREATED BY DAVID FRISK, 2016
+\chapter{Introduction}
+\section{Some Background About Dependent Types}
+Dependent type theory has lent much of its power to the proof-assistant systems like Coq \cite{huet1997coq}, Lean \cite{de2015lean}, and functional programming languages like Agda \cite{norell2008dependently} and Idris \cite{brady2013idris}, and contributed much to their success. Essentially, dependent types are types that depend on \emph{values} of other types. As a simple example, consider the type that represents vectors of length $n$ comprising of elements of type $A$, which can be expressed as a dependent type ($\texttt{vec}\; A\; n$). Readers may easily recall that in imperative languages such as c or java, there are array types which depend on the type of their elements, but no types that depend on values of other types. More formally, suppose we have defined a function which to an arbitrary object $x$ of type $A$ assigns a type $B(x)$, then the Cartesian product $(\Pi x \in A)B(x)$ is a type, namely the type of functions which take an arbitrary object $x$ of type $A$ into an object of type $B(x)$.
+
+The advantage of having a strong typed system built into a language lies in the fact that well typed programs exclude a large portion of run-time errors than those without or with weak type systems. Just as the famous saying puts it “well-type programs cannot ‘go wrong’” [16]. It is in this sense that we say languages equipped with a dependently typed system are guaranteed with the highest level of correctness and precision, which makes them a natural option for building proof assistant systems.
+
+\section{Issues with Dependent Type}
+The downside of dependent type systems are the difficulties in the implementation. One of the difficulties is checking the \textbf{convertibility} of terms. In any typed system, it is crucial for the type checker to decide whether a type denoted by a term $A$ is equal with another type denoted by a term $B$. In a simple typed system, this is done by simply checking the syntactic identity of the symbols of the types. For example, in Java, a primitive type \emph{int} equals only to itself, nothing more. This is because types in Java are not computable \footnote{Technically speaking, the type of an object in Java can be retrieved by the Java \emph{reflection} mechanism and presented in the form of another object, thus subject to computation. Here, we stress on the fact that a type as a term is not computable on the syntactic level, e.g. being passed as an argument to a function.}:there's no way for other terms in Java be reduced to the term \emph{int}. In a dependently typed system, however, the problem is more complex since a type may dependent on terms representing values. In this case, deciding the convertibility of types entails evaluation on values, which requires much more computation.
+
+One common approach to deciding the equality of terms in dependent type theory, whenever the property of confluence holds, is \textit{normalization by evaluation} (NbE) \cite{berger1998normalization}, which reduces terms to their canonical representation for comparison. This method, however, does not scale to large theories for various reasons, among which:
+\begin{itemize}
+\item Producing the normal form may require more reduction steps than necessary. For example, in proving $(1 + 1) ^ {10} = 2 ^{(5 + 5)}$, it is easier if we can prove $1 + 1 == 2$ and $5 + 5 == 10$ instead of having to reduce both sides to 1024 using the definition of exponentiation.
+\item As the number of definitions using previous definitions grows, the size of terms by expanding definitions can grow very quickly. For example, the inductive definition $x_n := (x_{n-1}, x_{n-1})$ makes the normal form of $x_{n}$ grow exponentially.
+\end{itemize}
+
+In this project, we shall focus on the first issue, that is, how to perform as few constant expansions as possible when deciding the convertibility of two terms in a dependently typed system. 
+
+\section{Aim of the Project}
+The first aim of the project is to study how to present \emph{definitions} in dependent type theory. We hope that the definitions of constants could be expanded as few times as possible during the type checking process. We claim that a good definition mechanism can help improve the performance of a proof assistant that is based on dependent type theory. We will analyze the example above later to give a support to our claim. Before that, we shall at fist make it clear for the reader this question: What exactly is the problem of definition and why is it important?
+
+A \emph{definition} in the context of dependent type theory is a term of the form $x : A = B$, meaning that $x$ is a constant of type $A$, defined as $B$. The problem with definitions is not about how a constant should be declared, but how it should be \textbf{evaluated}. \emph{Evaluation}, or \emph{reduction}, in dependent type theory has its concept rooted in \emph{$\lambda$-calculus} \cite{barendregt1984lambda}. There, a term in the form $(\lambda x . M) \;N$ can be \textbf{evaluated} (or \textbf{reduced}) to the form $M[x := N]$, meaning that replacing each appearance of $x$ that is free in $M$ with $N$\footnote{There is a problem of the capture of free variables which we will not elaborate here. Curious and uninformed readers are encouraged to read detailed articles about \emph{$\lambda$-calculus.}}. In dependent type theory, however, different evaluation strategies can have huge difference regarding the efficiency of evaluation. 
+
+For example, if we define the exponentiation function on natural numbers as
+\begin{align*}
+  \texttt{expo} &: \texttt{Nat} \to \texttt{Nat} \to \texttt{Nat} \\
+  \texttt{expo} &\;\; \_\;\; 0 = 1 \\
+  \texttt{expo} &\;\; n \;\; m = n * (\texttt{expo} \;\; n \;\; (m - 1))
+\end{align*}
+where \texttt{Nat} represents type of natural number and $*$ is the definition of multiplication. Then when we try to prove the convertibility of two terms: $(1 + 1)^{10}$ and $2 ^ {(5+5)}$, instead of unfolding the definition of \texttt{expo} multiple times, we keep the constant \texttt{expo} \textbf{locked} and only reduce both sides to the term ($\texttt{expo} \;\; 2 \;\; 10$). Then by showing that they can be reduced to a common term, we prove their equality with much less computation. Here, a \textbf{locked} constant has only its type information exposed, such that a type checker can still use it to do as much type checking work as possible, whereas its definition is erased so that it cannot be reduced further.
+
+The second aim of the project is to add a module system based on the idea `segments` borrowed from the work of AUTOMATH \cite{de1994survey}.
+
+\section{Limitations}
+The limitations of our work come into three aspects: expressiveness, scope and meta-theory.
+\begin{enumerate}
+\item \textbf{Expressiveness:} We try to keep the syntax of the language as simple as possible in order to focus on the study of a definition mechanism. This practice inevitably affects the expressiveness of our language: As has been mentioned, there is no syntax to create data types, nor the syntax to support pattern match operations. Besides, because we track the names of constants in a linear manner as an approach to the name collision problem (see example \ref{theory:exa2} in section \ref{theory:subtleties}) and enforce that any constant declaration must not collide with the names in the top level context, the language feature \emph{variable shadowing} does not exist in our language.
+\item \textbf{Scope:} For the study of definition, we do not try to establish a universal mechanism that is applicable in all kinds of systems. What we present in this paper is but a recommended way to do type checking with the presence of definitions in a dependent type theory. The type checking rules and the locking/unlocking mechanism are not guaranteed to be applicable to other systems without modification. However, the ideas suggested in this paper are highly likely to find a much wider using scenario. 
+\item \textbf{Metatheory:} We do not present the metatheory behind our system. Since our system shares much of its idea with Mini-TT, there should be some correspondence between the metatheory of these two systems, such as the property of the decidability of the type checking algorithm. But we will not conduct an analysis on this due to the limit of time and the limit of my knowledge.
+\end{enumerate}
+
+
