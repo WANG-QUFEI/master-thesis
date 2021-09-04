@@ -1,0 +1,28 @@
+\BOOKMARK [0][-]{chapter.1}{Terminology}{}% 1
+\BOOKMARK [0][-]{chapter.2}{Introduction}{}% 2
+\BOOKMARK [1][-]{section.2.1}{Some Background About Dependent Types}{chapter.2}% 3
+\BOOKMARK [1][-]{section.2.2}{Issues with Dependent Type}{chapter.2}% 4
+\BOOKMARK [1][-]{section.2.3}{Aim of the Project}{chapter.2}% 5
+\BOOKMARK [1][-]{section.2.4}{Limitations}{chapter.2}% 6
+\BOOKMARK [0][-]{chapter.3}{Theory}{}% 7
+\BOOKMARK [1][-]{section.3.1}{Subtleties of Dependent Type Theory}{chapter.3}% 8
+\BOOKMARK [1][-]{section.3.2}{Definitions in a Dependent Type Theory}{chapter.3}% 9
+\BOOKMARK [1][-]{section.3.3}{Syntax of the Language}{chapter.3}% 10
+\BOOKMARK [1][-]{section.3.4}{Operational Semantics}{chapter.3}% 11
+\BOOKMARK [1][-]{section.3.5}{Type Checking Rules}{chapter.3}% 12
+\BOOKMARK [2][-]{subsection.3.5.1}{Type Checking Context}{section.3.5}% 13
+\BOOKMARK [2][-]{subsection.3.5.2}{checkDecl}{section.3.5}% 14
+\BOOKMARK [2][-]{subsection.3.5.3}{checkInferT}{section.3.5}% 15
+\BOOKMARK [2][-]{subsection.3.5.4}{checkWithT}{section.3.5}% 16
+\BOOKMARK [2][-]{subsection.3.5.5}{checkEqualInferT}{section.3.5}% 17
+\BOOKMARK [2][-]{subsection.3.5.6}{CheckEqualWithT}{section.3.5}% 18
+\BOOKMARK [1][-]{section.3.6}{Locking Mechanism}{chapter.3}% 19
+\BOOKMARK [1][-]{section.3.7}{Head Reduction}{chapter.3}% 20
+\BOOKMARK [0][-]{chapter.4}{Extension}{}% 21
+\BOOKMARK [0][-]{chapter.5}{Results}{}% 22
+\BOOKMARK [0][-]{chapter.6}{Conclusion}{}% 23
+\BOOKMARK [0][-]{chapter.6}{Bibliography}{}% 24
+\BOOKMARK [0][-]{appendix.A}{Appendix}{}% 25
+\BOOKMARK [1][-]{section.A.1}{Haskell Source Code}{appendix.A}% 26
+\BOOKMARK [1][-]{section.A.2}{Concrete Syntax}{appendix.A}% 27
+\BOOKMARK [1][-]{section.A.3}{Test Case}{appendix.A}% 28
