@@ -174,7 +174,7 @@ getCommand str =
     parseMiniConsts [var] = return $ FindMinimumConsts var
     parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
-readBack :: [String] -> Val -> Exp
+readBack :: [String] -> QExp -> Exp
 readBack _ U = U
 readBack _ (Var x) = Var x
 readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
@@ -199,9 +199,9 @@ headRed c (Abs (Dec x a) e) =
 headRed c (Abs d@(Def x a b) e) =
   let e' = headRed (CConsDef c x a b) e
   in Abs d e'
-headRed c e = readBack (varsCont c) (headRedV c e)
+headRed c e = readBack (namesCont c) (headRedV c e)
 
-headRedV :: Cont -> Exp -> Val
+headRedV :: Cont -> Exp -> QExp
 headRedV c (Var x)     = eval (defVar x c) ENil
 headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
 headRedV _ e           = error  $ "invalid application of headRedV on expression" ++ show e
@@ -220,9 +220,9 @@ typeOf c (Abs d@(Def x a b) e) =
   let c' = CConsDef c x a b
       e' = typeOf c' e
   in Abs d e'
-typeOf c e = readBack (varsCont c) (typeOfV c e)
+typeOf c e = readBack (namesCont c) (typeOfV c e)
 
-typeOfV :: Cont -> Exp -> Val
+typeOfV :: Cont -> Exp -> QExp
 typeOfV c (Var x)     =
   let Just a = getType c x
   in eval a (getEnv L.LockNone c)
@@ -233,14 +233,14 @@ typeOfV _ e           = error ("not typeable expression: " ++ show e)
 unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
 unfold s c e =
   let ve = eval e (getEnv s c)
-  in readBack (varsCont c) ve
+  in readBack (namesCont c) ve
 
 checkConstant :: LockStrategy l => l -> Cont -> String -> Either String ()
 checkConstant ls c s =
   case locate c s of
     Nothing -> Left . errorMsg $ "No constant with name '" ++ s ++ "' exists in the current context"
     Just (_, d) ->
-      case runG (checkDecl ls c d) CNil of
+      case runG (checkD ls c d) CNil of
         Left err ->
           let errmsg = explain err
           in Left (unlines (map errorMsg errmsg))
@@ -271,7 +271,7 @@ locate c s = case c of
 
 trialAndUnfold :: LockStrategy s => [String] -> s -> Cont -> Decl -> TypeCheckM [String]
 trialAndUnfold ss ls c d = do
-  void $ checkDecl ls c d
+  void $ checkD ls c d
   return $ getConstsUnLocked ls c
   `catchError` h
   where

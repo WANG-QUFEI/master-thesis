@@ -17,14 +17,14 @@ data Exp = U
          deriving (Eq)
 
 -- | the syntax for 'Exp' is also used as value in this language
-type Val = Exp
+type QExp = Exp
 
 -- | abstract syntax for declarations
 data Decl = Dec String Exp | Def String Exp Exp deriving (Eq)
 
 -- | environment that relates a variable to a value
 data Env = ENil
-         | EConsVar Env String Val
+         | EConsVar Env String QExp
          | EConsDef Env String Exp Exp
          deriving (Eq, Show)
 
@@ -90,7 +90,7 @@ idPos :: Id -> (Int, Int)
 idPos (Id (pos, _)) = pos
 
 -- | evaluate an expression in a given environment
-eval :: Exp -> Env -> Val
+eval :: Exp -> Env -> QExp
 eval e r = case e of
   U                  -> U
   Var x              -> getVal r x
@@ -100,7 +100,7 @@ eval e r = case e of
   Clos _ _           -> e
 
 -- | get the value of a variable from an environment
-getVal :: Env -> String -> Val
+getVal :: Env -> String -> QExp
 getVal ENil x = Var x
 getVal (EConsVar r x' v) x
   | x == x'   = v
@@ -110,7 +110,7 @@ getVal (EConsDef r x' _ e) x
   | otherwise = getVal r x
 
 -- | application operation on values
-appVal :: Val -> Val -> Val
+appVal :: QExp -> QExp -> QExp
 appVal v1 v2 = case v1 of
   Clos (Abs (Dec x _) e) r -> eval e (consEVar r x v2)
   _                        -> App v1 v2
@@ -126,20 +126,20 @@ getType (CConsDef c x' a _) x
   | otherwise = getType c x
 
 -- | extend an environment with a variable and its value
-consEVar :: Env -> String -> Val -> Env
+consEVar :: Env -> String -> QExp -> Env
 consEVar r "" _ = r
 consEVar r x v  = EConsVar r x v
 
 -- | extend a type-checking context with a variable and its type
-consCVar :: Cont -> String -> Val -> Cont
+consCVar :: Cont -> String -> QExp -> Cont
 consCVar c "" _ = c
 consCVar c x t  = CConsVar c x t
 
 -- | get all variables of a context
-varsCont :: Cont -> [String]
-varsCont CNil               = []
-varsCont (CConsVar c x _)   = reverse (x : varsCont c)
-varsCont (CConsDef c x _ _) = reverse (x : varsCont c)
+namesCont :: Cont -> [String]
+namesCont CNil               = []
+namesCont (CConsVar c x _)   = reverse (x : namesCont c)
+namesCont (CConsDef c x _ _) = reverse (x : namesCont c)
 
 -- | generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String

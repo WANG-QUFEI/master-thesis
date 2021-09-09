@@ -359,9 +359,9 @@ Note that the definition part is always discarded.
 
 In our implementation, when parsing the source file into the abstract syntax of our language, we make sure that each variable is properly declared with a type and the name of the variable does not clash with the existing ones. By doing so, we ensure that the error condition in the lookup operation will never occur during the type checking process and each variable's name is unique.
 
-In order to facilitate the process of variable renaming, we also defined two auxiliary functions - \texttt{varsCont} and \texttt{freshVar}:
+In order to facilitate the process of variable renaming, we also defined two auxiliary functions - \texttt{namesCont} and \texttt{freshVar}:
 \begin{itemize}
-  \item $\texttt{varsCont} :: \texttt{Cont} \to [\texttt{String}]$: return the names of a context. (\texttt{Cont} represents the type of context.)
+  \item $\texttt{namesCont} :: \texttt{Cont} \to [\texttt{String}]$: return the names of a context. (\texttt{Cont} represents the type of context.)
   \item $\texttt{freshVar} :: \texttt{String} \to [\texttt{String}] \to \texttt{String}$: given a name $s$ and a list of names (usually the names of a context), return $s$ if it does not belong to the list; otherwise, return a new name that is not in the list.
 \end{itemize}
 
@@ -370,14 +370,14 @@ The definitions of these two functions are given in the table \ref{tab:var-renam
 \begin{table}[h] 
   \centering
   \begin{tabular}{l l p{6cm}}
-    $\texttt{varsCont}(())$ & = & \texttt{[]} \\
-    $\texttt{varsCont}((\Gamma, x : \_))$ & = & $x : \texttt{varsCont}(\Gamma)$ \\
-    $\texttt{varsCont}((\Gamma, x : \_ = \_))$ & = & $x : \texttt{varsCont}(\Gamma)$ \\
+    $\texttt{namesCont}(())$ & = & \texttt{[]} \\
+    $\texttt{namesCont}((\Gamma, x : \_))$ & = & $x : \texttt{namesCont}(\Gamma)$ \\
+    $\texttt{namesCont}((\Gamma, x : \_ = \_))$ & = & $x : \texttt{namesCont}(\Gamma)$ \\
     \\ 
     $\texttt{freshVar}(\varepsilon, ss)$ & = & $\texttt{freshVar}(\texttt{`var'}, ss)$ ($\varepsilon$ represents the empty string)\\
     $\texttt{freshVar}(s, ns)$ & = & if $s \in ns$ then $\texttt{freshVar}(s', ns)$ else $s$ ($s'$ means append $s$ with an apostrophe character)
   \end{tabular}
-  \caption{Functions: varsCont, freshVar}
+  \caption{Functions: namesCont, freshVar}
   \label{tab:var-rename}
 \end{table}
 
@@ -628,7 +628,7 @@ We check the convertibility of two closures by checking that they are convertibl
     \infer1{\Gamma,s \vdash v1 \equiv v2 \Leftarrow \langle [x : A] \, B, \rho \rangle} 
   \end{prooftree}\left(\begin{array}{l l l}
                          va &= & \llbracket A \rrbracket \rho \\
-                         ns &= & \texttt{varsCont}(\Gamma) \\
+                         ns &= & \texttt{namesCont}(\Gamma) \\
                          y &= & \texttt{freshVar}(x, ns) \\
                          \Gamma_1 &= & (\Gamma, y : va) \\
                          \rho_0 &= & \texttt{getEnv}(s, \Gamma) \\
@@ -662,7 +662,7 @@ This rule accommodates for $\eta$-conversion, where $\lambda x . f \, x$ and $f$
   \end{prooftree}\left(\begin{array}{l l l}
                          va_1 &= & \llbracket A_1 \rrbracket \rho_1 \\ 
                          va_2 &= & \llbracket A_2 \rrbracket \rho_2 \\ 
-                         ns &= & \texttt{varsCont}(\Gamma) \\
+                         ns &= & \texttt{namesCont}(\Gamma) \\
                          y &= & \texttt{freshVar}(x_1, ns) \\
                          \rho_{21} &= & (\rho_1, x_1 = y) \\
                          \rho_{22} &= & (\rho_2, x_2 = y) \\
@@ -732,7 +732,7 @@ We mentioned \emph{head-reduction} earlier as an alternative to implement a lock
   &\begin{prooftree}
     \infer0{\Gamma \vdash R(e, e')}
   \end{prooftree}\left(\begin{array}{l l l}
-                         ns &= & \texttt{varsCont}(\Gamma) \\
+                         ns &= & \texttt{namesCont}(\Gamma) \\
                          ve &= & \texttt{headRedV}(\Gamma, e) \\
                          e' &= & \texttt{readBack}(ns, ve)
                        \end{array}\right)
