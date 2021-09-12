@@ -12,7 +12,6 @@ import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
 import qualified Data.Text                  as T
-import           Debug.Trace
 
 -- | == Basic Data types and Classes
 
@@ -197,17 +196,15 @@ contName :: Cont -> Name
 contName (Cont [] _) = ""
 contName (Cont ns _) = last ns
 
--- |Find the path from the current context to the variable
-varPath :: Name -> Name -> (Namespace, Name)
-varPath cn vn =
+varPath :: Namespace -> Name -> (Namespace, Name)
+varPath ns vn =
   let ts = T.splitOn "." (T.pack vn)
-      ns = map T.unpack (reverse ts)
-  in case ns of
+      vs = map T.unpack ts
+  in case vs of
     [x] -> ([], x)
-    _   -> let x   = head ns
-               ns' = filter (/="") (tail ns)
-               pr  = takeWhile (/= cn) ns'
-           in (pr, x)
+    _   -> let vs' = tail vs
+               ps  = drop (length ns) vs'
+           in (init ps, last ps)
 
 -- |Strictly get the type bound to a variable
 getType :: Cont -> Name -> Exp
@@ -216,8 +213,7 @@ getType c x = fromJust $ getType' c x
 -- |Try to get the type bound to a variable
 getType' :: Cont -> Name -> Maybe Exp
 getType' c x =
-  let cn = contName c
-      (pr, x') = varPath cn x
+  let (pr, x') = varPath (cns c) x
       c' = findSeg c pr
   in case OrdM.lookup x' (mapCont c') of
        Just (Ct t)   -> Just t
@@ -228,8 +224,7 @@ getType' c x =
 -- |Get the definition of a variable from a context
 getDef :: Cont -> Name -> (Exp, Cont)
 getDef c x =
-  let cn = contName c
-      (pr, x') = varPath cn x
+  let (pr, x') = varPath (cns c) x
       c' = findSeg c pr
       mn = OrdM.lookup x' (mapCont c')
   in case fromJust mn of

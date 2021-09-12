@@ -1,2 +1,194 @@
 % CREATED BY DAVID FRISK, 2016
-\chapter{Extension}
+\chapter{Extension}\label{chapter:extension}
+We describe in this chapter an extension to our language: a module system based on the idea of `segment' from the work AUTOMATH. As introduced in section \ref{chapter:intro:aim}, the idea of `segment' was developed as an abbreviation facility in AUTOMATH. For a complete description, we refer the readers to H. Balsters's work\cite{balsters1994lambda}. Here, we would avoid an introduction to the idea of `segment' and how it used in AUTOMATH, but only illustrate its influence on our design of a module system by giving an example in the notation of our language as follows. Note that in the following discussion, we use the words `segment' and 'module' interchangeably since they refer to the same structure in our language.
+\begin{example} \label{exm:seg}
+  The idea of \emph{segment} is to have a new form of declaration: \[x = ds\; \texttt{Seg}\]
+  where $x$ is the name of the segment and $ds$ a list of declaration. The word `Seg' is designed as a language keyword and a segment can also be seen as a module with parameters. For example,
+  \[ s = [ A : *,\; id : A \to A = [x : A]\; x ]\; \texttt{Seg} \] 
+  is a module which contains a declaration and a definition. The declaration (\( A : * \footnote{`*' represents U, the type of small types}\)) is a parameter of the module and the definition $id$ is the identity function defined in this module. Suppose we have another declaration (\( A0 : * \)), then the expression \( (s \, [A0]).id \) has $A0 \to A0$ as its type and closure $([x : A]x)(A = A0)$ as its value. 
+\end{example}
+
+From this example we can see that a segment in our language is an abbreviation for a collection of declarations. We give a definition of segment by listing the relevant concepts and grammatical rules as follows.
+\begin{definition}[Segment]
+  \leavevmode \vspace{-\baselineskip}
+  \begin{itemize}
+  \item A segment can be declared as $x = \texttt{Seg}\;ds$ where $x$ is the \emph{name} of the segment and $ds$ consisting of a list of declarations is the \emph{content} of the segment.
+  \item An \emph{empty segment} is a segment whose content is an empty list. Declaration of an empty segment is allowed grammatically but of no practical usage.
+  \item Segments can be nested, i.e., a segment can be declared within another segment. The segment which contains other segments is called the \emph{parent} and the segment(s) contained in a parent is(are) called the \emph{child(children)}. We use the symbol $\to$ to denote the parent-child relation such that $a \to b$ iff $a$ is the parent of $b$.
+  \item For the constants that are declared under the segment $s$, $s$ are called their \emph{declaring segment}. So for all declarations under a segment $s$, if we put all the declared constants into a set $\mathcal{A}$, and all the declared segments into a set $\mathcal{B}$, then the declaring segment of $\mathcal{A}$ and the parent of $\mathcal{B}$ is the same segment $s$. 
+  \item There is a \emph{default segment} that is implicitly inhabited at the top-level and is denoted as \emph{s-root}. It is the segment to which the first declaration of a program belongs.
+  \item The children segments and their children are called \emph{descendants} to the parent segment; To the descendants, the parent segment and its parent up to \emph{s-root} are called the \emph{ancestors}.
+  \item The \emph{path} of a segment $s$ is the list of names that relate \emph{s-root} to $s$ under the relation $\to$. E.g., if a segment is declared with name ``a'' in the default segment, then its path is $[a]$\footnote{Here we use the convention about list of names introduced in chapter \ref{chapter:term}}; if another segment is declared with name ``b'' in segment \emph{a}, then its path is $[a,b]$. The path of \emph{s-root} is the empty list.
+  \item The \emph{namespace} of a constant or segment is the string formed by joining the names in the path of its declaring/parent segment by the full stop character. E.g., for a constant declared in a segment whose path is $[a,b,c]$, its namespace is ``a.b.c''. The namespace of the constants or segments from \emph{s-root} is the empty string.
+  \item The \emph{qualified name} of a constant is the string formed by joining the namespace of the constant and the name of the constant by a full stop character. E.g., the qualified name for a constant $x$ in the default segment is ``.x''; the qualified name for a constant $x$ with namespace ``a.b.c'' is ``a.b.c.x''. We also call the usual, non-qualified name of a constant the \emph{short name}.
+  \item The \emph{relative path} of a segment $s$ to an ancestor $a$ is the list of names that relate $a$ to $s$ under the relation $\to$. E.g., if $b$ is a child of $a$ and $c$ is child of $b$, then the relative path of $c$ to $a$ is $[b,c]$.  
+  \item The \emph{relative namespace} of a constant or segment to an ancestor $a$ is the string formed by joining the names in the relative path of its declaring/parent segment to $a$ by the full stop character. E.g., if $s1$ is a segment where $x$ is declared as a variable and $s2$ is declared as a segment, in $s2$, $y$ is declared as a variable, then the relative namespace of $x$ to $s1$ is the empty string and the relative namespace of $y$ to $s1$ is $[s2]$.
+  \item In a segment, declarations of the form $x : A$ are called \emph{parameters} of the segment.
+  \item Declarations and definitions in a segment can be interleaved. That is, we do not require all declarations go before the definitions in a segment for the ease of use.
+  \item A segment can be \emph{instantiated} by giving a list of expressions. If the segment has no parameter, then the list must be empty; otherwise the list must be filled with the exact number of expressions that match the types of the parameters. The result is a new segment with the variables of the parameters of the old segment bound to the expressions provided as their definitions. E.g., for a segment $s$ with parameters $[x : A, y : B, z : C]$, it can be instantiated by a term of the form $s\,[e_1, e_2, e_3]$ where $e_1, e_2, e_3$ are expressions and have type $A, B, C$ respectively.
+  \item A segment can have no parameter. In that case, it can only be instantiated by an empty list and resulting in a new segment that is a replicate of itself.
+  \item A segment can be declared by the instantiation of another segment, i.e., we have declarations of the form $s1 = s2\,[e_1, e_2, \dots, e_n]$ where $s1$ is an instantiation of $s2$.
+  \item Entities(constants and segments) in the current segment $s$ or its descendants can be accessed by the dot operation $(.)$, where on the left of the dot is the relative namespace of the entity to the segment $s$, and on the right is the name of the entity. If the relative namespace is the empty string, which means that the entity is declared under $s$, then it is referenced directly by its name. Both the relative namespace and the name are used in a non-quotation form, i.e., if the relative namespace is ``a.b.c'' and the name is ``x'', then variable $x$ in segment $c$ could be accessed from segment $a$ by term $a.b.c.x$. This form of access is called \emph{direct access}. 
+  \item The other form of access is \emph{access by instantiation}, where the segment represented by the last name of the relative path is instantiated before the entity is accessed. It has the form $s_1.s_2\,\dots\,s_n\,[e_1,e_2,\dots,e_n]\,.\,x$ where $[s_1,\dots,s_n]$ is the relative path of $x$ to the ancestor in which the access happens and $[e_1,\dots,e_n]$ are the expressions used to instantiate $s_n$.
+  \item Expressions in a segment can only refer to entities that has been declared within the same segment or its descendants. This means that terms of the form ($s1\,[\dots]\,.\,s2\,[\dots]\,\dots\,s_n\,[\dots]\,.\,x$) is not necessary since instantiation on the ancestors has no effect on the current segment. We take a step further and consider terms of this form illegal in our language. We call this the rule of \textbf{Reference Confinement}.
+  \item Name of a declaration cannot collide with names already existed in the current segment. Names of different segments may be the same without restriction.  
+  \end{itemize}
+\end{definition}
+
+Having introduced the concepts and rules about segment, we now describe in detail the syntax, semantics and type checking rules of our extended language.
+
+\section{Syntax of the Extended Language}
+We introduce below the abstract syntax of the extended language, for the concrete syntax see appendix\ref{apdix:concrete-syntax-extend}.
+
+Expression in the extended language is defined as follows:
+\begin{definition}[Expression]
+  \leavevmode \vspace{-\baselineskip}
+  \begin{enumerate}[(i)]
+  \item Terms in the form $U$, $x,y,z$, $M\,N$, $[x:A]B$, $[x:A=B] M$ that are defined in \ref{theory:def:exp} are still expressions in the extended language and have exactly the same meaning.
+  \item Given a non-empty list of names $[s_1,s_2,\dots,s_n]$, an empty-possible list of expressions $[e_1,e_2,\dots,e_m]$ and a constant $x$, a term of the form
+    \[ s_1\,.\,s_2\,\dots\,s_n\,[e_1,e_2,\dots,e_m]\,.\,x \]
+    is an expression. When the list of expressions is not empty, it represents an \emph{access by instantiation} to the constant $x$ from the segment $s_n$ whose relative path to the current segment is $[s_1,s_2,\dots,s_n]$; otherwise it represents a \emph{direct access} to the constant $x$ from the segment $s_n$.
+  \end{enumerate}
+\end{definition}
+
+Declaration in the extended language is defined as follows:
+\begin{definition}[Declaration]
+  \leavevmode \vspace{-\baselineskip}
+  \begin{enumerate}[(i)]
+  \item Term in the form $x : A$, $x : A = B$ that are defined in \ref{theory:def:decl} are still declarations in the extended language and have exactly the same meaning.
+  \item Given a name $s$ and an empty-possible list of declarations $ds$, a term of the form
+    \[ s = \texttt{Seg}\;ds \]
+    is a declaration which is used to declare a segment $s$ consisting of the list of declarations $ds$. \texttt{Seg} in this case is a reserved word of the language.
+  \item Given a name $s$, a non-empty list of names $[s_1,s_2,\dots,s_n]$ and an empty-possible list of expressions $[e_1,e_2,\dots,e_m]$, a term of the form
+    \[ s = s_1\,.\,s_2\,\dots\,s_n\,[e_1,e_2,\dots,e_m] \]
+    is a declaration which is used to declare a segment $s$ by the instantiation of another segment $s_n$. The relative path of $s_n$ to the current segment is $[s_1,s_2,\dots,s_n]$.
+  \end{enumerate}
+\end{definition}
+
+A program of the extended language consists of a list of declarations as before. These top-level declarations belong to the default segment \emph{s-root} just as we have introduced above. Within a segment, the name of a declaration still must not collide with any name of the existing declarations, but there is no constraint on the use of names between different segments. Each segment is uniquely identified by its path and each variable is uniquely identified by its qualified name. A summary of the syntax of the extended language could be found int table \ref{extension:tab:syntax}.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l p{8cm}}
+    Exp  & $E$ & ::= & $U \mid x \mid E_1 \; E_2 \mid [x : E_1] E_2 \mid [x : E_1 = E_2] E_3 \mid $ \newline $s_1\,.\,s_2\,\dots\,s_n\,[E_1,E_2,\dots,E_m]\,.\,x$ \\
+    Decl & $D$ & ::= & $x : E \mid x : E_1 = E_2 \mid s = \texttt{Seg}\;[D] \mid$ \newline $s = s_1\,.\,s_2\,\dots\,s_n\,[E_1,E_2,\dots,E_m]$ \\
+    Prog & $P$ & ::= & $[D]$
+  \end{tabular}
+  \caption{Syntax of the Extended Language}
+  \label{extension:tab:syntax}
+\end{table}
+
+\section{Operational Semantics}
+The fact that segments can be nested in the extended language suggests a tree like recursive structure of the evaluation environment.
+\begin{definition}[Environment]
+  An environment $\rho$ in the semantics of the extended language has the following two properties:
+  \begin{enumerate}[(i)]
+  \item Property \textbf{p} that is the path of the segment represented by $\rho$.
+  \item Property \textbf{d} that is a dictionary relating each name $x$ of the segment represented by $\rho$ to one of the following entities:
+    \begin{itemize}
+    \item a quasi-expression $v$, meaning that the variable $x$ is bound to a q-expression $v$ in the environment;
+    \item a definition $x : A = B$, meaning that the variable $x$ is declared with type $A$ and definition $B$ in the environment;
+    \item a sub-environment $\rho'$, meaning that $x$ is the name of the segment represented by $\rho'$.
+    \end{itemize}
+  \end{enumerate}
+  We denote the path of $\rho$ as $\rho_{p}$ and the dictionary of $\rho$ as $\rho_{d}$.
+\end{definition}
+
+The definition of q-expression is the same as that of \ref{theory:def:q-exp} and we still use the notation $[\![M]\!]\rho = q$ to express that expression $M$ is evaluated to a q-expression $q$ in the environment $\rho$.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l p{8cm}}
+    $[\![U]\!]\rho$ & = & $\mathcal{U}$ \\
+    $[\![x]\!]\rho$ & = & $\rho^*(x)$ \\
+    $[\![s_1\,.\,s_2\,\dots\,s_n\,[e_1,e_2,\dots,e_m]\,.\,x]\!]\rho$ & = & let $\rho_1 = \iota([s_1,\dots,s_n], \rho, [e_1,\dots,e_m])$ \newline in $\rho_1^*(x)$\\
+    $[\![M_1 \; M_2]\!]\rho$ & = & $\alpha([\![M_1]\!]\rho, [\![M_2]\!]\rho)$ \\
+    $[\![[x : A]\,B]\!]\rho$ & = & $\langle[x : A]\,B, \rho\rangle$ \\
+    $[\![[x : A = B]\,M]\!]\rho$ & = & $[\![M]\!](\rho, x : A = B)$ 
+  \end{tabular}
+  \caption{Semantics of the Extended Language}
+  \label{extension:tab:semantics}
+\end{table}
+
+The evaluation rules for expressions in these forms $U, M\,N, [x:A]B, [x:A=B]M$ are the same as that in table \ref{theory:tab:semantics}. For expressions of the other two forms, the following functions deserve particular attention:
+\begin{itemize}
+\item $\rho^*(x)$: evaluate the constant $x$ in environment $\rho$ with the concept of namespace.
+\item $\iota(rp, \rho, es)$: get the environment corresponding to the segment whose relative path is $rp$ and is instantiated by a list of expressions $es$ in the environment $\rho$. 
+\end{itemize}
+
+Function $\rho^*(x)$ relies further on three auxiliary functions, \emph{lookup}, \emph{is-qname} and \emph{qname}.
+\begin{itemize}
+  \item \emph{lookup}$(\rho, x)$: find the entity bound to the variable $x$(in short name) in the environment $\rho$. We use the notation
+    \begin{itemize}
+    \item $\rho_{d}, x \mapsto \varnothing$ to denote that $x$ is bound to nothing;
+    \item $\rho_{d}, x \mapsto v$ to denote that $x$ is bound to a q-expression $v$;
+    \item $\rho_{d}, x \mapsto x : A = B$ to denote that $x$ is bound to a definition $x : A = B$.
+    \end{itemize}
+    Note that the name $x$ used here must refer to a constant so that the case when $x$ is mapped to a segment will not appear in this function.
+  \item \emph{is-qname}$(x)$: a predicate testing whether $x$ is a qualified name.
+  \item \emph{qname}$(\rho_{p}, x)$: return the qualified name of variable $x$ in environment $\rho$.
+\end{itemize}
+The definition of $\rho^*(x)$ is given as a pattern match function in table \ref{extension:tab:eval-const}.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l}
+    $\rho_{d}, x \mapsto \varnothing$ & $\rightarrow$ & if \emph{is-qname}$(x)$ then $x$ else $qname(x)$ \\
+    $\rho_{d}, x \mapsto v$ & $\rightarrow$ & $v$ \\
+    $\rho_{d}, x \mapsto x : A = B$ & $\rightarrow$ & $[\![B]\!]\rho$ \\
+  \end{tabular}
+  \caption{Function - $\rho^*(x)$}
+  \label{extension:tab:eval-const}
+\end{table}
+
+Function $\iota$ relies on two auxiliary functions \emph{findEnvSeg} and \emph{bindEnvQ}.
+\begin{itemize}
+  \item \emph{findEnvSeg}$(rp, \rho)$: find the environment $\rho_1$ that represents the segment whose relative path is $rp$ to the segment represented by $\rho$. We also use this notation $\rightsquigarrow_{rp}\rho = \rho_1$ to express this function succinctly.
+  \item \emph{bindEnvQ}$(\rho, qs)$: bind the names of the parameters of a segment represented by $\rho$ to a list of q-expressions $qs$. The result is a new environment from $\rho$ where the dictionary of $\rho$ is updated by the list of (name, q-expression) pairs. Note that in the implementation, getting the parameters' names of a segment is handled by another procedure which we will not specify here. We also use this notation $\bigvee_{qs}\rho = \rho_1$ to express this function succinctly.
+\end{itemize}
+The definition of $\iota$ is given as a formula in table \ref{extension:tab:segEnv}. Note that we overload the notation ($[\![]\!]$) below to express the evaluation on a list of expressions to get a list of q-expressions.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l}
+    $\iota(rp, \rho, es)$ & = & let $\rho_1 = \rightsquigarrow_{rp}\rho$, $qs = [\![es]\!]\rho$ in $\bigvee_{qs}\rho$
+  \end{tabular}
+  \caption{Function - $\iota$}
+  \label{extension:tab:segEnv}
+\end{table}
+
+\section{Type Checking Algorithm}
+Like environment, the type checking context needs to be modified in a tree-like recursive structure.
+\begin{definition}[Type Checking Context]
+  A type checking context $\Gamma$ in the semantics of the extended language has the following two properties:
+  \begin{enumerate}[(i)]
+  \item Property \textbf{p} that is the path of the segment represented by $\Gamma$.
+  \item Property \textbf{d} that is a dictionary relating each name $x$ of the segment represented by $\Gamma$ to one of the following entities:
+    \begin{itemize}
+    \item an expression $A$, meaning that the variable $x$ has type $A$ in this context;
+    \item a definition $x : A = B$, meaning that the variable $x$ is declared with type $A$ and definition $B$ in the context;
+    \item a sub-environment $\Gamma'$, meaning that $x$ is the name of the segment represented by $\Gamma'$.
+    \end{itemize}
+  \end{enumerate}
+  We denote the path of $\Gamma$ as $\Gamma_{p}$ and the dictionary of $\Gamma$ as $\Gamma_{d}$.
+\end{definition}
+Given a type checking context $\Gamma$, we can query the type of a variable by function $\Gamma(x)$, where $x$ is the name or qualified name of a variable. Function $\Gamma(x)$ will always succeed because only variables from $\Gamma$ or its descendants are queried for types. This is guaranteed by (1) the rule of \emph{Reference Confinement} which regulates that variables in the outer scope of a segment cannot be referred inside the segment and (2) a \emph{translation} process corresponds to the one mentioned in section \ref{theory:sec:check} where proper declaration and usage of variables are checked. When $x$ is a short name, then variable $x$ is declared in $\Gamma$; otherwise if $x$ is a qualified name, then variable $x$ is declared in a descendant segment of $\Gamma$. In the latter case, we have a function \emph{locate-seg} that given a context $\Gamma$ and a qualified name $x$, finds the relative path of the declaring segment of $x$ to $\Gamma$. Once we have the relative path, say $rp$, we can get the context of the descendant segment by a function called $findCtxSeg(\Gamma, rp)$ and denote it as $\Gamma_1 = \rightsquigarrow_{rp}\Gamma$ where $\Gamma_1$ is the context of the descendant segment. Lastly, similar with environment, we have a \emph{lookup}$(\Gamma, x)$ function that finds the entity bound to the variable $x$(in short name) in the type checking context $\Gamma$, we use the notation
+\begin{itemize}
+\item $\Gamma_d, x \mapsto A$ to denote that $x$ has type $A$;
+\item $\Gamma_d, x \mapsto x : A = B$ to denote that $x$ is declared of type $A$ with definition $B$.
+\end{itemize}
+Also, for a variable with name $x$, the function \emph{sname}$(x)$ returns the short name of $x$: if $x$ is not a qualified name, return $x$; otherwise return the last component of $x$ split by the full stop character.
+
+With these auxiliary functions introduced, the definition of $\Gamma(x)$ is given in a Haskell style pseudo-code as follows:
+\begin{lstlisting}[mathescape=true, escapeinside={(*}{*)}, caption=Function - $\Gamma(x)$]
+  $\Gamma(x)$ =
+    let $\Gamma'$ = if not (*\emph{is-qname}*)$(x)$ then $\Gamma$
+             else let rp = (*\emph{locate-seg}*)$(\Gamma, x)$ in $\rightsquigarrow_{rp}\Gamma$
+        $x'$ = (*\emph{sname}*)$(x)$ 
+    in case $\Gamma'_d, x' \mapsto$ of
+        $A$ then $A$ 
+        $x : A = B$ then $A$
+\end{lstlisting}
+
+The lock strategies of the extended language have the same name and logic with that of the basic language, with three major differences:
+\begin{itemize}
+\item In transforming a type checking context to an environment, the tree structure of the segments must be retained.
+\item Names of variables used in the list as parameter for strategies \emph{LockList} and \emph{UnLockList} must be specified in qualified name.
+\item The lock/unlock operation can now be applied on segments, which means to lock/unlock all the constants in the segment. This is done by putting the ``qualified name'' of a segment to the list that is used as parameter for the lock strategies. A ``qualified name'' to a segment is formed by joining the names in its path by the full stop character.
+\end{itemize}

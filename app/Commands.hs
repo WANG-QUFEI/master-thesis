@@ -28,7 +28,7 @@ import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
 import           Data.Map                   (Map, (!))
 import qualified Data.Map                   as M
-import           Debug.Trace
+-- import           Debug.Trace
 import           Text.Printf                (printf)
 
 -- |Data type for the commands

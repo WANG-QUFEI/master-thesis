@@ -1,9 +1,34 @@
 % CREATED BY DAVID FRISK, 2016
 \chapter{Appendix}
+\section{Concrete Syntax for the Basic Language} \label{apdix:concrete-syntax-basic}
+\begin{verbatim}
+position token Id (char - ["\\\n\t[]():;. "])+;
 
-\section{Haskell Source Code} \label{apdix:source-code}
+entrypoints Context, CExp, CDecl;
 
-\section{Concrete Syntax} \label{apdix:concrete-syntax}
+Ctx. Context ::= [CDecl];
+
+CU.      CExp2 ::= "*";
+CVar.    CExp2 ::= Id;
+CApp.    CExp1 ::= CExp1 CExp2;
+CArr.    CExp  ::= CExp1 "->" CExp;
+CPi.     CExp  ::= "[" Id ":" CExp "]" CExp;
+CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
+
+CDec.    CDecl ::= Id ":" CExp;
+CDef.    CDecl ::= Id ":" CExp "=" CExp;
+
+
+terminator CDecl ";";
+
+coercions CExp 3;
+
+comment "--";
+
+comment "{-" "-}";
+\end{verbatim}
+
+\section{Concrete Syntax for the Extended Language} \label{apdix:concrete-syntax-extend}
 \begin{verbatim}
 position token Id ((char - ["\\\n\t[]():;,.0123456789 "]) 
   (char - ["\\\n\t[]():;,. "])*);
