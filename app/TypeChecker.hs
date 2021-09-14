@@ -16,7 +16,7 @@ import qualified Core.Abs             as Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
 import           Data.Maybe           (fromJust)
---import           Debug.Trace
+import           Debug.Trace
 import           Lang
 import           Lock
 import           Monads
@@ -39,9 +39,9 @@ data TypeCheckError
 instance InformativeError TypeCheckError where
   explain (CannotInferType e)       = ["cannot infer type!", printf "exp: %s" (show e)]
   explain (NotFunctionClos v)       = ["not a function closure!", show v]
-  explain (NotConvertible v1 v2)    = ["values not convertible!", "v1: " ++ show v1, "v2: " ++ show v2]
+  explain (NotConvertible q1 q2)    = ["values not convertible!", "q1: " ++ show q1, "q2: " ++ show q2]
   explain (NoTypeBoundVar x)        = ["no bound type!", "var: " ++ x]
-  explain (TypeNotMatch e v)        = ["type mismatch", "exp: " ++ show e, "type: " ++ show v]
+  explain (TypeNotMatch e q)        = ["type mismatch", "exp: " ++ show e, "type: " ++ show q]
   explain (ExtendedWithPos err d)   = "detect type check error at: " : show d : explain err
   explain (ExtendedWithCtx err ss)  = ss ++ explain err
 
@@ -86,6 +86,14 @@ checkT s c (SegVar ref eps) q = do
   let t = getType c'' x
       qt = eval (getEnv s c'') t
   void $ checkConvertI s c'' qt q
+checkT s c e@(App (Abs _ a _) b) q = do
+  let r = getEnv s c
+      qa = eval r a
+  checkT s c b qa
+  let ns = namesCont c
+      qe = eval r e
+      e' = readBack ns qe
+  checkT s c e' q
 checkT s c e@App {} q = do
   q' <- checkI s c e
   void (checkConvertI s c q q')
@@ -140,6 +148,14 @@ checkI s c (App m n) = do
 checkI s c (Let x a b e) = do
   c' <- checkD s c (Def x a b)
   checkI s c' e
+-- checkI s c (Abs x a b) = do
+--   let c' = bindConT c x a
+--   q <- checkI s c' b
+--   let ns = namesCont c'
+--       b' = readBack ns q
+--       t  = Abs x a b'
+--       r  = getEnv s c
+--   return $ eval r t
 checkI _ _ e = throwError $ CannotInferType e
 
 -- |Check that two q-exps are convertible and infer their type
@@ -266,3 +282,20 @@ checkDecl s cc cont cd =
        Right d  -> case runG (checkD s cont d) (emptyCont (cns cont)) of
                   Left err    -> Left $ unlines . map errorMsg $ explain err
                   Right cont' -> Right cont'
+
+-- |Read a quasi-expression back into an expression of the normal form
+readBack :: [String] -> QExp -> Exp
+readBack _  U = U
+readBack _  (Var x) = Var x
+readBack ss (App a b) = App (readBack ss a) (readBack ss b)
+readBack ss (Clos (Abs "" a b) r) =
+  let a' = readBack ss (eval r a)
+      b' = readBack ss (eval r b)
+  in Abs "" a' b'
+readBack ss (Clos (Abs x a b) r) =
+  let y  = freshVar x ss
+      a' = readBack ss (eval r a)
+      r' = bindEnvQ r x (Var y)
+      b' = readBack (y:ss) (eval r' b)
+  in Abs y a' b'
+readBack _ _ = error "error: readBack"

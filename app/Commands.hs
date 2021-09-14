@@ -221,23 +221,6 @@ segCont c pr eps =
           let t = getType cont x
           in bindConD cont x t q
 
--- |Read a quasi-expression back into an expression of the normal form
-readBack :: [String] -> QExp -> Exp
-readBack _  U = U
-readBack _  (Var x) = Var x
-readBack ss (App a b) = App (readBack ss a) (readBack ss b)
-readBack ss (Clos (Abs "" a b) r) =
-  let a' = readBack ss (eval r a)
-      b' = readBack ss (eval r b)
-  in Abs "" a' b'
-readBack ss (Clos (Abs x a b) r) =
-  let y  = freshVar x ss
-      a' = readBack ss (eval r a)
-      r' = bindEnvQ r x (Var y)
-      b' = readBack (y:ss) (eval r' b)
-  in Abs y a' b'
-readBack _ _ = error "error: readBack"
-
 -- |Apply head reduction on an expression
 hReduct :: Cont -> Exp -> Exp
 hReduct _ U = U

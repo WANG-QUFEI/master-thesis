@@ -1,38 +1,21 @@
-sg1 = seg
-  A : *
-  X : [a : A] A
-  a : A
-  z : A = X a 
-
-A : * = sg1.A
-
-M : [y : A] A = [y : A] y 
-
-{-
 lambek = seg
-  Pow : * -> *
   T : * -> *
   mon : [X : *][Y : *](X -> Y) -> (T X -> T Y)
   A   : * = [X : *] (T X -> X) -> X
-  sg1 = seg
-    Pow : * -> *
-    T : * -> * 
-    mon : [X : *][Y : *](X -> Y) -> (T X -> T Y)
-    A   : * = [X : *] (T X -> X) -> X
-    intro : T A -> A =
-      [z : T A][X : *][f : T X -> X]
-      [u : A -> X = [a : A] a X f]
-      [v : T A -> T X = mon A X u] f (v z)
-    match : A -> T A = [a : A] a (T A) (mon (T A) A intro)
-    mint : T A -> T A =
-      [z : T A] match (intro z)
+  intro : T A -> A =
+    [z : T A][X : *][f : T X -> X]
+    [u : A -> X = [a : A] a X f]
+    [v : T A -> T X = mon A X u] f (v z)
+  match : A -> T A = [a : A] a (T A) (mon (T A) A intro)
+  mint : T A -> T A =
+    [z : T A] match (intro z)
 
+Pow : * -> * = [X:*] X -> * ;
 
-Pow : * -> * = [X : *] X -> *
-T   : * -> * = [X : *] Pow (Pow X)
-mon : [X : *][Y : *](X -> Y) -> (T X -> T Y) =
-  [X:*][Y:*][f:X -> Y][u : T X][v: Pow Y] u ([x:X] v (f x))
+T0 : * -> * = [X : *] Pow (Pow X) ;
 
-lambek' = lambek [Pow, T, mon]
--}
+mon0 : [X:*][Y:*](X -> Y) -> (T0 X -> T0 Y) =
+  [X:*][Y:*][f:X -> Y][u : T0 X][v: Pow Y] u ([x:X] v (f x))
+
+s = lambek [T0, mon0]
 
