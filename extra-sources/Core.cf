@@ -14,7 +14,6 @@ CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
 CDec.    CDecl ::= Id ":" CExp;
 CDef.    CDecl ::= Id ":" CExp "=" CExp;
 
-
 terminator CDecl ";";
 
 coercions CExp 3;

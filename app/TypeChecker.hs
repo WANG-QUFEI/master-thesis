@@ -65,6 +65,14 @@ checkT s c (Var x) v = do
       let vt  = eval t (getEnv s c)
       void (checkCI s c vt v)
     Nothing -> throwError $ NoTypeBoundVar x
+checkT s c e@(App (Abs (Dec _ a) _) b) q = do
+  let r = getEnv s c
+      qa = eval a r
+  checkT s c b qa
+  let ns = namesCont c
+      qe = eval e r
+      e' = readBack ns qe
+  checkT s c e' q
 checkT s c e@App {} v = do
   v' <- checkI s c e
   void (checkCI s c v v')
@@ -221,3 +229,21 @@ runTypeCheckCtx s ctx@(Ctx _) =
       c' <- checkD s c d
       put c'
       `catchError` (\e -> throwError $ ExtendedWithPos e d)
+
+readBack :: [String] -> QExp -> Exp
+readBack _ U = U
+readBack _ (Var x) = Var x
+readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
+readBack ns (Clos (Abs (Dec "" a) e) r) =
+  let a' = readBack ns (eval a r)
+      e' = readBack ns (eval e r)
+  in Abs (Dec "" a') e'
+readBack ns (Clos (Abs (Dec x a) e) r) =
+  let z  = freshVar x ns
+      qa = eval a r
+      a' = readBack ns qa
+      r' = consEVar r x (Var z)
+      qe = eval e r'
+      e' = readBack (z : ns) qe
+  in Abs (Dec z a') e'
+readBack _ v = error ("readBack: " ++ show v)

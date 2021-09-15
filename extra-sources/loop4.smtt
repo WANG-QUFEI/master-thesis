@@ -1,3 +1,8 @@
+M : * -> *;
+
+test : * = ([A : *] [B : *] M) M;
+
+{-
 Pow : * -> * =
   [X : *] X -> * ;
 
@@ -45,3 +50,4 @@ loop : ⊥
   = lem2 lem3 ;
 
 delta2 : U -> U = [z : U] delta (delta z) ;
+-}

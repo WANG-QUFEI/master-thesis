@@ -174,21 +174,6 @@ getCommand str =
     parseMiniConsts [var] = return $ FindMinimumConsts var
     parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
-readBack :: [String] -> QExp -> Exp
-readBack _ U = U
-readBack _ (Var x) = Var x
-readBack ns (App v1 v2) = App (readBack ns v1) (readBack ns v2)
-readBack ns (Clos (Abs (Dec "" a) e) r) =
-  let a' = readBack ns (eval a r)
-      e' = readBack ns (eval e r)
-  in Abs (Dec "" a') e'
-readBack ns (Clos (Abs (Dec x a) e) r) =
-  let z  = freshVar x ns
-      a' = readBack ns (eval a r)
-      e' = readBack (z : ns) (eval e (consEVar r x (Var z)))
-  in Abs (Dec z a') e'
-readBack _ v = error ("invalid application of readBack on q-expression: " ++ show v)
-
 headRed :: Cont -> Exp -> Exp
 headRed _ U = U
 headRed c (Abs (Dec x a) e) =
