@@ -16,11 +16,12 @@ import qualified Core.Abs             as Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
 import           Data.Maybe           (fromJust)
-import           Debug.Trace
+--import           Debug.Trace
 import           Lang
 import           Lock
 import           Monads
 import           Text.Printf          (printf)
+
 
 -- | monad for type-checking
 type TypeCheckM a = G TypeCheckError Cont a
@@ -77,7 +78,7 @@ checkT _ _ U U = return ()
 checkT s c (Var x) q = do
   let t = getType c x
       qt = eval (getEnv s c) t
-  void (checkConvertI s c qt q)
+  void (checkCI s c qt q)
 checkT s c (SegVar ref eps) q = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
@@ -85,18 +86,10 @@ checkT s c (SegVar ref eps) q = do
   c'' <- checkSegInst s c c' eps
   let t = getType c'' x
       qt = eval (getEnv s c'') t
-  void $ checkConvertI s c'' qt q
-checkT s c e@(App (Abs _ a _) b) q = do
-  let r = getEnv s c
-      qa = eval r a
-  checkT s c b qa
-  let ns = namesCont c
-      qe = eval r e
-      e' = readBack ns qe
-  checkT s c e' q
+  void $ checkCI s c'' qt q
 checkT s c e@App {} q = do
   q' <- checkI s c e
-  void (checkConvertI s c q q')
+  void (checkCI s c q q')
 checkT s c (Abs x a b) U = do
   checkT s c a U
   let c' = bindConT c x a
@@ -106,7 +99,7 @@ checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
   let r  = getEnv s c
       qa = eval r a
       qa' = eval r' a'
-  void $ checkConvertI s c qa qa'
+  void $ checkCI s c qa qa'
   let y   = qualifiedName' (cns c) x
       r'' = bindEnvQ r' x' (Var y)
       qb' = eval r'' b'
@@ -148,72 +141,62 @@ checkI s c (App m n) = do
 checkI s c (Let x a b e) = do
   c' <- checkD s c (Def x a b)
   checkI s c' e
--- checkI s c (Abs x a b) = do
---   let c' = bindConT c x a
---   q <- checkI s c' b
---   let ns = namesCont c'
---       b' = readBack ns q
---       t  = Abs x a b'
---       r  = getEnv s c
---   return $ eval r t
 checkI _ _ e = throwError $ CannotInferType e
 
 -- |Check that two q-exps are convertible and infer their type
-checkConvertI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
-checkConvertI _ _ U U = return U
-checkConvertI s c (Var x) (Var y)
+checkCI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
+checkCI _ _ U U = return U
+checkCI s c (Var x) (Var y)
   | x == y =
     let mt = getType' c x
         t = fromJust mt
         r = getEnv s c
     in let qt = eval r t in return qt
   | otherwise = throwError $ NotConvertible (Var x) (Var y)
-checkConvertI s c (App m1 n1) (App m2 n2) = do
-  q <- checkConvertI s c m1 m2
+checkCI s c (App m1 n1) (App m2 n2) = do
+  q <- checkCI s c m1 m2
   case q of
     Clos (Abs x a b) r' -> do
       let qa = eval r' a
-      checkConvertT s c n1 n2 qa
-      let r  = getEnv s c
-          qn = eval r n1
-          r1 = bindEnvQ r' x qn
+      checkCT s c n1 n2 qa
+      let r1 = bindEnvQ r' x n1
       return $ eval r1 b
     _ -> throwError $ NotFunctionClos q
-checkConvertI s c q1@Clos {} q2@Clos {} = do
-  checkConvertT s c q1 q2 U
+checkCI s c q1@Clos {} q2@Clos {} = do
+  checkCT s c q1 q2 U
   return U
-checkConvertI _ _ q1 q2 = throwError $ NotConvertible q1 q2
+checkCI _ _ q1 q2 = throwError $ NotConvertible q1 q2
 
 -- |Check that two q-expressions are convertible under a given type
-checkConvertT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-checkConvertT s c q1 q2 (Clos (Abs x a b) r') = do
+checkCT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
+checkCT s c q1 q2 (Clos (Abs x a b) r') = do
   let names = namesCont c
       y     = freshVar x names
-      y'    = qualifiedName' (cns c) y
-      qa    = eval r' a
-      c'    = bindConT c y qa
       r     = getEnv s c
       qm    = eval r (App q1 (Var y))
       qn    = eval r (App q2 (Var y))
+      y'    = qualifiedName' (cns c) y
       r''   = bindEnvQ r' x (Var y')
+      qa    = eval r' a
+      c'    = bindConT c y qa
       qb    = eval r'' b
-  checkConvertT s c' qm qn qb
-checkConvertT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
+  checkCT s c' qm qn qb
+checkCT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   let qa1 = eval r1 a1
       qa2 = eval r2 a2
-  checkConvertT s c qa1 qa2 U
+  checkCT s c qa1 qa2 U
   let names = namesCont c
       y     = freshVar x1 names
       y'    = qualifiedName' (cns c) y
-      c'    = bindConT c y qa1
       r1'   = bindEnvQ r1 x1 (Var y')
       r2'   = bindEnvQ r2 x2 (Var y')
       qb1   = eval r1' b1
       qb2   = eval r2' b2
-  checkConvertT s c' qb1 qb2 U
-checkConvertT s c q1 q2 t = do
-  t' <- checkConvertI s c q1 q2
-  void $ checkConvertI s c t t'
+      c'    = bindConT c y qa1
+  checkCT s c' qb1 qb2 U
+checkCT s c q1 q2 t = do
+  t' <- checkCI s c q1 q2
+  void $ checkCI s c t t'
 
 -- |Check that the instantiation of a segment is type checked, namely the expressions provided
 -- match the type of the constant
