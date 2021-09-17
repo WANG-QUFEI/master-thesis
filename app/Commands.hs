@@ -177,9 +177,8 @@ getCommand str =
 headRed :: Cont -> Exp -> Exp
 headRed _ U = U
 headRed c (Abs (Dec x a) e) =
-  let va = eval a ENil
-      a' = headRed c a
-      e' = headRed (consCVar c x va) e
+  let a' = headRed c a
+      e' = headRed c e
   in Abs (Dec x a') e'
 headRed c (Abs d@(Def x a b) e) =
   let e' = headRed (CConsDef c x a b) e
