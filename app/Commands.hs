@@ -10,7 +10,7 @@ module Commands
   , CheckItem(..)
   , LockOption(..)
   , getCommand
-  , hReduct
+  , headRed
   , typeOf
   , unfold
   , checkConstant
@@ -222,42 +222,40 @@ segCont c pr eps =
           in bindConD cont x t q
 
 -- |Apply head reduction on an expression
-hReduct :: Cont -> Exp -> Exp
-hReduct _ U = U
-hReduct c (Abs x a b) =
-  let r  = getEnv LockAll c
-      qa = eval r a
-      a' = hReduct c a
-      c' = bindConT c x qa
-      b' = hReduct c' b
+headRed :: Cont -> Exp -> Exp
+headRed _ U = U
+headRed c (Abs x a b) =
+  let a' = headRed c a
+      c' = bindConT c x a
+      b' = headRed c' b
   in Abs x a' b'
-hReduct c (Let x a b e) =
+headRed c (Let x a b e) =
   let c' = bindConD c x a b
-      e' = hReduct c' e
+      e' = headRed c' e
   in Let x a b e'
-hReduct c e = readBack (namesCont c) (incrEval c e)
+headRed c e = readBack (namesCont c) (headRedV c e)
 
 -- |Evaluate an expression in 'one small step'
-incrEval :: Cont -> Exp -> QExp
-incrEval c (Var x) =
+headRedV :: Cont -> Exp -> QExp
+headRedV c (Var x) =
   let (dx,c') = getDef c x
       r  = getEnv LockAll c'
   in eval r dx
-incrEval c (App e1 e2) =
+headRedV c (App e1 e2) =
   let r  = getEnv LockAll c
-      q1 = incrEval c e1
+      q1 = headRedV c e1
       q2 = eval r e2
   in appVal q1 q2
-incrEval c (SegVar ref eps) =
+headRedV c (SegVar ref eps) =
   let pr = reverse (rns ref)
-      x  = rid ref
       r  = getEnv LockNone c
       r' = segEnv r pr eps
+      x  = rid ref
       dx = getDef' r' x
       c' = findSeg c pr
       re = getEnv LockAll c'
   in eval re dx
-incrEval _ _ = error "error: incrEval"
+headRedV _ _ = error "error: headRedV"
 
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Let x a b e) =

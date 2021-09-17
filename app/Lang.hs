@@ -228,8 +228,8 @@ getDef c x =
       c' = findSeg c pr
       mn = OrdM.lookup x' (mapCont c')
   in case fromJust mn of
-    Ct _   -> (Var x,c')
-    Cd _ d -> (d,c')
+    Ct _   -> (Var x, c')
+    Cd _ d -> (d, c')
     Cs _   -> error "error: getDef"
 
 -- |Get the definition of a variable from an environment

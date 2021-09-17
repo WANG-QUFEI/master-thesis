@@ -35,11 +35,14 @@ sg1 = seg
       = [z : U] [k : sigma z B] [l : [p : Pow U] sigma z p -> p (delta z)] l B k ([p : Pow U] l ([z1 : U] p (delta z1)))
 
     A : * = [p : Pow U] Q p -> p C
-lem2 : sg1.¬ sg1.A
-  = [h : sg1.A] h sg1.B sg1.lem1 ([p : sg1.Pow sg1.U] h ([z : sg1.U] p (sg1.delta z))) ;
 
-lem3 : sg1.A
-  = [p : sg1.Pow sg1.U] [h : sg1.Q p] h sg1.C ([x : sg1.U] h (sg1.delta x)) ;
+    lem2 : ¬ A = [h : A] h B lem1 ([p : Pow U] h ([z : U] p (delta z))) ;
+
+    lem3 : A = [p : Pow U] [h : Q p] h C ([x : U] h (delta x)) ;
+
+x : *
+p : *
+z : *
 
 loop : sg1.⊥
-  = lem2 lem3 ;
+  = sg1.lem2 sg1.lem3 ;

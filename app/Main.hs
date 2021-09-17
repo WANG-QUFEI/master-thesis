@@ -231,7 +231,7 @@ handleHeadRed = do
   ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
   let Just e = Map.lookup "it" m
-      e' = hReduct ac e
+      e' = headRed ac e
   outputStr' . U.ushow $ e'
   let m' = Map.insert "it" e' m
   lift . modify $ \s -> s {bindMap = m'}
