@@ -4,6 +4,8 @@
 {-# OPTIONS_GHC -XPartialTypeSignatures #-}
 #endif
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns -fno-warn-overlapping-patterns #-}
+{-# LANGUAGE PatternSynonyms #-}
+
 module Core.Par
   ( happyError
   , myLexer
@@ -11,6 +13,9 @@ module Core.Par
   , pCExp
   , pCDecl
   ) where
+
+import Prelude
+
 import qualified Core.Abs
 import Core.Lex
 import qualified Data.Array as Happy_Data_Array
@@ -317,14 +322,14 @@ happyNewToken action sts stk (tk:tks) =
 happyError_ explist 11# tk tks = happyError' (tks, explist)
 happyError_ explist _ tk tks = happyError' ((tk:tks), explist)
 
-happyThen :: () => Either String a -> (a -> Either String b) -> Either String b
+happyThen :: () => Err a -> (a -> Err b) -> Err b
 happyThen = ((>>=))
-happyReturn :: () => a -> Either String a
+happyReturn :: () => a -> Err a
 happyReturn = (return)
 happyThen1 m k tks = ((>>=)) m (\a -> k a tks)
-happyReturn1 :: () => a -> b -> Either String a
+happyReturn1 :: () => a -> b -> Err a
 happyReturn1 = \a tks -> (return) a
-happyError' :: () => ([(Token)], [Prelude.String]) -> Either String a
+happyError' :: () => ([(Token)], [Prelude.String]) -> Err a
 happyError' = (\(tokens, _) -> happyError tokens)
 pContext tks = happySomeParser where
  happySomeParser = happyThen (happyParse 0# tks) (\x -> happyReturn (let {(HappyWrap7 x') = happyOut7 x} in x'))
@@ -338,7 +343,9 @@ pCDecl tks = happySomeParser where
 happySeq = happyDontSeq
 
 
-happyError :: [Token] -> Either String a
+type Err = Either String
+
+happyError :: [Token] -> Err a
 happyError ts = Left $
   "syntax error at " ++ tokenPos ts ++
   case ts of
@@ -346,6 +353,7 @@ happyError ts = Left $
     [Err _] -> " due to lexer error"
     t:_     -> " before `" ++ (prToken t) ++ "'"
 
+myLexer :: String -> [Token]
 myLexer = tokens
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 -- $Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp $

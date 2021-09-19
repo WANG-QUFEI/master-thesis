@@ -175,11 +175,10 @@ getCommand str =
     parseMiniConsts _     = Left "invalid command, type ':?' for a detailed description of the command"
 
 headRed :: Cont -> Exp -> Exp
-headRed _ U = U
-headRed c (Abs (Dec x a) e) =
-  let a' = headRed c a
-      e' = headRed c e
-  in Abs (Dec x a') e'
+headRed c (Abs d@(Dec x a) e) =
+  let c' = CConsVar c x a
+      e' = headRed c' e
+  in Abs d e'
 headRed c (Abs d@(Def x a b) e) =
   let e' = headRed (CConsDef c x a b) e
   in Abs d e'
@@ -188,7 +187,7 @@ headRed c e = readBack (namesCont c) (headRedV c e)
 headRedV :: Cont -> Exp -> QExp
 headRedV c (Var x)     = eval (defVar x c) ENil
 headRedV c (App e1 e2) = appVal (headRedV c e1) (eval e2 ENil)
-headRedV _ e           = error  $ "invalid application of headRedV on expression" ++ show e
+headRedV _ e           = eval e ENil
 
 defVar :: String -> Cont -> Exp
 defVar x CNil = Var x
@@ -202,6 +201,10 @@ defVar x (CConsDef c x' _ e)
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Abs d@(Def x a b) e) =
   let c' = CConsDef c x a b
+      e' = typeOf c' e
+  in Abs d e'
+typeOf c (Abs d@(Dec x a) e) =
+  let c' = CConsVar c x a
       e' = typeOf c' e
   in Abs d e'
 typeOf c e = readBack (namesCont c) (typeOfV c e)

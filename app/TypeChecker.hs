@@ -10,10 +10,12 @@ import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.Map             as Map
+import           Debug.Trace
 
 import           Classes
 import           Convertor
 import           Core.Abs
+import           Core.Layout          (resolveLayout)
 import           Core.Par
 import           Lang
 import           Message
@@ -49,7 +51,6 @@ checkD :: LockStrategy s => s -> Cont -> Decl -> TypeCheckM Cont
 checkD s c (Dec x a) = do
   checkT s c a U
   return $ consCVar c x a
-
 checkD s c (Def x a e) = do
   checkT s c a U
   let va = eval a (getEnv s c)
@@ -62,20 +63,12 @@ checkT _ _ U U = return ()
 checkT s c (Var x) v = do
   case getType c x of
     Just t -> do
-      let vt  = eval t (getEnv s c)
-      void (checkCI s c vt v)
+      let v' = eval t (getEnv s c)
+      void (checkCI s c v' v)
     Nothing -> throwError $ NoTypeBoundVar x
-checkT s c e@(App (Abs (Dec _ a) _) b) q = do
-  let r = getEnv s c
-      qa = eval a r
-  checkT s c b qa
-  let ns = namesCont c
-      qe = eval e r
-      e' = readBack ns qe
-  checkT s c e' q
 checkT s c e@App {} v = do
   v' <- checkI s c e
-  void (checkCI s c v v')
+  void (checkCI s c v' v)
 checkT s c (Abs (Dec x a) b) U = do
   checkT s c a U
   let c' = consCVar c x a
@@ -136,8 +129,6 @@ checkCI s c (App m1 n1) (App m2 n2) = do
     Clos (Abs (Dec x a) b) r -> do
       let va = eval a r
       checkCT s c n1 n2 va
-      -- let nv = eval n1 (getEnv s c)
-      --     r' = consEVar r x nv
       let r' = consEVar r x n1
       return $ eval b r'
     _ -> throwError $ NotFunctionClos v
@@ -175,7 +166,7 @@ checkCT s c v1 v2 t = do
 
 -- | parse and type check a file
 parseCheckFile :: LockStrategy s => s -> String -> Either String (Context, Cont)
-parseCheckFile s text = case pContext (myLexer text) of
+parseCheckFile s text = case pContext (resolveLayout True  $ myLexer text) of
   Left parseError -> Left (unlines (map errorMsg ["failed to parse the file", parseError]))
   Right cx ->
     case runTypeCheckCtx s cx of

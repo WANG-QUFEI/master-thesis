@@ -1,1 +1,16 @@
-nat : *
+-- begin context G --
+id : * -> * = [A : *] A
+
+T1 : *
+
+T2 : *
+
+T3 : * = T1 -> T1
+
+c0 : T1
+
+c1 : T2 
+-- end --
+-- c2 : id T1 = c0 
+
+c3 : id T3 = [x : T1] c1 

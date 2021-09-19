@@ -83,15 +83,15 @@ handleLoad :: FilePath -> InputT (StateT ReplState IO) ()
 handleLoad fp = do
   b <- liftIO . doesFileExist $ fp
   if not b
-    then outputStrLn . errorMsg $ "error: file does not exist"
+    then outputStr' . errorMsg $ "error: file does not exist"
     else do
     ls <- lift . gets $ lockStrategy
     t  <- liftIO (TI.readFile fp)
     let ts = T.unpack t
     case parseCheckFile ls ts of
-      Left err -> outputStrLn err
+      Left err -> outputStr' err
       Right (cx, ac) -> do
-        outputStrLn $ okayMsg "file loaded!"
+        outputStr' $ okayMsg "file loaded!"
         lift $ modify (\s -> s {filePath    = fp,
                                 fileContent = t,
                                 concretCtx  = cx,
@@ -101,36 +101,36 @@ handleShow :: ShowItem -> InputT (StateT ReplState IO) ()
 handleShow SFilePath = do
   fp <- lift $ gets filePath
   if fp == ""
-    then outputStrLn . errorMsg $ "no file loaded"
-    else outputStrLn fp
+    then outputStr' . errorMsg $ "no file loaded"
+    else outputStr' fp
 handleShow SFileContent = do
   fc <- lift $ gets fileContent
-  outputStrLn (T.unpack fc)
+  outputStr' (T.unpack fc)
 handleShow SConsants = do
   ac <- lift $ gets context
-  outputStrLn $ U.ushow (namesCont ac)
+  outputStr' $ U.ushow (namesCont ac)
 handleShow SLocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
   let sl = getConstsLocked ls ac
-  outputStrLn . U.ushow $ sl
-  outputStrLn $ "Lock strategy: " ++ U.ushow ls
+  outputStr' . U.ushow $ sl
+  outputStr' $ "Lock strategy: " ++ U.ushow ls
 
 handleShow SUnlocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context
   let su = getConstsUnLocked ls ac
-  outputStrLn . U.ushow $ su
-  outputStrLn $ "Lock strategy: " ++ U.ushow ls
+  outputStr' . U.ushow $ su
+  outputStr' $ "Lock strategy: " ++ U.ushow ls
 
 handleShow SContext = do
   ac <- lift $ gets context
-  outputStrLn $ U.ushow ac
+  outputStr' $ U.ushow ac
 handleShow (SName name) = do
   m <- lift . gets $ bindMap
   case Map.lookup name m of
-    Nothing -> outputStrLn . errorMsg $ "error: name not bound"
-    Just e  -> outputStrLn (U.ushow e)
+    Nothing -> outputStr' . errorMsg $ "error: name not bound"
+    Just e  -> outputStr' (U.ushow e)
 
 handleLock :: LockOption -> InputT (StateT ReplState IO) ()
 handleLock LockAll = do
@@ -172,10 +172,10 @@ handleCheck (CExp cexp) = do
   ac <- lift $ gets context
   case convertCheckExpr ls cx ac cexp of
     Left err -> do
-      outputStrLn (errorMsg "error: invalid expression!")
+      outputStr' (errorMsg "error: invalid expression!")
       outputStr err
     Right e  -> do
-      outputStrLn (okayMsg "okay~")
+      outputStr' (okayMsg "okay~")
       m <- lift . gets $ bindMap
       let m' = Map.insert "it" e m
       lift $ modify (\s -> s {bindMap = m'})
@@ -185,10 +185,10 @@ handleCheck (CDecl cdecl) = do
   ac <- lift $ gets context
   case convertCheckDecl ls cx ac cdecl of
     Left err -> do
-      outputStrLn (errorMsg "error: invalid declaration/definition!")
+      outputStr' (errorMsg "error: invalid declaration/definition!")
       outputStr err
     Right d  -> do
-      outputStrLn (okayMsg "okay~")
+      outputStr' (okayMsg "okay~")
       let (cx', ac') = expandContext (cx, ac) (cdecl, d)
       lift $ modify (\s -> s {concretCtx = cx',
                               context = ac'})
@@ -205,7 +205,7 @@ handleCheck (Const var) = do
   ac <- lift . gets $ context
   case checkConstant ls ac var of
     Left errmsg -> outputStr errmsg
-    Right _     -> outputStrLn "okay~"
+    Right _     -> outputStr' "okay~"
 
 handleTypeOf :: Either String CExp -> InputT (StateT ReplState IO) ()
 handleTypeOf (Left name) = do
@@ -214,17 +214,17 @@ handleTypeOf (Left name) = do
   case Map.lookup name m of
     Just e ->
       let te = typeOf ac e
-      in outputStrLn (U.ushow te)
-    Nothing -> outputStrLn . errorMsg $ "name: '" ++ name ++ "' is not bound"
+      in outputStr' (U.ushow te)
+    Nothing -> outputStr' . errorMsg $ "name: '" ++ name ++ "' is not bound"
 handleTypeOf (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
   case convertCheckExpr ls cx ac cexp of
-    Left err -> outputStrLn err
+    Left err -> outputStr' err
     Right e  ->
       let te = typeOf ac e
-      in outputStrLn (U.ushow te)
+      in outputStr' (U.ushow te)
 
 handleHeadRed :: InputT (StateT ReplState IO) ()
 handleHeadRed = do
@@ -232,7 +232,7 @@ handleHeadRed = do
   m  <- lift . gets $ bindMap
   let Just e = Map.lookup "it" m
       e' = headRed ac e
-  outputStrLn . U.ushow $ e'
+  outputStr' . U.ushow $ e'
   let m' = Map.insert "it" e' m
   lift . modify $ \s -> s {bindMap = m'}
 
@@ -244,31 +244,40 @@ handleUnfold (Left name) = do
   case Map.lookup name m of
     Just e ->
       let e' = unfold ls ac e
-      in outputStrLn (U.ushow e')
-    Nothing -> outputStrLn . errorMsg $ "name: '" ++ name ++ "' is not bound"
+      in outputStr' (U.ushow e')
+    Nothing -> outputStr' . errorMsg $ "name: '" ++ name ++ "' is not bound"
 handleUnfold (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
   case convertCheckExpr ls cx ac cexp of
-    Left err -> outputStrLn err
+    Left err -> outputStr' err
     Right e  ->
       let e' = unfold ls ac e
-      in outputStrLn (U.ushow e')
+      in outputStr' (U.ushow e')
 
 showChangeOfLock :: L.SimpleLock -> InputT (StateT ReplState IO) ()
 showChangeOfLock lockNew = do
   lockNow <- lift . gets $ lockStrategy
-  outputStrLn "Change lock strategy"
-  outputStrLn $ "  from: " ++ U.ushow lockNow
-  outputStrLn $ "  to: " ++ U.ushow lockNew
+  outputStr' "Change lock strategy"
+  outputStr' $ "  from: " ++ U.ushow lockNow
+  outputStr' $ "  to: " ++ U.ushow lockNew
 
 handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
 handleFindMiniConsts x = do
   ac <- lift . gets $ context
   case minimumConsts ac x of
-    Left err -> outputStrLn err
-    Right ss -> outputStrLn (U.ushow ss)
+    Left err -> outputStr' err
+    Right ss -> outputStr' (U.ushow ss)
+
+-- |Print a string to the terminal with newline character ensured
+outputStr' :: MonadIO m => String -> InputT m ()
+outputStr' "" = return ()
+outputStr' s  =
+  let c = last s
+  in if c == '\n'
+     then outputStr s
+     else outputStrLn s
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"

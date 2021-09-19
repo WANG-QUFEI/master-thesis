@@ -18,6 +18,8 @@ terminator CDecl ";";
 
 coercions CExp 3;
 
+layout toplevel;
+
 comment "--";
 
 comment "{-" "-}";
