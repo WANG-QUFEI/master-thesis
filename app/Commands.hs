@@ -223,12 +223,10 @@ segCont c pr eps =
 
 -- |Apply head reduction on an expression
 headRed :: Cont -> Exp -> Exp
-headRed _ U = U
 headRed c (Abs x a b) =
-  let a' = headRed c a
-      c' = bindConT c x a
+  let c' = bindConT c x a
       b' = headRed c' b
-  in Abs x a' b'
+  in Abs x a b'
 headRed c (Let x a b e) =
   let c' = bindConD c x a b
       e' = headRed c' e
@@ -255,7 +253,7 @@ headRedV c (SegVar ref eps) =
       c' = findSeg c pr
       re = getEnv LockAll c'
   in eval re dx
-headRedV _ _ = error "error: headRedV"
+headRedV c e = eval (getEnv LockAll c) e
 
 typeOf :: Cont -> Exp -> Exp
 typeOf c (Let x a b e) =

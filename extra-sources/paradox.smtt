@@ -1,0 +1,24 @@
+Pow : * -> * = [X : *] X -> * ;
+T : * -> * = [X : *] Pow (Pow X) ;
+abs : * = [X : *]X;
+f : abs -> abs ;
+not : * -> * = [X : *] X -> abs ;
+
+A : * = [X : *] (T X -> X) -> X ;
+intro : T A -> A =
+  [t : T A][X : *][f1 : T X -> X] f1 ([g : Pow X] t ([z : A] g (z X f1))) ;
+match : A -> T A =
+  [z : A]z (T A) ([t : T (T A)][g : Pow A] t ([x : T A] g (intro x))) ;
+
+delta : A -> A = [z : A] intro (match z) ;
+Q : T A = [p : Pow A][z : A]match z p -> p z;
+cDelta : Pow A -> Pow A =  [p : Pow A][z:A]p (delta z) ;
+a0 : A = intro Q ;
+lem1 : [p : Pow A]Q p -> p a0 = [p : Pow A][h : Q p]h a0 ([x : A]h (delta x)) ;
+Ed : Pow A = [z:A][p:Pow A]match z p -> p (delta z) ;
+lem2 :  Ed a0  = [p:Pow A]lem1 (cDelta p) ;
+B : Pow A =  [z : A] not (Ed z) ;
+lem3 : [z:A]Ed z -> Ed (delta z) = [z:A][edz:Ed z][p:Pow A]edz (cDelta p) ;
+lem4 : Q B = [z : A] [k : match z B] [l : Ed z] l B k (lem3 z l) ;
+lem5 : not (Ed a0) = lem1 B lem4 ;
+loop : abs = lem5 lem2 ;
