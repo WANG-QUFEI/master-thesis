@@ -23,7 +23,6 @@ import           TypeChecker
 import           Util
 
 import           Data.List.Split
-import           Data.Maybe
 
 -- | data type for the commands
 data Cmd = Help
@@ -206,8 +205,8 @@ typeOf c e = readBack (namesCont c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
 typeOfV c (Var x) =
-  let a = fromJust $ getType c x
-  in eval a (getEnv Util.LockNone c)
+  let (c', a) = getType c x
+  in eval a (getEnv Util.LockNone c')
 typeOfV _ U           = U
 typeOfV c (App e1 e2) = appVal (typeOfV c e1) (eval e2 ENil)
 typeOfV _ e           = error ("typeOfV: " ++ show e)

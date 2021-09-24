@@ -16,7 +16,6 @@ import           Convertor
 import           Core.Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
-import           Data.Maybe
 import           Lang
 import           Util
 
@@ -73,8 +72,8 @@ checkT s c (Abs (Dec x a) m) (Clos (Abs (Dec x' a') t) r) = do
   let r0 = getEnv s c
       va  = eval a r0
       va' = eval a' r
-  cc <- gets snd
-  checkConvert s cc c va va'
+  ct <- gets snd
+  checkConvert s ct c va va'
   let r' = consEVar r x' (Var x)
       q = eval t r'
       c' = consCVar c x a
@@ -127,10 +126,9 @@ convertBeta _ q1 q2 = throwError $ NotConvertible q1 q2
 
 convertEta :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
 convertEta _ _ U U = return U
-convertEta s c (Var x) (Var x') =
-  if x == x'
-  then return (getTypeQ s c x)
-  else throwError $ NotConvertible (Var x) (Var x')
+convertEta s c (Var x) (Var x')
+  | x == x' = return (getTypeQ s c x)
+  | otherwise = throwError $ NotConvertible (Var x) (Var x')
 convertEta s c (App m1 n1) (App m2 n2) = do
   v <- convertEta s c m1 m2
   case v of
@@ -185,17 +183,17 @@ convertCheckExpr s ctc cc ac ce =
   let m = toMap cc in
   case runG (absExp ce) m of
     Left err -> Left $ unlines . map errorMsg $ explain err
-    Right e  -> checkExpr ac e
+    Right e  -> soundExpr ac e
   where
-    checkExpr :: Cont -> Exp -> Either String Exp
-    checkExpr _ U = Right U
-    checkExpr ctx e@(Abs d m) =
+    soundExpr :: Cont -> Exp -> Either String Exp
+    soundExpr _ U = Right U
+    soundExpr ctx e@(Abs d m) =
       case runG (checkD s ctx d) (CNil, ctc) of
         Left err   -> Left $ unlines . map errorMsg $ explain err
-        Right ctx' -> case checkExpr ctx' m of
+        Right ctx' -> case soundExpr ctx' m of
                          Left err -> Left err
                          Right _  -> Right e
-    checkExpr ctx e =
+    soundExpr ctx e =
       case runG (checkI s ctx e) (CNil, ctc) of
         Left err -> Left $ unlines . map errorMsg $ explain err
         Right _  -> Right e
@@ -258,6 +256,6 @@ readBack _ v = error ("readBack: " ++ show v)
 
 getTypeQ :: LockStrategy s => s -> Cont -> String -> QExp
 getTypeQ s c x =
-  let t = fromJust (getType c x)
-      e = getEnv s c
-  in eval t e
+  let (c', t) = getType c x
+      r = getEnv s c'
+  in eval t r

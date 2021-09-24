@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3f0578643f0967511abb416d6a2240d01b72157c749a0b5badf601afa455ba4b
+-- hash: 0f4d6e0551799dc54f72eaaf2ce42742d317a8af229215cf44fcd32585f22075
 
 name:           siminitt
 version:        0.1.0.0
@@ -23,13 +23,10 @@ extra-source-files:
     README.md
     extra-sources/Core.cf
     extra-sources/gen.sh
-    extra-sources/loop1.smtt
-    extra-sources/loop2.smtt
-    extra-sources/loop4.smtt
     extra-sources/Makefile
+    extra-sources/paradox.smtt
     extra-sources/test.sh
     extra-sources/test.smtt
-    extra-sources/tmp.smtt
 
 source-repository head
   type: git
@@ -38,7 +35,6 @@ source-repository head
 executable siminitt
   main-is: Main.hs
   other-modules:
-      Classes
       Commands
       Convertor
       Core.Abs
@@ -49,10 +45,8 @@ executable siminitt
       Core.Print
       Core.Skel
       Lang
-      Locking
-      Message
-      Monads
       TypeChecker
+      Util
       Paths_siminitt
   hs-source-dirs:
       app
