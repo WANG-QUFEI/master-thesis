@@ -10,10 +10,9 @@ import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.Map             as Map
 
-import           Classes
 import           Core.Abs
 import           Lang
-import           Monads
+import           Util
 
 -- | monad for converting
 type ConvertM a = G ConversionError (Map.Map String Id) a

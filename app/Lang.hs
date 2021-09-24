@@ -118,11 +118,11 @@ appVal v1 v2 = case v1 of
 -- | get the type of a variable in a given context
 getType :: Cont -> String -> Maybe Exp
 getType CNil _ = Nothing
-getType (CConsVar c x' a) x
-  | x' == x = Just a
+getType (CConsVar c x' t) x
+  | x' == x = Just t
   | otherwise = getType c x
-getType (CConsDef c x' a _) x
-  | x' == x = Just a
+getType (CConsDef c x' t _) x
+  | x' == x = Just t
   | otherwise = getType c x
 
 -- | extend an environment with a variable and its value
@@ -131,7 +131,7 @@ consEVar r "" _ = r
 consEVar r x v  = EConsVar r x v
 
 -- | extend a type-checking context with a variable and its type
-consCVar :: Cont -> String -> QExp -> Cont
+consCVar :: Cont -> String -> Exp -> Cont
 consCVar c "" _ = c
 consCVar c x t  = CConsVar c x t
 

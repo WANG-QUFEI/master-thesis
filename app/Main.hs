@@ -6,22 +6,19 @@ Portability     : POSIX
 -}
 module Main (main) where
 
-import           Classes
 import           Commands
-import           Core.Abs
-import           Lang
-import qualified Locking                  as L
-import           Message
-import           TypeChecker
-
 import           Control.Monad.State
+import           Core.Abs
 import           Data.Char
 import qualified Data.Map                 as Map
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as TI
+import           Lang
 import           System.Console.Haskeline
 import           System.Directory
 import qualified Text.Show.Unicode        as U
+import           TypeChecker
+import           Util
 
 -- | the context/state of the REPL operation
 data ReplState = ReplState
@@ -29,13 +26,14 @@ data ReplState = ReplState
     fileContent  :: T.Text,              -- content of the loaded file
     concretCtx   :: Context,             -- concret context of the loaded file
     context      :: Cont,                -- abstract context of the loaded file
-    lockStrategy :: L.SimpleLock,        -- locking/unlocking variables
+    lockStrategy :: SimpleLock,          -- locking/unlocking variables
+    conversion   :: ConvertCheck,        -- type of convertibility checking: beta or eta
     bindMap      :: Map.Map String Exp,  -- a map binds well-typed expressions to names
     continue     :: Bool                 -- whether to continue execution
   }
 
 initState :: ReplState
-initState = ReplState "" T.empty (Ctx []) CNil L.LockNone (Map.fromList [("it", U)]) True
+initState = ReplState "" T.empty (Ctx []) CNil LockNone Beta (Map.fromList [("it", U)]) True
 
 main :: IO ()
 main = do
@@ -56,18 +54,18 @@ handleInput str =
   then return ()
   else let str' = trimString str
        in case getCommand str' of
-            Left err                    -> outputStrLn (errorMsg err)
-            Right Quit                  -> stop
-            Right Help                  -> usage
-            Right (Load fp)             -> handleLoad fp
-            Right (Show s)              -> handleShow s
-            Right (Lock l)              -> handleLock l
-            Right (Bind x cexp)         -> handleBind x cexp
-            Right (Check c)             -> handleCheck c
-            Right (Unfold uf)           -> handleUnfold uf
-            Right (TypeOf tf)           -> handleTypeOf tf
-            Right HeadReduct            -> handleHeadRed
-            Right (FindMinimumConsts v) -> handleFindMiniConsts v
+            Left err             -> outputStrLn (errorMsg err)
+            Right Quit           -> stop
+            Right Help           -> usage
+            Right (Load fp)      -> handleLoad fp
+            Right (Show s)       -> handleShow s
+            Right (Lock l)       -> handleLock l
+            Right (Bind x cexp)  -> handleBind x cexp
+            Right (Check c)      -> handleCheck c
+            Right (SetConvert c) -> handleSet c
+            Right (Unfold uf)    -> handleUnfold uf
+            Right (TypeOf tf)    -> handleTypeOf tf
+            Right HeadReduct     -> handleHeadRed
 
 stop :: InputT (StateT ReplState IO) ()
 stop = lift $ modify (\s -> s {continue = False})
@@ -86,9 +84,10 @@ handleLoad fp = do
     then outputStr' . errorMsg $ "error: file does not exist"
     else do
     ls <- lift . gets $ lockStrategy
+    c  <- lift . gets $ conversion
     t  <- liftIO (TI.readFile fp)
     let ts = T.unpack t
-    case parseCheckFile ls ts of
+    case parseCheckFile ls c ts of
       Left err -> outputStr' err
       Right (cx, ac) -> do
         outputStr' $ okayMsg "file loaded!"
@@ -133,21 +132,21 @@ handleShow (SName name) = do
     Just e  -> outputStr' (U.ushow e)
 
 handleLock :: LockOption -> InputT (StateT ReplState IO) ()
-handleLock LockAll = do
-  let ls = L.LockAll
+handleLock OptLockAll = do
+  let ls = LockAll
   showChangeOfLock ls
   lift . modify $ \s -> s {lockStrategy = ls}
 
-handleLock LockNone = do
-  let ls = L.LockNone
+handleLock OptLockNone = do
+  let ls = LockNone
   showChangeOfLock ls
   lift . modify $ \s -> s {lockStrategy = ls}
-handleLock (LockAdd ss) = do
+handleLock (OptLockAdd ss) = do
   ls <- lift . gets $ lockStrategy
   let ls' = addLock ls ss
   showChangeOfLock ls'
   lift . modify $ \s -> s {lockStrategy = ls'}
-handleLock (LockRemove ss) = do
+handleLock (OptLockRemove ss) = do
   ls <- lift . gets $ lockStrategy
   let ls' = removeLock ls ss
   showChangeOfLock ls'
@@ -159,7 +158,8 @@ handleBind x cexp = do
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
   m  <- lift . gets $ bindMap
-  case convertCheckExpr ls cx ac cexp of
+  cc <- lift $ gets conversion
+  case convertCheckExpr ls cc cx ac cexp of
     Left err -> outputStr err
     Right e  ->
       let m' = Map.insert x e m
@@ -170,7 +170,8 @@ handleCheck (CExp cexp) = do
   ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
   ac <- lift $ gets context
-  case convertCheckExpr ls cx ac cexp of
+  cc <- lift $ gets conversion
+  case convertCheckExpr ls cc cx ac cexp of
     Left err -> do
       outputStr' (errorMsg "error: invalid expression!")
       outputStr err
@@ -183,7 +184,8 @@ handleCheck (CDecl cdecl) = do
   ls <- lift $ gets lockStrategy
   cx <- lift $ gets concretCtx
   ac <- lift $ gets context
-  case convertCheckDecl ls cx ac cdecl of
+  cc <- lift $ gets conversion
+  case convertCheckDecl ls cc cx ac cdecl of
     Left err -> do
       outputStr' (errorMsg "error: invalid declaration/definition!")
       outputStr err
@@ -203,14 +205,18 @@ handleCheck (CDecl cdecl) = do
 handleCheck (Const var) = do
   ls <- lift . gets $ lockStrategy
   ac <- lift . gets $ context
-  case checkConstant ls ac var of
+  cc <- lift . gets $ conversion
+  case checkConstant ls cc ac var of
     Left errmsg -> outputStr errmsg
     Right _     -> outputStr' "okay~"
+
+handleSet :: ConvertCheck -> InputT (StateT ReplState IO) ()
+handleSet c = lift $ modify (\s -> s {conversion = c})
 
 handleTypeOf :: Either String CExp -> InputT (StateT ReplState IO) ()
 handleTypeOf (Left name) = do
   ac <- lift . gets $ context
-  m <- lift . gets $ bindMap
+  m  <- lift . gets $ bindMap
   case Map.lookup name m of
     Just e ->
       let te = typeOf ac e
@@ -220,7 +226,8 @@ handleTypeOf (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
-  case convertCheckExpr ls cx ac cexp of
+  cc <- lift . gets $ conversion
+  case convertCheckExpr ls cc cx ac cexp of
     Left err -> outputStr' err
     Right e  ->
       let te = typeOf ac e
@@ -250,25 +257,19 @@ handleUnfold (Right cexp) = do
   ls <- lift . gets $ lockStrategy
   cx <- lift . gets $ concretCtx
   ac <- lift . gets $ context
-  case convertCheckExpr ls cx ac cexp of
+  cc <- lift . gets $ conversion
+  case convertCheckExpr ls cc cx ac cexp of
     Left err -> outputStr' err
     Right e  ->
       let e' = unfold ls ac e
       in outputStr' (U.ushow e')
 
-showChangeOfLock :: L.SimpleLock -> InputT (StateT ReplState IO) ()
+showChangeOfLock :: SimpleLock -> InputT (StateT ReplState IO) ()
 showChangeOfLock lockNew = do
   lockNow <- lift . gets $ lockStrategy
   outputStr' "Change lock strategy"
   outputStr' $ "  from: " ++ U.ushow lockNow
   outputStr' $ "  to: " ++ U.ushow lockNew
-
-handleFindMiniConsts :: String -> InputT (StateT ReplState IO) ()
-handleFindMiniConsts x = do
-  ac <- lift . gets $ context
-  case minimumConsts ac x of
-    Left err -> outputStr' err
-    Right ss -> outputStr' (U.ushow ss)
 
 -- |Print a string to the terminal with newline character ensured
 outputStr' :: MonadIO m => String -> InputT m ()
@@ -309,6 +310,7 @@ usage = let msg = [ " Commands available:"
                   , "                                 locking strategy."
                   , "                                 the constant must come from the current context. This command is used to experiment with the locking/un-"
                   , "                                 locking mechanism."
+                  , "   :set {-convert beta|eta}      set the convertibility checking support, beta conversion or eta conversion"
                   , "   :unfold {-name | -expr} { <name> | <expr> }"
                   , "                                 unfold an expression bound to a name <name> or a given expression <expr> under the"
                   , "                                 current locking strategy."
@@ -318,7 +320,5 @@ usage = let msg = [ " Commands available:"
                   , "                                 a given expression will firstly be type-checked before being calculated the type"
                   , "   :hred                         apply head reduction on the expression bound to name 'it', making the result be bound to"
                   , "                                 'it' instead"
-                  , "   :fmc <constant>               find the minimum set of constants that need to be unfolded, such that the declaration/definition"
-                  ,"                                  referred by <constant> in the current context is type valid"
                    ]
         in outputStr (unlines msg)

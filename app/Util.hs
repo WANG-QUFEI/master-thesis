@@ -1,15 +1,39 @@
-{-|
-Module          : Locking
-Description     : Provides locking/unlocking strategies for constants
-Maintainer      : wangqufei2009@gmail.com
-Portability     : POSIX
--}
-module Locking where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module Util where
 
-import           Classes
+import           Control.Monad.Except
+import           Control.Monad.State
+import qualified Data.Set             as Set
 import           Lang
 
-import qualified Data.Set as Set
+-- | a composite monad which contains a state monad and an exception monad
+newtype G e s a = G {mkg :: ExceptT e (State s) a}
+  deriving (Monad, Applicative, Functor, MonadError e, MonadState s)
+
+-- | run the monad and get the result
+runG :: G e s a -> s -> Either e a
+runG g = evalState (runExceptT (mkg g))
+
+class InformativeError e where
+  explain :: e -> [String]
+
+errorMsg :: String -> String
+errorMsg s = "\10006 " ++ s
+
+okayMsg :: String -> String
+okayMsg s = "\10004 " ++ s
+
+infoMsg :: String -> String
+infoMsg = id
+
+data ConvertCheck = Beta | Eta deriving Show
+
+class LockStrategy s where
+  getEnv            :: s -> Cont -> Env
+  addLock           :: s -> [String] -> s
+  removeLock        :: s -> [String] -> s
+  getConstsLocked   :: s -> Cont -> [String]
+  getConstsUnLocked :: s -> Cont -> [String]
 
 -- | A simple locking/unlocking strategy for constants
 -- LockAll  : lock all constants
@@ -103,4 +127,3 @@ instance LockStrategy SimpleLock where
         let set1 = Set.fromList vars
             set2 = Set.fromList ss
         in Set.toList (Set.intersection set1 set2)
-
