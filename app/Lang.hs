@@ -65,13 +65,13 @@ data ENode = Ev QExp    -- ^ a node that keeps the value of a constant
 -- |Type checking context, storing a map of Nodes
 data Cont = Cont {
   cns     :: Namespace, -- ^ namespace of the context
-  mapCont :: OrdM.InsOrdHashMap Name CNode
+  mapCont :: OrdM.InsOrdHashMap Name CNode  -- ^ content of the context
   } deriving Eq
 
 -- |Evaluation environment
 data Env  = Env {
   ens    :: Namespace,  -- ^ namespace of the environment
-  mapEnv :: Map.HashMap Name ENode
+  mapEnv :: Map.HashMap Name ENode -- ^ content of the environment
   } deriving Eq
 
 class SegNest a where
@@ -206,20 +206,17 @@ varPath ns vn =
                ps  = drop (length ns) vs'
            in (init ps, last ps)
 
--- |Strictly get the type bound to a variable
-getType :: Cont -> Name -> Exp
-getType c x = fromJust $ getType' c x
-
 -- |Try to get the type bound to a variable
-getType' :: Cont -> Name -> Maybe Exp
-getType' c x =
+getType :: Cont -> Name -> (Cont, Exp)
+getType c x =
   let (pr, x') = varPath (cns c) x
       c' = findSeg c pr
-  in case OrdM.lookup x' (mapCont c') of
-       Just (Ct t)   -> Just t
-       Just (Cd t _) -> Just t
-       Just Cs {}    -> error "error: getType'"
-       Nothing       -> Nothing
+      m  = mapCont c'
+      sc = splitCont x' c'
+  in case OrdM.lookup x' m of
+       Just (Ct t)   -> (sc, t)
+       Just (Cd t _) -> (sc, t)
+       _             -> error "error: getType'"
 
 -- |Get the definition of a variable from a context
 getDef :: Cont -> Name -> (Exp, Cont)
@@ -265,7 +262,7 @@ splitCont :: Name -> Cont -> Cont
 splitCont x c =
   let ns = cns c
       ls = OrdM.toList (mapCont c)
-      ls' = takeWhile (\(x', _) -> x' /= x) ls
+      ls' = takeWhile ((/=) x . fst) ls
   in Cont ns (OrdM.fromList ls')
 
 -- |A wrapper for error message

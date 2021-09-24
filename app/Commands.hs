@@ -8,27 +8,25 @@ module Commands
   ( Cmd(..)
   , ShowItem(..)
   , CheckItem(..)
+  , SetItem(..)
   , LockOption(..)
   , getCommand
   , headRed
   , typeOf
   , unfold
   , checkConstant
-  -- , minimumConsts
    ) where
 
 import qualified Core.Abs                   as Abs
 import qualified Core.Par                   as Par
 import           Lang
-import           Lock
-import           Monads
 import           TypeChecker
+import           Util
 
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
 import           Data.Map                   (Map, (!))
 import qualified Data.Map                   as M
--- import           Debug.Trace
 import           Text.Printf                (printf)
 
 -- |Data type for the commands
@@ -39,10 +37,10 @@ data Cmd = Help
          | Lock LockOption
          | Bind String Abs.Exp
          | Check CheckItem
+         | SetOpt SetItem
          | Unfold (Either String Abs.Exp)
          | TypeOf (Either String Abs.Exp)
          | HeadReduct
-         | FindMinimumConsts String
          deriving (Show)
 
 data ShowItem = SFilePath         -- show file path
@@ -57,12 +55,14 @@ data ShowItem = SFilePath         -- show file path
 data CheckItem = CExp  Abs.Exp    -- check an expression
                | CDecl Abs.Decl   -- check a declaration/definition
                | Const String     -- check a constant
-               deriving (Show)
+               deriving Show
 
-data LockOption = AllLock
-                | NoneLock
-                | AddLock [String]
-                | RemoveLock [String]
+newtype SetItem = SConvert ConvertCheck deriving Show
+
+data LockOption = OptAllLock
+                | OptNoneLock
+                | OptAddLock [String]
+                | OptRemoveLock [String]
                 deriving (Show)
 
 data CmdSelector = CmdSel { funs    :: Map String ([String] -> Either String Cmd)
@@ -97,18 +97,18 @@ getCommand str =
     Nothing -> Left "invalid command, type ':?' for a detailed description of the command"
     Just f -> f tws
   where
-    fm = M.fromList [(":?", \_ -> Right Help),
-                     (":help", \_ -> Right Help),
-                     (":quit", \_ -> Right Quit),
-                     (":load", parseLoad),
-                     (":show", parseShow),
-                     (":lock", parseLock),
-                     (":bind", parseBind),
-                     (":check", parseCheck),
+    fm = M.fromList [(":?",      \_ -> Right Help),
+                     (":help",   \_ -> Right Help),
+                     (":quit",   \_ -> Right Quit),
+                     (":load",   parseLoad),
+                     (":show",   parseShow),
+                     (":lock",   parseLock),
+                     (":bind",   parseBind),
+                     (":check",  parseCheck),
+                     (":set",    parseSet),
                      (":unfold", parseUnfold),
                      (":typeOf", parseTypeof),
-                     (":hred", \_ -> Right HeadReduct),
-                     (":fmc", parseMiniConsts)]
+                     (":hred",   \_ -> Right HeadReduct)]
     pm = M.fromList [("?", "show the usage message"),
                      (":help", "show the usage message"),
                      (":quit", "stop the program"),
@@ -117,10 +117,10 @@ getCommand str =
                      (":lock", "{-all | -none | -add | -remove} [<varlist>]"),
                      (":bind", "<name> = <expr>, bind a name <name> to expression <expr>"),
                      (":check", "{-expr | -decl | -const}  { <expr> | <decl> | <constant>}"),
+                     (":set",   "{-conversion [beta | eta]}"),
                      (":unfold", "{-name | -expr} { <name> | <expr> }"),
                      (":typeOf", "{-name | -expr} { <name> | <expr> }"),
-                     (":hred", "apply head reduction on the expression bound to name 'it'"),
-                     (":fmc", "<constant>, find the minimum set of constants that need to be unfolded")]
+                     (":hred", "apply head reduction on the expression bound to name 'it'")]
 
     parseLoad :: [String] -> Either String Cmd
     parseLoad tws = case tws of
@@ -146,14 +146,14 @@ getCommand str =
 
     parseLock :: [String] -> Either String Cmd
     parseLock tws = case tws of
-      ["-all"]             -> return $ Lock AllLock
-      ["-none"]            -> return $ Lock NoneLock
+      ["-all"]             -> return $ Lock OptAllLock
+      ["-none"]            -> return $ Lock OptNoneLock
       ["-add", varlist]    -> do
         ss <- parseList varlist
-        return $ Lock (AddLock ss)
+        return $ Lock (OptAddLock ss)
       ["-remove", varlist] -> do
         ss <- parseList varlist
-        return $ Lock (RemoveLock ss)
+        return $ Lock (OptRemoveLock ss)
       _ -> Left ":lock {-all | -none | -add | -remove} [<varlist>]"
 
     parseBind :: [String] -> Either String Cmd
@@ -173,6 +173,12 @@ getCommand str =
         return $ Check (CDecl d)
       ["-const", var] -> return $ Check (Const var)
       _ ->  Left ":check {-expr | -decl | -const}  {<expr> | <decl> | <constant>}"
+
+    parseSet :: [String] -> Either String Cmd
+    parseSet tws = case tws of
+      "-conversion" : ["beta"] -> return $ SetOpt (SConvert Beta)
+      "-conversion" : ["eta"]  -> return $ SetOpt (SConvert Eta)
+      _                        -> Left ":set -conversion [beta | eta]"
 
     parseUnfold :: [String] -> Either String Cmd
     parseUnfold tws = case tws of
@@ -205,10 +211,6 @@ getCommand str =
     parseDecl "" = Left "lack of declaration"
     parseDecl s  = Par.pDecl (Par.myLexer s)
 
-    parseMiniConsts :: [String] -> Either String Cmd
-    parseMiniConsts []    = Left "lack of constant"
-    parseMiniConsts (x:_) = return $ FindMinimumConsts x
-
 -- |Instantiate a segment with expressions
 segCont :: Cont -> Namespace -> [ExPos] -> Cont
 segCont c pr eps =
@@ -218,7 +220,7 @@ segCont c pr eps =
   in foldr g c' qps
   where g :: (QExp, Name) -> Cont -> Cont
         g (q, x) cont =
-          let t = getType cont x
+          let (_, t) = getType cont x
           in bindConD cont x t q
 
 -- |Apply head reduction on an expression
@@ -269,13 +271,13 @@ typeOf c e = readBack (namesCont c) (typeOfV c e)
 typeOfV :: Cont -> Exp -> QExp
 typeOfV _ U = U
 typeOfV c (Var x) =
-  let t = getType c x
+  let (_, t) = getType c x
   in eval (getEnv LockAll c) t
 typeOfV c (SegVar ref eps) =
   let pr = reverse (rns ref)
       x  = rid ref
       c' = segCont c pr eps
-      t  = getType c' x
+      (_, t)  = getType c' x
   in eval (getEnv LockAll c') t
 typeOfV c (App e1 e2) =
   let t1 = typeOfV c e1
@@ -288,12 +290,12 @@ unfold s c e =
   let q = eval (getEnv s c) e
   in readBack (namesCont c) q
 
-checkConstant :: LockStrategy s => s -> Cont -> Name -> Either String ()
-checkConstant s c x =
+checkConstant :: LockStrategy s => s -> ConvertCheck -> Cont -> Name -> Either String ()
+checkConstant s ct c x =
   case locate x of
     Nothing -> Left . errorMsg $ "No constant with name '" ++ x ++ "' exists in the current context"
-    Just (_, d) ->
-      case runG (checkD s c d) (emptyCont (cns c)) of
+    Just (c', d) ->
+      case runG (checkD s c' d) (emptyCont (cns c), ct) of
         Left err ->
           let errmsg = explain err
           in Left (unlines (map errorMsg errmsg))

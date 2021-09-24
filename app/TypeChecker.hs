@@ -15,16 +15,14 @@ import qualified Convertor            as Con
 import qualified Core.Abs             as Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
-import           Data.Maybe           (fromJust)
 --import           Debug.Trace
 import           Lang
-import           Lock
-import           Monads
 import           Text.Printf          (printf)
+import           Util
 
 
 -- | monad for type-checking
-type TypeCheckM a = G TypeCheckError Cont a
+type TypeCheckM a = G TypeCheckError (Cont, ConvertCheck) a
 
 -- | a datatype used as exception in an ExceptT monad
 data TypeCheckError
@@ -76,20 +74,21 @@ checkD s c d = do
 checkT :: LockStrategy s => s -> Cont -> Exp -> QExp -> TypeCheckM ()
 checkT _ _ U U = return ()
 checkT s c (Var x) q = do
-  let t = getType c x
-      qt = eval (getEnv s c) t
-  void (checkCI s c qt q)
+  let q' = getTypeQ s c x
+  ct <- gets snd
+  checkConvert s ct c q' q
 checkT s c (SegVar ref eps) q = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
   c'' <- checkSegInst s c c' eps
-  let t = getType c'' x
-      qt = eval (getEnv s c'') t
-  void $ checkCI s c'' qt q
+  let q' = getTypeQ s c'' x
+  ct <- gets snd
+  checkConvert s ct c'' q' q
 checkT s c e@App {} q = do
   q' <- checkI s c e
-  void (checkCI s c q q')
+  ct <- gets snd
+  checkConvert s ct c q q'
 checkT s c (Abs x a b) U = do
   checkT s c a U
   let c' = bindConT c x a
@@ -99,7 +98,8 @@ checkT s c (Abs x a b) (Clos (Abs x' a' b') r') = do
   let r  = getEnv s c
       qa = eval r a
       qa' = eval r' a'
-  void $ checkCI s c qa qa'
+  ct <- gets snd
+  checkConvert s ct c qa qa'
   let y   = qualifiedName' (cns c) x
       r'' = bindEnvQ r' x' (Var y)
       qb' = eval r'' b'
@@ -112,64 +112,76 @@ checkT _ _ e q = throwError $ TypeNotMatch e q
 
 -- |Check that an expression is well typed and infer its type
 checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
-checkI _ _ U = return U
 checkI s c (Var x) = do
-  let mt = getType' c x
-      t  = fromJust mt
-      r = getEnv s c
-  return $ eval r t
+  let q = getTypeQ s c x
+  return q
 checkI s c (SegVar ref eps) = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
   c'' <- checkSegInst s c c' eps
-  let mt = getType' c'' x
-      t = fromJust mt
-      r = getEnv s c''
-  return $ eval r t
+  let q = getTypeQ s c'' x
+  return q
 checkI s c (App m n) = do
   qm <- checkI s c m
   case qm of
     Clos (Abs x a b) r -> do
       let qa = eval r a
       checkT s c n qa
-      let rp = getEnv s c
-          qn = eval rp n
+      let r0 = getEnv s c
+          qn = eval r0 n
           r' = bindEnvQ r x qn
       return $ eval r' b
     _ -> throwError (NotFunctionClos qm)
-checkI s c (Let x a b e) = do
-  c' <- checkD s c (Def x a b)
-  checkI s c' e
 checkI _ _ e = throwError $ CannotInferType e
 
+checkConvert :: LockStrategy s => s -> ConvertCheck -> Cont -> QExp -> QExp -> TypeCheckM ()
+checkConvert _ Beta c q1 q2 = convertBeta (cns c) (namesCont c) q1 q2
+checkConvert s Eta  c q1 q2 = void (convertEta s c q1 q2)
+
+convertBeta :: Namespace -> [String] -> QExp -> QExp -> TypeCheckM ()
+convertBeta _ _ U U = return ()
+convertBeta _ _ (Var x) (Var x') =
+  if x == x' then return () else throwError $ NotConvertible (Var x) (Var x')
+convertBeta nsp ns (App k1 v1) (App k2 v2) = do
+  convertBeta nsp ns k1 k2
+  convertBeta nsp ns v1 v2
+convertBeta nsp ns (Clos (Abs x a m) r) (Clos (Abs x' a' m') r') = do
+  let va  = eval r a
+      va' = eval r' a'
+  convertBeta nsp ns va va'
+  let y = freshVar x ns
+      y' = qualifiedName' nsp y
+      r1 = bindEnvQ r x (Var y')
+      q1 = eval r1 m
+      r1' = bindEnvQ r' x' (Var y')
+      q1' = eval r1' m'
+  convertBeta nsp (y : ns) q1 q1'
+convertBeta _ _ q1 q2 = throwError $ NotConvertible q1 q2
+
 -- |Check that two q-exps are convertible and infer their type
-checkCI :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
-checkCI _ _ U U = return U
-checkCI s c (Var x) (Var y)
-  | x == y =
-    let mt = getType' c x
-        t = fromJust mt
-        r = getEnv s c
-    in let qt = eval r t in return qt
+convertEta :: LockStrategy s => s -> Cont -> QExp -> QExp -> TypeCheckM QExp
+convertEta _ _ U U = return U
+convertEta s c (Var x) (Var y)
+  | x == y = return (getTypeQ s c x)
   | otherwise = throwError $ NotConvertible (Var x) (Var y)
-checkCI s c (App m1 n1) (App m2 n2) = do
-  q <- checkCI s c m1 m2
+convertEta s c (App m1 n1) (App m2 n2) = do
+  q <- convertEta s c m1 m2
   case q of
     Clos (Abs x a b) r' -> do
       let qa = eval r' a
-      checkCT s c n1 n2 qa
+      convertEtaT s c n1 n2 qa
       let r1 = bindEnvQ r' x n1
       return $ eval r1 b
     _ -> throwError $ NotFunctionClos q
-checkCI s c q1@Clos {} q2@Clos {} = do
-  checkCT s c q1 q2 U
+convertEta s c q1@Clos {} q2@Clos {} = do
+  convertEtaT s c q1 q2 U
   return U
-checkCI _ _ q1 q2 = throwError $ NotConvertible q1 q2
+convertEta _ _ q1 q2 = throwError $ NotConvertible q1 q2
 
 -- |Check that two q-expressions are convertible under a given type
-checkCT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-checkCT s c q1 q2 (Clos (Abs x a b) r') = do
+convertEtaT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
+convertEtaT s c q1 q2 (Clos (Abs x a b) r') = do
   let names = namesCont c
       y     = freshVar x names
       r     = getEnv s c
@@ -180,11 +192,11 @@ checkCT s c q1 q2 (Clos (Abs x a b) r') = do
       qa    = eval r' a
       c'    = bindConT c y qa
       qb    = eval r'' b
-  checkCT s c' qm qn qb
-checkCT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
+  convertEtaT s c' qm qn qb
+convertEtaT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   let qa1 = eval r1 a1
       qa2 = eval r2 a2
-  checkCT s c qa1 qa2 U
+  convertEtaT s c qa1 qa2 U
   let names = namesCont c
       y     = freshVar x1 names
       y'    = qualifiedName' (cns c) y
@@ -193,10 +205,10 @@ checkCT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
       qb1   = eval r1' b1
       qb2   = eval r2' b2
       c'    = bindConT c y qa1
-  checkCT s c' qb1 qb2 U
-checkCT s c q1 q2 t = do
-  t' <- checkCI s c q1 q2
-  void $ checkCI s c t t'
+  convertEtaT s c' qb1 qb2 U
+convertEtaT s c q1 q2 t = do
+  t' <- convertEta s c q1 q2
+  void $ convertEta s c t t'
 
 -- |Check that the instantiation of a segment is type checked, namely the expressions provided
 -- match the type of the constant
@@ -209,60 +221,70 @@ checkSegInst _ _  cc []  = return cc
 checkSegInst s cp cc eps = foldM g cc eps
   where g :: Cont -> ExPos -> TypeCheckM Cont
         g c (e, x) = do
-          let t = getType c x -- get the type of 'x' in segment 'c'
-              r = getEnv s c
+          let (c', t) = getType c x -- get the type of 'x' in segment 'c'
+              r = getEnv s c'
               q = eval r t
           checkT s cp e q      -- in context 'cp', check that the expression 'e' matches the type of 't'
           let rp = getEnv s cp
               qe = eval rp e    -- evaluate 'e' in the environment got from 'cp'
-              c' = bindConD c x t qe -- bind the q-expression of 'e' to variable 'x' in the context 'c'
-          return c'
+              cr = bindConD c x t qe -- bind the q-expression of 'e' to variable 'x' in the context 'c'
+          return cr
 
 -- |Parse and type check a file
-parseAndCheck :: LockStrategy s => s -> String -> Either [String] (Abs.Context, Cont)
-parseAndCheck s str = case pContext (resolveLayout True  $ myLexer str) of
+parseAndCheck :: LockStrategy s => s -> ConvertCheck -> String -> Either [String] (Abs.Context, Cont)
+parseAndCheck s ctc str = case pContext (resolveLayout True  $ myLexer str) of
   Left err -> Left (map errorMsg ["failed to parse the file", err])
   Right cxt -> case runG (Con.absCtx cxt) Con.initTree of
     Left err -> Left $ explain err
-    Right axt -> case runG (typeCheck axt) (emptyCont []) of
+    Right axt -> case runG (typeCheck axt) (emptyCont [], ctc) of
       Left err -> Left $ explain err
       Right c  -> Right (cxt, c)
   where
     typeCheck :: [Decl] -> TypeCheckM Cont
     typeCheck axt = do
       mapM_ checkUpdate axt
-      get
+      gets fst
 
     checkUpdate :: Decl -> TypeCheckM ()
     checkUpdate d = do
-      c  <- get
+      (c, ctc')  <- get
       c' <- checkD s c d
-      put c'
+      put (c', ctc')
 
 -- |Type check an expression under given context and locking strategy
-checkExpr :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
-checkExpr s cc cont ce =
+checkExpr :: LockStrategy s => s -> ConvertCheck -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
+checkExpr s ctc cc ac ce =
   let Right tree = runG (Con.ctxTree cc) Con.initTree
-  in case runG (Con.absExp (cns cont) ce) tree of
+  in case runG (Con.absExp (cns ac) ce) tree of
     Left err -> Left $ unlines . map errorMsg $ explain err
-    Right e  -> case runG (soundExpr cont e) (emptyCont (cns cont)) of
-                  Left err -> Left $ unlines . map errorMsg $ explain err
-                  Right _  -> Right e
+    Right e  -> soundExpr ac e
   where
-    soundExpr :: Cont -> Exp -> TypeCheckM ()
-    soundExpr c (Abs x a b) = do
-      checkT s c a U
-      let c' = bindConT c x a
-      void $ checkI s c' b
-    soundExpr c e = void $ checkI s c e
+    soundExpr :: Cont -> Exp -> Either String Exp
+    soundExpr _ U = Right U
+    soundExpr ctx e@(Abs x a m) =
+      case runG (checkD s ctx (Dec x a)) (emptyCont (cns ctx), ctc) of
+        Left err   -> Left $ unlines . map errorMsg $ explain err
+        Right ctx' -> case soundExpr ctx' m of
+                        Left err -> Left err
+                        Right _  -> Right e
+    soundExpr ctx e@(Let x a b m) =
+      case runG (checkD s ctx (Def x a b)) (emptyCont (cns ctx), ctc) of
+        Left err   -> Left $ unlines . map errorMsg $ explain err
+        Right ctx' -> case soundExpr ctx' m of
+                        Left err -> Left err
+                        Right _  -> Right e
+    soundExpr ctx e =
+      case runG (checkI s ctx e) (emptyCont (cns ctx), ctc) of
+        Left err -> Left $ unlines . map errorMsg $ explain err
+        Right _  -> Right e
 
 -- |Type check an declaration/definition under given context and locking strategy
-checkDecl :: LockStrategy s => s -> Abs.Context -> Cont -> Abs.Decl -> Either String Cont
-checkDecl s cc cont cd =
+checkDecl :: LockStrategy s => s -> ConvertCheck -> Abs.Context -> Cont -> Abs.Decl -> Either String Cont
+checkDecl s ctc cc cont cd =
   let Right tree = runG (Con.ctxTree cc) Con.initTree
   in case runG (Con.absDecl (cns cont) cd) tree of
        Left err -> Left $ unlines . map errorMsg $ explain err
-       Right d  -> case runG (checkD s cont d) (emptyCont (cns cont)) of
+       Right d  -> case runG (checkD s cont d) (emptyCont (cns cont), ctc) of
                   Left err    -> Left $ unlines . map errorMsg $ explain err
                   Right cont' -> Right cont'
 
@@ -282,3 +304,9 @@ readBack ss (Clos (Abs x a b) r) =
       b' = readBack (y:ss) (eval r' b)
   in Abs y a' b'
 readBack _ _ = error "error: readBack"
+
+getTypeQ :: LockStrategy s => s -> Cont -> String -> QExp
+getTypeQ s c x =
+  let (c', t) = getType c x
+      r = getEnv s c'
+  in eval r t

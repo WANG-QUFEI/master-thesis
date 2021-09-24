@@ -3,8 +3,6 @@ cabal-version: 1.12
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: d4d1acab02051a43d8b7c538eb9d1923d6fd96aecfb37026fcda634b860de2af
 
 name:           siminitt
 version:        0.1.0.0
@@ -46,9 +44,8 @@ executable siminitt
       Core.Print
       Core.Skel
       Lang
-      Lock
-      Monads
       TypeChecker
+      Util
       Paths_siminitt
   hs-source-dirs:
       app

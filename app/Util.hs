@@ -1,16 +1,24 @@
-{-|
-Module          : Lock
-Description     : providing functions that type check the abstract syntax
-Maintainer      : wangqufei2009@gmail.com
-Portability     : POSIX
--}
-module Lock where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module Util where
 
 import           Lang
 
+import           Control.Monad.Except
+import           Control.Monad.State
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
+
+-- | a composite monad which contains a state monad and an exception monad
+newtype G e s a = G {mkg :: ExceptT e (State s) a}
+  deriving (Monad, Applicative, Functor, MonadError e, MonadState s)
+
+-- | run the monad and get the result
+runG :: G e s a -> s -> Either e a
+runG g = evalState (runExceptT (mkg g))
+
+-- | convertibility check option
+data ConvertCheck = Beta | Eta deriving Show
 
 class LockStrategy s where
   getEnv           :: s -> Cont -> Env     -- ^ get an environment from a type checking context
@@ -182,4 +190,3 @@ unlockedNames ul@(UnLockList ls) (Cont ns cm) =
               else let xs' = unlockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if Set.member x' names
               then x' : xs else xs
-

@@ -14,11 +14,10 @@ import           Core.Abs                   (Id (..))
 import qualified Core.Abs                   as Abs
 import           Core.Print                 (printTree)
 import           Data.Maybe                 (fromMaybe)
---import           Debug.Trace
 import           Lang                       (Name, Namespace, buildRef, strnsp)
 import qualified Lang
-import           Monads
 import           Text.Printf                (printf)
+import           Util
 
 -- |Data structure used to differentiate between types of declarations
 data Tag = TD -- ^ a tag for declaration
