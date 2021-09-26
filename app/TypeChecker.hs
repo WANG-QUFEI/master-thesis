@@ -136,7 +136,7 @@ checkI s c (App m n) = do
 checkI _ _ e = throwError $ CannotInferType e
 
 checkConvert :: LockStrategy s => s -> ConvertCheck -> Cont -> QExp -> QExp -> TypeCheckM ()
-checkConvert _ Beta c q1 q2 = convertBeta (cns c) (namesCont c) q1 q2
+checkConvert _ Beta c q1 q2 = convertBeta (cns c) (namesCtx c) q1 q2
 checkConvert s Eta  c q1 q2 = void (convertEta s c q1 q2)
 
 convertBeta :: Namespace -> [String] -> QExp -> QExp -> TypeCheckM ()
@@ -182,7 +182,7 @@ convertEta _ _ q1 q2 = throwError $ NotConvertible q1 q2
 -- |Check that two q-expressions are convertible under a given type
 convertEtaT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
 convertEtaT s c q1 q2 (Clos (Abs x a b) r') = do
-  let names = namesCont c
+  let names = namesCtx c
       y     = freshVar x names
       r     = getEnv s c
       qm    = eval r (App q1 (Var y))
@@ -197,7 +197,7 @@ convertEtaT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   let qa1 = eval r1 a1
       qa2 = eval r2 a2
   convertEtaT s c qa1 qa2 U
-  let names = namesCont c
+  let names = namesCtx c
       y     = freshVar x1 names
       y'    = qualifiedName' (cns c) y
       r1'   = bindEnvQ r1 x1 (Var y')

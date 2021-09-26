@@ -132,7 +132,7 @@ unlocklist unames (Cont ns cm) = OrdM.foldrWithKey g (emptyEnv ns) cm
                   in bindEnvS r x en
 
 lockedNames :: SimpleLock -> Cont -> [Name]
-lockedNames LockAll c = allNames c
+lockedNames LockAll c = allNamesCtx c
 lockedNames LockNone _ = []
 lockedNames ll@(LockList ls) (Cont ns cm) =
   let lnames = Set.fromList ls
@@ -143,7 +143,7 @@ lockedNames ll@(LockList ls) (Cont ns cm) =
       let x' = qualifiedName ns x
       in if pSegnode v
          then if Set.member x' names
-              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              then let xs' = allNamesCtx (nodeToCont (ns ++ [x]) v) in xs' ++ xs
               else let xs' = lockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if Set.member x' names
               then x' : xs else xs
@@ -162,7 +162,7 @@ lockedNames ul@(UnLockList ls) (Cont ns cm) =
               then x' : xs else xs
 
 unlockedNames :: SimpleLock -> Cont -> [Name]
-unlockedNames LockNone cont = allNames cont
+unlockedNames LockNone cont = allNamesCtx cont
 unlockedNames LockAll _ = []
 unlockedNames ll@(LockList ls) (Cont ns cm) =
   let names = Set.fromList ls
@@ -186,7 +186,7 @@ unlockedNames ul@(UnLockList ls) (Cont ns cm) =
       let x' = qualifiedName ns x
       in if pSegnode v
          then if Set.member x' names
-              then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
+              then let xs' = allNamesCtx (nodeToCont (ns ++ [x]) v) in xs' ++ xs
               else let xs' = unlockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
          else if Set.member x' names
               then x' : xs else xs

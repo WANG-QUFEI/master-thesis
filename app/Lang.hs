@@ -11,6 +11,7 @@ module Lang where
 import qualified Data.HashMap.Lazy          as Map
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.Maybe                 (fromJust)
+import qualified Data.Set                   as Set
 import qualified Data.Text                  as T
 
 -- | == Basic Data types and Classes
@@ -238,17 +239,57 @@ getDef' r x =
     _             -> error "error: getDef'"
 
 -- |Get the names of a context (excluding the names of sub-segments)
-namesCont :: Cont -> [Name]
-namesCont (Cont _ cm) = OrdM.keys cm
+namesCtx :: Cont -> [Name]
+namesCtx (Cont _ cm) = OrdM.foldrWithKey g [] cm
+  where g :: Name -> CNode -> [Name] -> [Name]
+        g x v ns =
+          case v of
+            Ct e -> let ns' = namesExp e
+                    in uniqueNames $ x:ns ++ ns'
+            Cd a b -> let nsa = namesExp a
+                          nsb = namesExp b
+                      in uniqueNames $ x:ns ++ nsa ++ nsb
+            Cs _ -> x:ns
 
 -- |Get the names of a context (including the names of sub-segments)
-allNames :: Cont -> [Name]
-allNames (Cont ns cm) = OrdM.foldrWithKey g [] cm
+allNamesCtx :: Cont -> [Name]
+allNamesCtx ctx@(Cont nsp cm) =
+  let ns = namesCtx ctx
+      qns = map (qualifiedName nsp) ns
+  in OrdM.foldrWithKey g qns cm
   where g :: Name -> CNode -> [Name] -> [Name]
-        g x v xs = let x' = qualifiedName ns x in
+        g x v xs =
           if pSegnode v
-          then let xs' = allNames (nodeToCont (ns ++ [x]) v) in xs' ++ xs
-          else x' : xs
+          then let child = nodeToCont (nsp ++ [x]) v
+                   ns = allNamesCtx child
+                   x' = qualifiedName nsp x
+               in uniqueNames $ x':xs ++ ns
+          else xs
+
+-- | Get the names of definitions in let clauses of an expression
+namesExp :: Exp -> [Name]
+namesExp (Let x a b m) =
+  let ns1 = namesExp a
+      ns2 = namesExp b
+      ns3 = namesExp m
+  in uniqueNames $ x : ns1 ++ ns2 ++ ns3
+namesExp (Abs _ a m) =
+  let ns1 = namesExp a
+      ns2 = namesExp m
+  in uniqueNames (ns1 ++ ns2)
+namesExp (App e1 e2) =
+  let ns1 = namesExp e1
+      ns2 = namesExp e2
+  in uniqueNames (ns1 ++ ns2)
+namesExp (SegVar _ eps) =
+  let es = map fst eps
+      nss = map namesExp es
+  in uniqueNames (concat nss)
+namesExp _ = []
+
+uniqueNames :: [String] -> [String]
+uniqueNames [] = []
+uniqueNames ss = Set.toList . Set.fromList $ ss
 
 -- |Generate a fresh name based on a list of names
 freshVar :: Name -> [Name] -> Name

@@ -233,7 +233,7 @@ headRed c (Let x a b e) =
   let c' = bindConD c x a b
       e' = headRed c' e
   in Let x a b e'
-headRed c e = readBack (namesCont c) (headRedV c e)
+headRed c e = readBack (namesCtx c) (headRedV c e)
 
 -- |Evaluate an expression in 'one small step'
 headRedV :: Cont -> Exp -> QExp
@@ -266,7 +266,7 @@ typeOf c (Abs x a b) =
   let c' = bindConT c x a
       b' = typeOf c' b
   in Abs x a b'
-typeOf c e = readBack (namesCont c) (typeOfV c e)
+typeOf c e = readBack (namesCtx c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
 typeOfV _ U = U
@@ -288,7 +288,7 @@ typeOfV _ _ = error "error: typeOfV"
 unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
 unfold s c e =
   let q = eval (getEnv s c) e
-  in readBack (namesCont c) q
+  in readBack (namesCtx c) q
 
 checkConstant :: LockStrategy s => s -> ConvertCheck -> Cont -> Name -> Either String ()
 checkConstant s ct c x =
