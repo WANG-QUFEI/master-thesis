@@ -176,7 +176,7 @@ headRed c (Abs x a e) =
 headRed c (Let x a b e) =
   let e' = headRed (CConsDef c x a b) e
   in Let x a b e'
-headRed c e = readBack (namesCont c) (headRedV c e)
+headRed c e = readBack (namesCtx c) (headRedV c e)
 
 headRedV :: Cont -> Exp -> QExp
 headRedV c (Var x)     = eval (defVar x c) ENil
@@ -201,7 +201,7 @@ typeOf c (Abs x a e) =
   let c' = consCVar c x a
       e' = typeOf c' e
   in Abs x a e'
-typeOf c e = readBack (namesCont c) (typeOfV c e)
+typeOf c e = readBack (namesCtx c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
 typeOfV c (Var x) =
@@ -214,7 +214,7 @@ typeOfV _ e           = error ("typeOfV: " ++ show e)
 unfold :: LockStrategy s => s -> Cont -> Exp -> Exp
 unfold s c e =
   let ve = eval e (getEnv s c)
-  in readBack (namesCont c) ve
+  in readBack (namesCtx c) ve
 
 checkConstant :: LockStrategy s => s -> ConvertCheck -> Cont -> String -> Either String ()
 checkConstant ls cc c s =

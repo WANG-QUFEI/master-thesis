@@ -139,38 +139,37 @@ consCVar c "" _ = c
 consCVar c x t  = CConsVar c x t
 
 -- | get all variables of a context
-namesCont :: Cont -> [String]
-namesCont CNil               = []
-namesCont (CConsVar c x a)   =
-  let nsc = namesCont c
+namesCtx :: Cont -> [String]
+namesCtx CNil               = []
+namesCtx (CConsVar c x a)   =
+  let nsc = namesCtx c
       nse = namesExp a
-      set = Set.fromList (x : nsc ++ nse)
-  in Set.toList set
-namesCont (CConsDef c x a b) =
-  let nsc = namesCont c
+  in uniqueNames $ x : nsc ++ nse
+namesCtx (CConsDef c x a b) =
+  let nsc = namesCtx c
       ns1 = namesExp a
       ns2 = namesExp b
-      set = Set.fromList (x : nsc ++ ns1 ++ ns2)
-  in Set.toList set
+  in uniqueNames $ x : nsc ++ ns1 ++ ns2
 
 namesExp :: Exp -> [String]
 namesExp (Let x a b m) =
   let ns1 = namesExp a
       ns2 = namesExp b
       ns3 = namesExp m
-      set = Set.fromList (x : ns1 ++ ns2 ++ ns3)
-  in Set.toList set
+  in uniqueNames $ x : ns1 ++ ns2 ++ ns3
 namesExp (Abs _ a m) =
   let ns1 = namesExp a
       ns2 = namesExp m
-      set = Set.fromList (ns1 ++ ns2)
-  in Set.toList set
+  in uniqueNames (ns1 ++ ns2)
 namesExp (App e1 e2) =
   let ns1 = namesExp e1
       ns2 = namesExp e2
-      set = Set.fromList (ns1 ++ ns2)
-  in Set.toList set
+  in uniqueNames (ns1 ++ ns2)
 namesExp _ = []
+
+uniqueNames :: [String] -> [String]
+uniqueNames [] = []
+uniqueNames ss = Set.toList . Set.fromList $ ss
 
 -- | generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String

@@ -107,7 +107,7 @@ handleShow SFileContent = do
   outputStr' (T.unpack fc)
 handleShow SConsants = do
   ac <- lift $ gets context
-  outputStr' $ U.ushow (namesCont ac)
+  outputStr' $ U.ushow (namesCtx ac)
 handleShow SLocked = do
   ls <- lift $ gets lockStrategy
   ac <- lift $ gets context

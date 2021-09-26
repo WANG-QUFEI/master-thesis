@@ -101,7 +101,7 @@ instance LockStrategy SimpleLock where
     in UnLockList (Set.toList set3)
 
   getConstsLocked s c =
-    let vars = namesCont c
+    let vars = namesCtx c
     in case s of
       LockAll -> vars
       LockNone -> []
@@ -115,7 +115,7 @@ instance LockStrategy SimpleLock where
         in Set.toList (Set.difference set1 set2)
 
   getConstsUnLocked s c =
-    let vars = namesCont c
+    let vars = namesCtx c
     in case s of
       LockNone -> vars
       LockAll -> []

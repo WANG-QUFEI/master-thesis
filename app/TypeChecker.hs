@@ -103,7 +103,7 @@ checkI s c (App m n) = do
 checkI _ _ e = throwError $ CannotInferType e
 
 checkConvert :: LockStrategy s => s -> ConvertCheck -> Cont -> QExp -> QExp -> TypeCheckM ()
-checkConvert _ Beta c q1 q2 = convertBeta (namesCont c) q1 q2
+checkConvert _ Beta c q1 q2 = convertBeta (namesCtx c) q1 q2
 checkConvert s Eta  c q1 q2 = void (convertEta s c q1 q2)
 
 convertBeta :: [String] -> QExp -> QExp -> TypeCheckM ()
@@ -147,7 +147,7 @@ convertEta _ _ v v' = throwError $ NotConvertible v v'
 convertEtaT  :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
 convertEtaT s c v1 v2 (Clos (Abs x a b) r) = do
   let va = eval a r
-      y  = freshVar x (namesCont c)
+      y  = freshVar x (namesCtx c)
       c' = consCVar c y va
       r0 = getEnv s c
       m = eval (App v1 (Var y)) r0
@@ -159,7 +159,7 @@ convertEtaT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   let va1 = eval a1 r1
       va2 = eval a2 r2
   convertEtaT s c va1 va2 U
-  let x' = freshVar x1 (namesCont c)
+  let x' = freshVar x1 (namesCtx c)
       var = Var x'
       vb1 = eval b1 (consEVar r1 x1 var)
       vb2 = eval b2 (consEVar r2 x2 var)
