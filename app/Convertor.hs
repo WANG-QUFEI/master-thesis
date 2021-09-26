@@ -74,7 +74,7 @@ absExp e = case e of
   CArr e1 e2 -> do
     e1' <- absExp e1
     e2' <- absExp e2
-    return $ Abs (Dec "" e1') e2'
+    return $ Abs "" e1' e2'
   CPi var e1 e2 -> do
     let s = idStr var
     m <- get
@@ -85,7 +85,7 @@ absExp e = case e of
         put (Map.insert s var m)
         e2' <- absExp e2
         put m
-        return $ Abs (Dec s e1') e2'
+        return $ Abs s e1' e2'
   CWhere var e1 e2 e3 -> do
     let s = idStr var
     m <- get
@@ -97,4 +97,4 @@ absExp e = case e of
         e2' <- absExp e2
         e3' <- absExp e3
         put m
-        return $ Abs (Def s e1' e2') e3'
+        return $ Let s e1' e2' e3'

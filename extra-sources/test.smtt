@@ -1,16 +1,7 @@
--- begin context G --
-id : * -> * = [A : *] A
+A : *
 
-T1 : *
+a : A
 
-T2 : *
+t : * = [x : * -> * -> * = [A1 : *][A2 : *] A] [y : *] x y y 
 
-T3 : * = T1 -> T1
-
-c0 : T1
-
-c1 : T2 
--- end --
--- c2 : id T1 = c0 
-
-c3 : id T3 = [x : T1] c1 
+q : t = [x : *] a

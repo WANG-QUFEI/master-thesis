@@ -105,7 +105,7 @@ T(G) will be needed for eta-conversion  it records the -type- of the variables d
 
  and what is left is definition of  equality of types T(G) |-  V1 = V2 
 
- First we define  beta-conversion    T(G) |- V1 = V2
+ First we define beta-conversion    T(G) |- V1 = V2
 
     T(G) |- U = U
 

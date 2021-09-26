@@ -6,13 +6,16 @@ Portability     : POSIX
 -}
 module Lang where
 
+import qualified Data.Set as Set
+
 import           Core.Abs
 
--- | abstract syntax for expressions, extended with closure as values
+-- | abstract syntax for expressions, extended with closure as q-expressions
 data Exp = U
          | Var String
          | App Exp Exp
-         | Abs Decl Exp
+         | Abs String Exp Exp
+         | Let String Exp Exp Exp
          | Clos Exp Env
          deriving (Eq)
 
@@ -68,11 +71,11 @@ instance Show Exp where
                      Var _ -> pLow
                      _     -> pHigh
           in showsPrec p1 e1 . showString " " . showsPrec p2 e2
-        Abs (Dec "" a) e' -> case a of
-                              Abs _ _ -> showsPrec pHigh a . showString " -> " . showsPrec pLow e'
-                              _       -> showsPrec pLow a . showString " -> " . showsPrec pLow e'
-        Abs d@(Dec _ _) e'  -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
-        Abs d@Def {} e' -> showString "[ " . showsPrec pBar d . showString " ] " . showsPrec pLow e'
+        Abs "" a e' -> case a of
+                         Abs {} -> showsPrec pHigh a . showString " -> " . showsPrec pLow e'
+                         _       -> showsPrec pLow a . showString " -> " . showsPrec pLow e'
+        Abs x a e'  -> showString "[ " . showsPrec pBar (Dec x a) . showString " ] " . showsPrec pLow e'
+        Let x a b e' -> showString "[ " . showsPrec pBar (Def x a b) . showString " ] " . showsPrec pLow e'
         Clos e' _ -> showParen True (showsPrec pLow e') . showString "(..)"
 
 instance Show Decl where
@@ -92,12 +95,12 @@ idPos (Id (pos, _)) = pos
 -- | evaluate an expression in a given environment
 eval :: Exp -> Env -> QExp
 eval e r = case e of
-  U                  -> U
-  Var x              -> getVal r x
-  App e1 e2          -> appVal (eval e1 r) (eval e2 r)
-  Abs Dec {} _       -> Clos e r
-  Abs (Def x a b) e' -> eval e' (EConsDef r x a b)
-  Clos _ _           -> e
+  U           -> U
+  Var x       -> getVal r x
+  App e1 e2   -> appVal (eval e1 r) (eval e2 r)
+  Abs {}      -> Clos e r
+  Let x a b m -> eval m (EConsDef r x a b)
+  Clos _ _    -> e
 
 -- | get the value of a variable from an environment
 getVal :: Env -> String -> QExp
@@ -112,8 +115,8 @@ getVal (EConsDef r x' _ e) x
 -- | application operation on values
 appVal :: QExp -> QExp -> QExp
 appVal v1 v2 = case v1 of
-  Clos (Abs (Dec x _) e) r -> eval e (consEVar r x v2)
-  _                        -> App v1 v2
+  Clos (Abs x _ e) r -> eval e (consEVar r x v2)
+  _                  -> App v1 v2
 
 -- | get the type of a variable in a given context
 getType :: Cont -> String -> (Cont, Exp)
@@ -138,12 +141,40 @@ consCVar c x t  = CConsVar c x t
 -- | get all variables of a context
 namesCont :: Cont -> [String]
 namesCont CNil               = []
-namesCont (CConsVar c x _)   = reverse (x : namesCont c)
-namesCont (CConsDef c x _ _) = reverse (x : namesCont c)
+namesCont (CConsVar c x a)   =
+  let nsc = namesCont c
+      nse = namesExp a
+      set = Set.fromList (x : nsc ++ nse)
+  in Set.toList set
+namesCont (CConsDef c x a b) =
+  let nsc = namesCont c
+      ns1 = namesExp a
+      ns2 = namesExp b
+      set = Set.fromList (x : nsc ++ ns1 ++ ns2)
+  in Set.toList set
+
+namesExp :: Exp -> [String]
+namesExp (Let x a b m) =
+  let ns1 = namesExp a
+      ns2 = namesExp b
+      ns3 = namesExp m
+      set = Set.fromList (x : ns1 ++ ns2 ++ ns3)
+  in Set.toList set
+namesExp (Abs _ a m) =
+  let ns1 = namesExp a
+      ns2 = namesExp m
+      set = Set.fromList (ns1 ++ ns2)
+  in Set.toList set
+namesExp (App e1 e2) =
+  let ns1 = namesExp e1
+      ns2 = namesExp e2
+      set = Set.fromList (ns1 ++ ns2)
+  in Set.toList set
+namesExp _ = []
 
 -- | generate a fresh name based on a list of names
 freshVar :: String -> [String] -> String
 freshVar x xs
   | x `elem` xs = freshVar (x ++ "'") xs
-  | x == "" = freshVar "var" xs
+  | x == "" = freshVar "_v" xs
   | otherwise = x

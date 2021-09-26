@@ -169,13 +169,13 @@ getCommand str =
     parseDecl s  = pCDecl (myLexer s)
 
 headRed :: Cont -> Exp -> Exp
-headRed c (Abs d@(Dec x a) e) =
+headRed c (Abs x a e) =
   let c' = CConsVar c x a
       e' = headRed c' e
-  in Abs d e'
-headRed c (Abs d@(Def x a b) e) =
+  in Abs x a e'
+headRed c (Let x a b e) =
   let e' = headRed (CConsDef c x a b) e
-  in Abs d e'
+  in Let x a b e'
 headRed c e = readBack (namesCont c) (headRedV c e)
 
 headRedV :: Cont -> Exp -> QExp
@@ -193,14 +193,14 @@ defVar x (CConsDef c x' _ e)
   | otherwise = defVar x c
 
 typeOf :: Cont -> Exp -> Exp
-typeOf c (Abs d@(Def x a b) e) =
+typeOf c (Let x a b e) =
   let c' = CConsDef c x a b
       e' = typeOf c' e
-  in Abs d e'
-typeOf c (Abs d@(Dec x a) e) =
+  in Let x a b e'
+typeOf c (Abs x a e) =
   let c' = consCVar c x a
       e' = typeOf c' e
-  in Abs d e'
+  in Abs x a e'
 typeOf c e = readBack (namesCont c) (typeOfV c e)
 
 typeOfV :: Cont -> Exp -> QExp
