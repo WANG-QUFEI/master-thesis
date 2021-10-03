@@ -14,47 +14,42 @@ module Commands
   , headRed
   , typeOf
   , unfold
-  , checkConstant
-   ) where
+  , checkExpr
+  , checkProg
+  ) where
 
-import qualified Core.Abs                   as Abs
-import qualified Core.Par                   as Par
+import qualified Convertor       as Con
+import qualified Core.Abs        as Abs
+import qualified Core.Par        as Par
 import           Lang
 import           TypeChecker
 import           Util
 
-import qualified Data.HashMap.Strict.InsOrd as OrdM
 import           Data.List.Split
-import           Data.Map                   (Map, (!))
-import qualified Data.Map                   as M
-import           Text.Printf                (printf)
+import           Data.Map        (Map, (!))
+import qualified Data.Map        as M
+import           Text.Printf     (printf)
 
 -- |Data type for the commands
 data Cmd = Help
          | Quit
+         | Check CheckItem
          | Load FilePath
+         | CLet String Abs.Exp
+         | CType Abs.Exp
+         | HRed (Maybe Abs.Exp)
          | Show ShowItem
          | Lock LockOption
-         | Bind String Abs.Exp
-         | Check CheckItem
          | SetOpt SetItem
-         | Unfold (Either String Abs.Exp)
-         | TypeOf (Either String Abs.Exp)
-         | HeadReduct
          deriving (Show)
 
-data ShowItem = SFilePath         -- show file path
-              | SFileContent      -- show file content
-              | SConsants         -- show all constants from the currently loaded file
-              | SLocked           -- show locked constants
-              | SUnlocked         -- show unlocked constants
-              | SContext          -- show the type-checking context
-              | SName String      -- show the expression bound to a name
+
+data ShowItem = SLock         -- show lock strategy
+              | SContext      -- show the type-checking context
               deriving (Show)
 
-data CheckItem = CExp  Abs.Exp    -- check an expression
-               | CDecl Abs.Decl   -- check a declaration/definition
-               | Const String     -- check a constant
+data CheckItem = CProg Abs.Context
+               | CExp  Abs.Exp
                deriving Show
 
 newtype SetItem = SConvert ConvertCheck deriving Show
@@ -68,6 +63,92 @@ data LockOption = OptAllLock
 data CmdSelector = CmdSel { funs    :: Map String ([String] -> Either String Cmd)
                           , prompts :: Map String String}
 
+-- | Parse a string into a command, return an error message if no command
+-- could be found
+getCommand :: String -> Either String Cmd
+getCommand str =
+  if head str /= ':'
+  then parsePorgExp str
+  else
+    let ws = words str
+    in case selectCmd (head ws) (CmdSel fm pm) of
+      Nothing -> Left (printf "unknown command: %s" str)
+      Just f  -> f (tail ws)
+  where
+    fm = M.fromList [(":?",      \_ -> Right Help),
+                     (":help",   \_ -> Right Help),
+                     (":quit",   \_ -> Right Quit),
+                     (":load",   parseLoad),
+                     (":let",    parseLet),
+                     (":type",   parseType),
+                     (":hRed",   parseHred),
+                     (":show",   parseShow),
+                     (":lock",   parseLock),
+                     (":set",    parseSet)]
+    pm = M.fromList [(":?", "show the usage message"),
+                     (":help", "show the usage message"),
+                     (":quit", "stop the program"),
+                     (":load", "<file>"),
+                     (":show", "{-lock | -context}"),
+                     (":lock", "{-all | -none | -add <[variable]> | -remove <[variable]>}"),
+                     (":set",   "{-conversion [beta | eta]}"),
+                     (":type", "<expression>"),
+                     (":hRed", "<expression>")]
+
+parsePorgExp :: String -> Either String Cmd
+parsePorgExp str =
+  let tokens = Par.myLexer str
+  in case Par.pContext tokens of
+       Right ctx -> return $ Check (CProg ctx)
+       Left  _   ->
+         case Par.pExp tokens of
+           Right e -> return $ Check (CExp e)
+           Left  _ -> Left $ "unknown command: " ++ str
+
+parseExpr :: String -> Either String Abs.Exp
+parseExpr s  = Par.pExp (Par.myLexer s)
+
+parseLoad :: [String] -> Either String Cmd
+parseLoad ss = case ss of
+  []  -> Left ":load <file>"
+  x:_ -> return $ Load x
+
+parseLet :: [String] -> Either String Cmd
+parseLet ss = case ss of
+  n : "=" : exps -> do
+    e <- parseExpr (unwords exps)
+    return $ CLet n e
+  _   -> Left ":let <name> = <expression>"
+
+parseType :: [String] -> Either String Cmd
+parseType ss = do
+  e <- parseExpr (unwords ss)
+  return $ CType e
+
+parseHred :: [String] -> Either String Cmd
+parseHred [] = return $ HRed Nothing
+parseHred ss = do
+  e <- parseExpr (unwords ss)
+  return $ HRed (Just e)
+
+parseShow :: [String] -> Either String Cmd
+parseShow ss = case ss of
+  ["-lock"]    -> return $ Show SLock
+  ["-context"] -> return $ Show SContext
+  _            -> Left ":show {-lock | -context}"
+
+parseLock :: [String] -> Either String Cmd
+parseLock ss = case ss of
+  ["-all"]             -> return $ Lock OptAllLock
+  ["-none"]            -> return $ Lock OptNoneLock
+  ["-add", varlist]    -> do
+    vs <- parseList varlist
+    return $ Lock (OptAddLock vs)
+  ["-remove", varlist] -> do
+    vs <- parseList varlist
+    return $ Lock (OptRemoveLock vs)
+  _ -> Left ":lock {-all | -none | -add <[variable]>| -remove <[variable]>}"
+
 selectCmd :: String -> CmdSelector -> Maybe ([String] -> Either String Cmd)
 selectCmd str sel =
   let fm = funs sel
@@ -80,136 +161,26 @@ selectCmd str sel =
       let msg = "ambiguous input, possible commands:" : map (\x -> printf "  %s     %s" x (pm ! x)) cms
           f'  = \_ -> Left $ unlines msg
       in Just f'
-  where
-    matchCmd :: String -> [String] -> [String]
-    matchCmd s xs = foldl matchChar xs (zip s [0,1..])
 
-    matchChar :: [String] -> (Char, Int) -> [String]
-    matchChar xs (c, i) = filter (\x -> length x > i && x !! i == c) xs
+matchCmd :: String -> [String] -> [String]
+matchCmd s xs = foldl matchChar xs (zip s [0,1..])
 
--- | Parse a string into a command, return an error message if no command
--- could be found
-getCommand :: String -> Either String Cmd
-getCommand str =
-  let ws  = words str
-      tws = tail ws
-  in case selectCmd (head ws) (CmdSel fm pm) of
-    Nothing -> Left "invalid command, type ':?' for a detailed description of the command"
-    Just f -> f tws
-  where
-    fm = M.fromList [(":?",      \_ -> Right Help),
-                     (":help",   \_ -> Right Help),
-                     (":quit",   \_ -> Right Quit),
-                     (":load",   parseLoad),
-                     (":show",   parseShow),
-                     (":lock",   parseLock),
-                     (":bind",   parseBind),
-                     (":check",  parseCheck),
-                     (":set",    parseSet),
-                     (":unfold", parseUnfold),
-                     (":typeOf", parseTypeof),
-                     (":hred",   \_ -> Right HeadReduct)]
-    pm = M.fromList [("?", "show the usage message"),
-                     (":help", "show the usage message"),
-                     (":quit", "stop the program"),
-                     (":load", "<filename>"),
-                     (":show", "{filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name>}"),
-                     (":lock", "{-all | -none | -add | -remove} [<varlist>]"),
-                     (":bind", "<name> = <expr>, bind a name <name> to expression <expr>"),
-                     (":check", "{-expr | -decl | -const}  { <expr> | <decl> | <constant>}"),
-                     (":set",   "{-conversion [beta | eta]}"),
-                     (":unfold", "{-name | -expr} { <name> | <expr> }"),
-                     (":typeOf", "{-name | -expr} { <name> | <expr> }"),
-                     (":hred", "apply head reduction on the expression bound to name 'it'")]
+matchChar :: [String] -> (Char, Int) -> [String]
+matchChar xs (c, i) = filter (\x -> length x > i && x !! i == c) xs
 
-    parseLoad :: [String] -> Either String Cmd
-    parseLoad tws = case tws of
-      []  -> Left ":load <file>"
-      x:_ -> return $ Load x
+parseSet :: [String] -> Either String Cmd
+parseSet tws = case tws of
+  "-conversion" : ["beta"] -> return $ SetOpt (SConvert Beta)
+  "-conversion" : ["eta"]  -> return $ SetOpt (SConvert Eta)
+  _                        -> Left ":set -conversion [beta | eta]"
 
-    parseShow :: [String] -> Either String Cmd
-    parseShow tws = case tws of
-      ["filePath"]       -> return (Show SFilePath)
-      ["fp"]             -> return (Show SFilePath)
-      ["fileContent"]    -> return (Show SFileContent)
-      ["fc"]             -> return (Show SFileContent)
-      ["const_all"]      -> return (Show SConsants)
-      ["ca"]             -> return (Show SConsants)
-      ["const_locked"]   -> return (Show SLocked)
-      ["cl"]             -> return (Show SLocked)
-      ["const_unlocked"] -> return (Show SUnlocked)
-      ["cu"]             -> return (Show SUnlocked)
-      ["context"]        -> return (Show SContext)
-      ["ctx"]            -> return (Show SContext)
-      ["-name", n]       -> return (Show (SName n))
-      _                  -> Left ":show {filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name>}"
-
-    parseLock :: [String] -> Either String Cmd
-    parseLock tws = case tws of
-      ["-all"]             -> return $ Lock OptAllLock
-      ["-none"]            -> return $ Lock OptNoneLock
-      ["-add", varlist]    -> do
-        ss <- parseList varlist
-        return $ Lock (OptAddLock ss)
-      ["-remove", varlist] -> do
-        ss <- parseList varlist
-        return $ Lock (OptRemoveLock ss)
-      _ -> Left ":lock {-all | -none | -add | -remove} [<varlist>]"
-
-    parseBind :: [String] -> Either String Cmd
-    parseBind tws = case tws of
-      v : "=" : ws' -> do
-        e <- parseExpr (unwords ws')
-        return $ Bind v e
-      _ -> Left ":bind <name> = <expr>"
-
-    parseCheck :: [String] -> Either String Cmd
-    parseCheck tws = case tws of
-      "-expr" : ws'  -> do
-        e <- parseExpr (unwords ws')
-        return $ Check (CExp e)
-      "-decl" : ws'  -> do
-        d <- parseDecl (unwords ws')
-        return $ Check (CDecl d)
-      ["-const", var] -> return $ Check (Const var)
-      _ ->  Left ":check {-expr | -decl | -const}  {<expr> | <decl> | <constant>}"
-
-    parseSet :: [String] -> Either String Cmd
-    parseSet tws = case tws of
-      "-conversion" : ["beta"] -> return $ SetOpt (SConvert Beta)
-      "-conversion" : ["eta"]  -> return $ SetOpt (SConvert Eta)
-      _                        -> Left ":set -conversion [beta | eta]"
-
-    parseUnfold :: [String] -> Either String Cmd
-    parseUnfold tws = case tws of
-      ["-name", v] -> return $ Unfold (Left v)
-      "-expr" : ws' -> do
-        e <- parseExpr (unwords ws')
-        return $ Unfold (Right e)
-      _ ->  Left ":unfold {-name | -expr} {<name> | <expr>}"
-
-    parseTypeof :: [String] -> Either String Cmd
-    parseTypeof tws = case tws of
-      ["-name", v] -> return $ TypeOf (Left v)
-      "-expr" : ws' -> do
-        e <- parseExpr (unwords ws')
-        return $ TypeOf (Right e)
-      _ ->  Left ":typeOf {-name | -expr} {<name> | <expr>}"
-
-    parseList :: String -> Either String [String]
-    parseList s =
-      if head s == '[' && last s == ']'
-      then let s' = init . tail $ s
-           in Right (endBy "," s')
-      else Left "<varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
-
-    parseExpr :: String -> Either String Abs.Exp
-    parseExpr "" = Left "lack of expression"
-    parseExpr s  = Par.pExp (Par.myLexer s)
-
-    parseDecl :: String -> Either String Abs.Decl
-    parseDecl "" = Left "lack of declaration"
-    parseDecl s  = Par.pDecl (Par.myLexer s)
+-- TODO: allow space interspersed
+parseList :: String -> Either String [String]
+parseList s =
+  if head s == '[' && last s == ']'
+  then let s' = init . tail $ s
+       in Right (endBy "," s')
+  else Left "<varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
 
 -- |Instantiate a segment with expressions
 segCont :: Cont -> Namespace -> [ExPos] -> Cont
@@ -246,7 +217,7 @@ headRedV c (App e1 e2) =
       q1 = headRedV c e1
       q2 = eval r e2
   in appVal q1 q2
-headRedV c (SegVar ref eps) =
+headRedV c (SVar ref eps) =
   let pr = reverse (rns ref)
       r  = getEnv LockNone c
       r' = segEnv r pr eps
@@ -273,7 +244,7 @@ typeOfV _ U = U
 typeOfV c (Var x) =
   let (_, t) = getType c x
   in eval (getEnv LockAll c) t
-typeOfV c (SegVar ref eps) =
+typeOfV c (SVar ref eps) =
   let pr = reverse (rns ref)
       x  = rid ref
       c' = segCont c pr eps
@@ -290,23 +261,39 @@ unfold s c e =
   let q = eval (getEnv s c) e
   in readBack (namesCtx c) q
 
-checkConstant :: LockStrategy s => s -> ConvertCheck -> Cont -> Name -> Either String ()
-checkConstant s ct c x =
-  case locate x of
-    Nothing -> Left . errorMsg $ "No constant with name '" ++ x ++ "' exists in the current context"
-    Just (c', d) ->
-      case runG (checkD s c' d) (emptyCont (cns c), ct) of
-        Left err ->
-          let errmsg = explain err
-          in Left (unlines (map errorMsg errmsg))
-        Right _ -> return ()
+-- |Type check an expression under given context and locking strategy
+checkExpr :: LockStrategy s => s -> ConvertCheck -> Cont -> Abs.Exp -> Either String (Exp, Exp)
+checkExpr s ctc ac cexp =
+  case runG (Con.convertExp cexp) ac of
+    Left err   -> Left $ unlines . map errorMsg $ explain err
+    Right aexp -> case soundExpr ac aexp of
+                  Left err -> Left err
+                  Right e  -> let t = typeOf ac e in Right (e, t)
   where
-    locate :: Name -> Maybe (Cont, Decl)
-    locate n = case OrdM.lookup n (mapCont c) of
-      Just (Ct a) ->
-        let c' = splitCont n c
-        in Just (c', Dec n a)
-      Just (Cd a b) ->
-        let c' = splitCont n c
-        in Just (c', Def n a b)
-      _ -> Nothing
+    soundExpr :: Cont -> Exp -> Either String Exp
+    soundExpr _ U = Right U
+    soundExpr ctx e@(Abs x a m) =
+      case runG (checkD s ctx (Dec x a)) (emptyCont (cns ctx), ctc) of
+        Left err   -> Left $ unlines . map errorMsg $ explain err
+        Right ctx' -> case soundExpr ctx' m of
+                        Left err -> Left err
+                        Right _  -> Right e
+    soundExpr ctx e@(Let x a b m) =
+      case runG (checkD s ctx (Def x a b)) (emptyCont (cns ctx), ctc) of
+        Left err   -> Left $ unlines . map errorMsg $ explain err
+        Right ctx' -> case soundExpr ctx' m of
+                        Left err -> Left err
+                        Right _  -> Right e
+    soundExpr ctx e =
+      case runG (checkI s ctx e) (emptyCont (cns ctx), ctc) of
+        Left err -> Left $ unlines . map errorMsg $ explain err
+        Right _  -> Right e
+
+-- |Type check an declaration/definition under given context and locking strategy
+checkProg :: LockStrategy s => s -> ConvertCheck -> Cont -> Abs.Context -> Either String Cont
+checkProg s ctc ac cc =
+  case runG (Con.convertCtx cc) ac of
+    Left err -> Left $ unlines . map errorMsg $ explain err
+    Right ds -> case runG (typeCheckProg s ds) (ac, ctc) of
+                  Left err -> Left $ unlines . map errorMsg $ explain err
+                  Right c  -> Right c

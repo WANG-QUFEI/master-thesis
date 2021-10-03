@@ -2,9 +2,9 @@
 
   T : * -> *
 
-  mon : [X : *][Y : *](X -> Y) -> (T X -> T Y)
+  mon : [X : *][Y : *] (X -> Y) -> (T X -> T Y)
 
-  A   : * = [X : *] (T X -> X) -> X
+  A : * = [X : *] (T X -> X) -> X
 
   intro : T A -> A =
 
@@ -20,15 +20,13 @@
 
     [z : T A] match (intro z)
 
+Pow : * -> * = [X:*] X -> *
 
-Pow : * -> * = [X:*] X -> * ;
-
-T : * -> * = [X : *] Pow (Pow X) ;
+T : * -> * = [X : *] Pow (Pow X)
 
 mon0 : [X:*][Y:*](X -> Y) -> (T X -> T Y) =
 
   [X:*][Y:*][f:X -> Y][u : T X][v: Pow Y] u ([x:X] v (f x))
-
 
 s = lambek [T, mon0]
 
@@ -38,40 +36,28 @@ intro : T A -> A = s.intro
 
 match : A -> T A = s.match
 
+abs : * = [X : *] X
 
-abs : * = [X : *]X;
+not : * -> * = [X : *] X -> abs
 
-not : * -> * = [X : *] X -> abs ;
+delta : A -> A = [z : A] intro (match z)
 
--- A : * = [X : *] (T X -> X) -> X ;
+Q : T A = [p : Pow A][z : A] match z p -> p z
 
--- intro : T A -> A =
+cDelta : Pow A -> Pow A =  [p : Pow A] [z:A] p (delta z)
 
---  [t : T A][X : *][f : T X -> X] f ([g : Pow X] t ([z : A] g (z X f))) ;
+a0 : A = intro Q
 
--- match : A -> T A =
+lem1 : [p : Pow A] Q p -> p a0 = [p : Pow A][h : Q p] h a0 ([x : A] h (delta x))
 
---  [z : A]z (T A) ([t : T (T A)][g : Pow A] t ([x : T A] g (intro x))) ;
+Ed : Pow A = [z:A][p:Pow A] match z p -> p (delta z)
 
+lem2 :  Ed a0  = [p:Pow A] lem1 (cDelta p)
 
-delta : A -> A = [z : A] intro (match z) ;
+B : Pow A =  [z : A] not (Ed z)
 
-Q : T A = [p : Pow A][z : A]match z p -> p z;
+lem3 : Q B = [z : A] [k : match z B] [l : Ed z] l B k ([p:Pow A] l (cDelta p))
 
-cDelta : Pow A -> Pow A =  [p : Pow A][z:A]p (delta z) ;
-
-a0 : A = intro Q ;
-
-lem1 : [p : Pow A]Q p -> p a0 = [p : Pow A][h : Q p]h a0 ([x : A]h (delta x)) ;
-
-Ed : Pow A = [z:A][p:Pow A]match z p -> p (delta z) ;
-
-lem2 :  Ed a0  = [p:Pow A]lem1 (cDelta p) ;
-
-B : Pow A =  [z : A] not (Ed z) ;
-
-lem3 : Q B = [z : A] [k : match z B] [l : Ed z] l B k ([p:Pow A]l (cDelta p));
-
-lem4 : not (Ed a0) = lem1 B lem3 ;
+lem4 : not (Ed a0) = lem1 B lem3
 
 loop : abs = lem4 lem2

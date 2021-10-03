@@ -214,7 +214,7 @@ happyReduction_7 (happy_x_6 `HappyStk`
 	case happyOut14 happy_x_3 of { (HappyWrap14 happy_var_3) -> 
 	case happyOut6 happy_x_6 of { (HappyWrap6 happy_var_6) -> 
 	happyIn8
-		 (Core.Abs.SegVar happy_var_1 happy_var_3 happy_var_6
+		 (Core.Abs.SVar happy_var_1 happy_var_3 happy_var_6
 	) `HappyStk` happyRest}}}
 
 happyReduce_8 = happySpecReduce_1  2# happyReduction_8
@@ -340,14 +340,14 @@ happyReduction_18 (happy_x_6 `HappyStk`
 	case happyOut12 happy_x_3 of { (HappyWrap12 happy_var_3) -> 
 	case happyOut14 happy_x_5 of { (HappyWrap14 happy_var_5) -> 
 	happyIn11
-		 (Core.Abs.SegInst happy_var_1 happy_var_3 happy_var_5
+		 (Core.Abs.SInst happy_var_1 happy_var_3 happy_var_5
 	) `HappyStk` happyRest}}}
 
 happyReduce_19 = happySpecReduce_1  6# happyReduction_19
 happyReduction_19 happy_x_1
 	 =  case happyOut6 happy_x_1 of { (HappyWrap6 happy_var_1) -> 
 	happyIn12
-		 (Core.Abs.Ri happy_var_1
+		 (Core.Abs.Rid happy_var_1
 	)}
 
 happyReduce_20 = happySpecReduce_3  6# happyReduction_20
@@ -357,7 +357,7 @@ happyReduction_20 happy_x_3
 	 =  case happyOut12 happy_x_1 of { (HappyWrap12 happy_var_1) -> 
 	case happyOut6 happy_x_3 of { (HappyWrap6 happy_var_3) -> 
 	happyIn12
-		 (Core.Abs.Rn happy_var_1 happy_var_3
+		 (Core.Abs.Rns happy_var_1 happy_var_3
 	)}}
 
 happyReduce_21 = happySpecReduce_0  7# happyReduction_21

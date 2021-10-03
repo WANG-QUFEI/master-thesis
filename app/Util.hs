@@ -141,7 +141,7 @@ lockedNames ll@(LockList ls) (Cont ns cm) =
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
       let x' = qualifiedName ns x
-      in if pSegnode v
+      in if isNodeSeg v
          then if Set.member x' names
               then let xs' = allNamesCtx (nodeToCont (ns ++ [x]) v) in xs' ++ xs
               else let xs' = lockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
@@ -154,7 +154,7 @@ lockedNames ul@(UnLockList ls) (Cont ns cm) =
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
       let x' = qualifiedName ns x
-      in if pSegnode v
+      in if isNodeSeg v
          then if Set.member x' names
               then xs
               else let xs' = lockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs
@@ -171,7 +171,7 @@ unlockedNames ll@(LockList ls) (Cont ns cm) =
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
       let x' = qualifiedName ns x
-      in if pSegnode v
+      in if isNodeSeg v
          then if Set.member x' names -- segment is locked
               then xs
               else let xs' = unlockedNames ll (nodeToCont (ns ++ [x]) v) in xs' ++ xs
@@ -184,7 +184,7 @@ unlockedNames ul@(UnLockList ls) (Cont ns cm) =
     g :: Set Name -> Name -> CNode -> [Name] -> [Name]
     g names x v xs =
       let x' = qualifiedName ns x
-      in if pSegnode v
+      in if isNodeSeg v
          then if Set.member x' names
               then let xs' = allNamesCtx (nodeToCont (ns ++ [x]) v) in xs' ++ xs
               else let xs' = unlockedNames ul (nodeToCont (ns ++ [x]) v) in xs' ++ xs

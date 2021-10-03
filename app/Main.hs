@@ -7,34 +7,35 @@ Portability     : POSIX
 module Main (main) where
 
 import           Commands
-import qualified Core.Abs                 as Abs
+import qualified Core.Abs                   as Abs
 import           Lang
 import           TypeChecker
 import           Util
 
 import           Control.Monad.State
 import           Data.Char
-import qualified Data.Map                 as Map
-import qualified Data.Text                as T
-import qualified Data.Text.IO             as TI
+import qualified Data.HashMap.Strict.InsOrd as OrdM
+import qualified Data.Text                  as T
+import qualified Data.Text.IO               as TI
 import           System.Console.Haskeline
 import           System.Directory
-import qualified Text.Show.Unicode        as U
+import qualified Text.Show.Unicode          as U
 
 -- | the context/state of the REPL operation
-data ReplState = ReplState
-  { filePath     :: FilePath,            -- path of the loaded file
-    fileContent  :: T.Text,              -- content of the loaded file
-    concretCtx   :: Abs.Context,         -- concret context of the loaded file
-    context      :: Cont,                -- abstract context of the loaded file
-    lockStrategy :: SimpleLock,          -- locking/unlocking variables
-    conversion   :: ConvertCheck,        -- convertibility support, beta conversion or eta conversion
-    bindMap      :: Map.Map String Exp,  -- a map binds well-typed expressions to names
-    continue     :: Bool                 -- whether to continue execution
+data ReplState = ReplState {
+  buff         :: (Bool, T.Text),      -- structure for multi-line user input
+  context      :: Cont,                -- abstract context of the loaded file
+  bindCtx      :: Cont,                -- a map binds well-typed expressions to names
+  lockStrategy :: SimpleLock,          -- locking/unlocking variables
+  conversion   :: ConvertCheck,        -- convertibility support, beta conversion or eta conversion
+  continue     :: Bool                 -- whether to continue execution
   }
 
 initState :: ReplState
-initState = ReplState "" T.empty (Abs.Ctx []) (emptyCont []) LockNone Beta (Map.fromList [("it", U)]) True
+initState = ReplState (False, T.empty) (emptyCont []) initDynamicContext LockNone Beta True
+
+initDynamicContext :: Cont
+initDynamicContext = Cont [] (OrdM.singleton "_it" (Cd U U))
 
 main :: IO ()
 main = do
@@ -53,23 +54,72 @@ handleInput :: String -> InputT (StateT ReplState IO) ()
 handleInput str =
   if isEmptyString str
   then return ()
-  else let str' = trimString str
-       in case getCommand str' of
-            Left err            -> outputStr' (errorMsg err)
-            Right Quit          -> stop
-            Right Help          -> usage
-            Right (Load fp)     -> handleLoad fp
-            Right (Show s)      -> handleShow s
-            Right (Lock l)      -> handleLock l
-            Right (Bind x cexp) -> handleBind x cexp
-            Right (Check c)     -> handleCheck c
-            Right (Unfold uf)   -> handleUnfold uf
-            Right (TypeOf tf)   -> handleTypeOf tf
-            Right HeadReduct    -> handleHeadRed
-            Right (SetOpt sopt) -> handleSet sopt
+  else do
+    (b, t) <- lift $ gets buff
+    let str' = trimString str
+    if b
+      then case str' of
+             ":}" -> do
+               lift $ modify (\s -> s {buff = (False, T.empty)})
+               let text = T.unpack t
+               unless (isEmptyString text) (parseExec text)
+             _    -> do
+               lift $ modify (\s -> s {buff = (True, T.append t (T.pack (str' ++ "\n")))})
+      else case str' of
+             ":{" -> do
+               lift $ modify (\s -> s {buff = (True, T.empty)})
+             _    ->
+               parseExec str'
 
-stop :: InputT (StateT ReplState IO) ()
-stop = lift $ modify (\s -> s {continue = False})
+promptExec :: String -> InputT (StateT ReplState IO) a -> InputT (StateT ReplState IO) ()
+promptExec question action = do
+  ms <- getInputLine question
+  case ms of
+    Nothing  -> return ()
+    Just ans -> when (isAffirmative (trimString ans)) (void action)
+  where
+    isAffirmative :: String -> Bool
+    isAffirmative s = head s == 'y' || head s == 'Y'
+
+parseExec :: String -> InputT (StateT ReplState IO) ()
+parseExec str =
+  case getCommand str of
+    Left err        -> outputStr' (errorMsg err)
+    Right Help      -> usage
+    Right Quit      -> lift $ modify (\s -> s {continue = False})
+    Right (Check c) -> handleCheck c
+    Right (Load fp) -> do
+      dc <- lift . gets $ bindCtx
+      if OrdM.size (mapCont dc) < 2
+        then handleLoad fp
+        else promptExec "load/reload a file will erase all the bindings, continue? [Y/N] " (handleLoad fp)
+    Right (CLet x ce) -> handleLet x ce
+    Right (CType ce) -> handleGetType ce
+    Right (HRed me)  -> handleHred me
+    Right (Show si)  -> handleShow si
+    Right (Lock lopt)  -> handleLock lopt
+    Right (SetOpt sopt) -> handleSet sopt
+
+usage :: InputT (StateT ReplState IO) ()
+usage = let msg = [ " Commands available:"
+                  , "   :?, :help                               show this usage message"
+                  , "   :quit                                   stop the program"
+                  , "   :load <file>                            load <file> with the current locking strategy, default strategy is '-none'"
+                  , "   :let  <name> = <expression>             bind an expression to a name"
+                  , "   :type <expression>                      infer the type of a valid expression"
+                  , "   :hRed <expression>                      apply head reduction on one valid expression"
+                  , "   :show {-lock | -context}"
+                  , "      -lock                                show the current lock strategy"
+                  , "      -context                             show the type checking context"
+                  , "   :lock {-all | -none | -add | -remove}"
+                  , "      -all                                 lock all constants"
+                  , "      -none                                unlock all constants"
+                  , "      -add    <[variable]>                 add a list of names to be locked"
+                  , "      -remove <[variable]>                 remove a list of names to be locked"
+                  , "   :set {-conversion}"
+                  , "      -conversion  <beta | eta>            set the convertibility checking support, beta conversion or eta conversion"
+                   ]
+        in outputStr (unlines msg)
 
 -- |Print a string to the terminal with newline character ensured
 outputStr' :: MonadIO m => String -> InputT m ()
@@ -99,219 +149,128 @@ handleLoad fp = do
     let ts = T.unpack t
     case parseAndCheck ls c ts of
       Left err -> outputStr' (unlines err)
-      Right (cx, ac) -> do
-        outputStrLn $ okayMsg "file loaded!"
-        lift $ modify (\s -> s {filePath    = fp,
-                                fileContent = t,
-                                concretCtx  = cx,
-                                context     = ac})
-
-handleShow :: ShowItem -> InputT (StateT ReplState IO) ()
-handleShow SFilePath = do
-  fp <- lift $ gets filePath
-  if fp == ""
-    then outputStrLn . errorMsg $ "no file loaded"
-    else outputStrLn fp
-handleShow SFileContent = do
-  fc <- lift $ gets fileContent
-  outputStrLn (T.unpack fc)
-handleShow SConsants = do
-  ac <- lift $ gets context
-  outputStrLn $ U.ushow (allNamesCtx ac)
-handleShow SLocked = do
-  ls <- lift $ gets lockStrategy
-  ac <- lift $ gets context
-  let sl = lockedNames ls ac
-  outputStrLn . U.ushow $ sl
-  outputStrLn $ "Lock strategy: " ++ U.ushow ls
-handleShow SUnlocked = do
-  ls <- lift $ gets lockStrategy
-  ac <- lift $ gets context
-  let su = unlockedNames ls ac
-  outputStrLn . U.ushow $ su
-  outputStrLn $ "Lock strategy: " ++ U.ushow ls
-handleShow SContext = do
-  ac <- lift $ gets context
-  outputStr' $ U.ushow ac
-handleShow (SName name) = do
-  m <- lift . gets $ bindMap
-  case Map.lookup name m of
-    Nothing -> outputStrLn . errorMsg $ "error: name not bound"
-    Just e  -> outputStr' (U.ushow e)
-
-handleLock :: LockOption -> InputT (StateT ReplState IO) ()
-handleLock OptAllLock = do
-  let ls = LockAll
-  showChangeOfLock ls
-  lift . modify $ \s -> s {lockStrategy = ls}
-
-handleLock OptNoneLock = do
-  let ls = LockNone
-  showChangeOfLock ls
-  lift . modify $ \s -> s {lockStrategy = ls}
-handleLock (OptAddLock ss) = do
-  ls <- lift . gets $ lockStrategy
-  let ls' = addLock ls ss
-  showChangeOfLock ls'
-  lift . modify $ \s -> s {lockStrategy = ls'}
-handleLock (OptRemoveLock ss) = do
-  ls <- lift . gets $ lockStrategy
-  let ls' = removeLock ls ss
-  showChangeOfLock ls'
-  lift . modify $ \s -> s {lockStrategy = ls'}
-
-handleBind :: String -> Abs.Exp -> InputT (StateT ReplState IO) ()
-handleBind x cexp = do
-  ls <- lift . gets $ lockStrategy
-  ct <- lift . gets $ conversion
-  cx <- lift . gets $ concretCtx
-  ac <- lift . gets $ context
-  m  <- lift . gets $ bindMap
-  case checkExpr ls ct cx ac cexp of
-    Left err -> outputStr' err
-    Right e  ->
-      let m' = Map.insert x e m
-      in lift . modify $ \s -> s {bindMap = m'}
+      Right ctx -> do
+        outputStr' $ okayMsg "file loaded!"
+        lift $ modify (\s -> s {context = ctx, bindCtx = initDynamicContext})
 
 handleCheck :: CheckItem -> InputT (StateT ReplState IO) ()
 handleCheck (CExp cexp) = do
-  ls <- lift $ gets lockStrategy
+  s  <- lift $ gets lockStrategy
   ct <- lift $ gets conversion
-  cx <- lift $ gets concretCtx
-  ac <- lift $ gets context
-  case checkExpr ls ct cx ac cexp of
-    Left err -> do
-      outputStrLn (errorMsg "error: invalid expression!")
-      outputStr' err
-    Right e  -> do
-      outputStrLn (okayMsg "okay~")
-      m <- lift . gets $ bindMap
-      let m' = Map.insert "it" e m
-      lift $ modify (\s -> s {bindMap = m'})
-handleCheck (CDecl cdecl) = do
-  ls <- lift $ gets lockStrategy
-  ct <- lift $ gets conversion
-  cx <- lift $ gets concretCtx
-  ac <- lift $ gets context
-  case checkDecl ls ct cx ac cdecl of
-    Left err -> do
-      outputStrLn (errorMsg "error: invalid declaration/definition!")
-      outputStr' err
-    Right ac'  -> do
-      outputStrLn (okayMsg "okay~")
-      lift $ modify (\s -> s {concretCtx = addDecl cx cdecl,
-                              context = ac'})
-  where
-    addDecl :: Abs.Context -> Abs.Decl -> Abs.Context
-    addDecl (Abs.Ctx ds) d = Abs.Ctx (ds ++ [d])
-handleCheck (Const var) = do
-  ls <- lift . gets $ lockStrategy
-  ct <- lift . gets $ conversion
-  ac <- lift . gets $ context
-  case checkConstant ls ct ac var of
-    Left errmsg -> outputStr' errmsg
-    Right _     -> outputStrLn "okay~"
-
-handleSet :: SetItem -> InputT (StateT ReplState IO) ()
-handleSet (SConvert c) = lift $ modify (\s -> s {conversion = c})
-
-handleTypeOf :: Either String Abs.Exp -> InputT (StateT ReplState IO) ()
-handleTypeOf (Left name) = do
-  ac <- lift . gets $ context
-  m <- lift . gets $ bindMap
-  case Map.lookup name m of
-    Just e ->
-      let te = typeOf ac e
-      in outputStr' (U.ushow te)
-    Nothing -> outputStrLn . errorMsg $ "name: '" ++ name ++ "' is not bound"
-handleTypeOf (Right cexp) = do
-  ls <- lift . gets $ lockStrategy
-  ct <- lift . gets $ conversion
-  cx <- lift . gets $ concretCtx
-  ac <- lift . gets $ context
-  case checkExpr ls ct cx ac cexp of
+  sc <- lift $ gets context
+  dc <- lift $ gets bindCtx
+  let ctx = combineCtx sc dc
+  case checkExpr s ct ctx cexp of
     Left err -> outputStr' err
-    Right e  ->
-      let te = typeOf ac e
-      in outputStr' (U.ushow te)
+    Right (e, t)  -> do
+      let e' = unfold s ctx e
+      outputStr' (U.ushow e')
+      let m' = OrdM.insert "_it" (Cd t e') (mapCont dc)
+          dc' = dc {mapCont = m'}
+      lift . modify $ \stat -> stat {bindCtx = dc'}
+handleCheck (CProg cx) = do
+  s  <- lift $ gets lockStrategy
+  ct <- lift $ gets conversion
+  sc <- lift $ gets context
+  case checkProg s ct sc cx of
+    Left err -> outputStr' err
+    Right c' ->
+      lift . modify $ \stat -> stat {context = combineCtx sc c'}
 
-handleHeadRed :: InputT (StateT ReplState IO) ()
-handleHeadRed = do
-  ac <- lift . gets $ context
-  m  <- lift . gets $ bindMap
-  let Just e = Map.lookup "it" m
-      e' = headRed ac e
+handleLet :: String -> Abs.Exp -> InputT (StateT ReplState IO) ()
+handleLet x cexp = do
+  s  <- lift . gets $ lockStrategy
+  ct <- lift . gets $ conversion
+  sc <- lift . gets $ context
+  dc <- lift . gets $ bindCtx
+  case checkExpr s ct (combineCtx sc dc) cexp of
+    Left err -> outputStr' err
+    Right (e, t) ->
+      let dc' = bindConD dc x t e
+      in lift . modify $ \stat -> stat {bindCtx = dc'}
+
+handleGetType :: Abs.Exp -> InputT (StateT ReplState IO) ()
+handleGetType cexp = do
+  s  <- lift . gets $ lockStrategy
+  ct <- lift . gets $ conversion
+  sc <- lift . gets $ context
+  dc <- lift . gets $ bindCtx
+  case checkExpr s ct (combineCtx sc dc) cexp of
+    Left err     -> outputStr' err
+    Right (_, t) -> outputStr' (U.ushow t)
+
+handleHred :: Maybe Abs.Exp -> InputT (StateT ReplState IO) ()
+handleHred Nothing = do
+  sc <- lift . gets $ context
+  dc <- lift . gets $ bindCtx
+  let ctx = combineCtx sc dc
+      Just (Cd t e) = OrdM.lookup "_it" (mapCont dc)
+      e' = headRed ctx e
   outputStr' . U.ushow $ e'
-  let m' = Map.insert "it" e' m
-  lift . modify $ \s -> s {bindMap = m'}
-
-handleUnfold :: Either String Abs.Exp -> InputT (StateT ReplState IO) ()
-handleUnfold (Left name) = do
-  ls <- lift . gets $ lockStrategy
-  ac <- lift . gets $ context
-  m <- lift . gets $ bindMap
-  case Map.lookup name m of
-    Just e ->
-      let e' = unfold ls ac e
-      in outputStr' (U.ushow e')
-    Nothing -> outputStr' . errorMsg $ "name: '" ++ name ++ "' is not bound"
-handleUnfold (Right cexp) = do
-  ls <- lift . gets $ lockStrategy
+  let m' = OrdM.insert "_it" (Cd t e') (mapCont dc)
+      dc' = dc {mapCont = m'}
+  lift . modify $ \s -> s {bindCtx = dc'}
+handleHred (Just cexp) = do
+  s  <- lift . gets $ lockStrategy
   ct <- lift . gets $ conversion
-  cx <- lift . gets $ concretCtx
-  ac <- lift . gets $ context
-  case checkExpr ls ct cx ac cexp of
-    Left err -> outputStr' err
-    Right e  ->
-      let e' = unfold ls ac e
-      in outputStr' (U.ushow e')
+  sc <- lift . gets $ context
+  dc <- lift . gets $ bindCtx
+  let ctx = combineCtx sc dc
+  case checkExpr s ct ctx cexp of
+    Left err     -> outputStr' err
+    Right (e, t) -> do
+      let e' = headRed ctx e
+      outputStr' . U.ushow $ e'
+      let m' = OrdM.insert "_it" (Cd t e') (mapCont dc)
+          dc' = dc {mapCont = m'}
+      lift . modify $ \stat -> stat {bindCtx = dc'}
 
-showChangeOfLock :: SimpleLock -> InputT (StateT ReplState IO) ()
-showChangeOfLock lockNew = do
+combineCtx :: Cont -> Cont -> Cont
+combineCtx sc dc =
+  let cmap = OrdM.union (mapCont sc) (mapCont dc)
+  in Cont (cns sc) cmap
+
+handleShow :: ShowItem -> InputT (StateT ReplState IO) ()
+handleShow SContext = do
+  sc <- lift $ gets context
+  dc <- lift $ gets bindCtx
+  outputStr' "--- static context ----"
+  outputStr' $ U.ushow sc
+  outputStr' "--- dynamic context ----"
+  outputStr' $ U.ushow dc
+handleShow SLock = do
+  lock <- lift . gets $ lockStrategy
+  outputStr' ("current lock strategy is: " ++ U.ushow lock)
+
+showLockChange :: SimpleLock -> InputT (StateT ReplState IO) ()
+showLockChange lockNew = do
   lockNow <- lift . gets $ lockStrategy
   outputStrLn "Change lock strategy"
   outputStrLn $ "  from: " ++ U.ushow lockNow
   outputStrLn $ "  to: " ++ U.ushow lockNew
 
-usage :: InputT (StateT ReplState IO) ()
-usage = let msg = [ " Commands available:"
-                  , "   :?, :help                     show this usage message"
-                  , "   :q                            quit"
-                  , "   :load <file>                  load <file> with the current locking strategy, default strategy is '-none'"
-                  , "   :show {filePath | fileContent | const_all | const_locked | const_unlocked | expr | context | -name <name>}"
-                  , "      filePath, fp               show the path of the currently loaded file"
-                  , "      fileContent, fc            show the content of the currently loaded file"
-                  , "      const_all, ca              show the name of all of the constants of the currently loaded file"
-                  , "      const_locked, cl           show the name of all of the locked constants specified by the user"
-                  , "      const_unlocked, cu         show the name of all of the unlocked constants of the currently loaded file"
-                  , "      context, ctx               show the type checking context"
-                  , "      -name <name>               show the expression bound to the name <name>"
-                  , "   :lock {-all | -none | -add | -remove} [<varlist>]"
-                  , "                                 change lock strategy:"
-                  , "                                 -all: lock all constants; -none: lock none constants;"
-                  , "                                 -add <varlist>: add a list of constants to the locking strategy"
-                  , "                                 -remove <varlist>: remove a list of constants from the locking strategy"
-                  , "                                 <varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
-                  , "   :bind <name> = <expr>         bind a name <name> to expression <expr>, if <expr> is well typed under the current"
-                  , "                                 locking strategy."
-                  , "   :check {-expr | -decl | -const}  {<expr> | <decl> | <constant>}"
-                  , "      -expr   <expr>             parse and type check an expression in the current context with the current locking strategy."
-                  , "                                 a type checked expression will be bound to the name 'it'"
-                  , "      -decl   <decl>             parse and type check a declaration/definition in the current context with the current locking strategy."
-                  , "                                 a type checked declaration/definition will be added to the context"
-                  , "      -const  <constant>         type check a constant (identifier of a declaration/definition) in the current context with the current"
-                  , "                                 locking strategy."
-                  , "                                 the constant must come from the current context. This command is used to experiment with the locking/un-"
-                  , "                                 locking mechanism."
-                  , "   :set -conversion [beta|eta]   set the convertibility checking support, beta conversion or eta conversion"
-                  , "   :unfold {-name | -expr} {<name> | <expr>}"
-                  , "                                 unfold an expression bound to a name <name> or a given expression <expr> under the"
-                  , "                                 current locking strategy."
-                  , "                                 a given expression will firstly be type-checked before its being unfolded"
-                  , "   :typeOf {-name | -expr} {<name> | <expr>}"
-                  , "                                 calculate the type of an expression bound to a name <name> or a given expression <expr>."
-                  , "                                 a given expression will firstly be type-checked before being calculated the type"
-                  , "   :hred                         apply head reduction on the expression bound to name 'it', making the result be bound to"
-                  , "                                 'it' instead"
-                   ]
-        in outputStr (unlines msg)
+handleLock :: LockOption -> InputT (StateT ReplState IO) ()
+handleLock OptAllLock = do
+  let ls = LockAll
+  showLockChange ls
+  lift . modify $ \s -> s {lockStrategy = ls}
+handleLock OptNoneLock = do
+  let ls = LockNone
+  showLockChange ls
+  lift . modify $ \s -> s {lockStrategy = ls}
+handleLock (OptAddLock ss) = do
+  ls <- lift . gets $ lockStrategy
+  let ls' = addLock ls ss
+  showLockChange ls'
+  lift . modify $ \s -> s {lockStrategy = ls'}
+handleLock (OptRemoveLock ss) = do
+  ls <- lift . gets $ lockStrategy
+  let ls' = removeLock ls ss
+  showLockChange ls'
+  lift . modify $ \s -> s {lockStrategy = ls'}
+
+handleSet :: SetItem -> InputT (StateT ReplState IO) ()
+handleSet (SConvert Beta) =
+  lift . modify $ \s -> s {conversion = Beta}
+handleSet (SConvert Eta) =
+  lift . modify $ \s -> s {conversion = Eta}

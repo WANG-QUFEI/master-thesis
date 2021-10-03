@@ -26,6 +26,7 @@ extra-source-files:
     extra-sources/seg.smtt
     extra-sources/Test.hs
     extra-sources/test.sh
+    extra-sources/test.smtt
 
 source-repository head
   type: git

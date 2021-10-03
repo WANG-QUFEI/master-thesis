@@ -34,7 +34,7 @@ data Ref = Ref {rns :: Namespace, rid :: Name} deriving Eq
 -- |Data type for expressions and quasi-expressions
 data Exp = U                     -- ^ type of universe
          | Var Name              -- ^ name of a variable
-         | SegVar Ref [ExPos]    -- ^ name of a variable withnin a instantiated segment
+         | SVar Ref [ExPos]      -- ^ name of a variable withnin a instantiated segment
          | App Exp Exp           -- ^ function application
          | Abs Name Exp Exp      -- ^ function abstraction or dependent product type
          | Let Name Exp Exp Exp  -- ^ let clause. e.g. let x : a = b in e could be expressed as 'Let x a b e'
@@ -82,6 +82,12 @@ class InformativeError e where
   explain :: e -> [Name]
 
 -- | == Basic Operations
+-- |If an expression is a K-expression
+isKexp :: Exp -> Bool
+isKexp Var {}     = True
+isKexp SVar {}    = True
+isKexp (App e1 _) = isKexp e1
+isKexp _          = False
 
 -- |Map a function over the first element of a tuple
 mfst :: (a -> b) -> (a, c) -> (b, c)
@@ -101,6 +107,7 @@ strnsp ns  = foldr1 (\a b -> a ++ "." ++ b) ns
 showRef :: Ref -> String
 showRef ref = qualifiedName (rns ref) (rid ref)
 
+-- |Get the namespace of a reference
 refnsp :: Ref -> Namespace
 refnsp (Ref xs x) = x : reverse xs
 
@@ -124,9 +131,20 @@ nodeToCont ns (Cs cm) = Cont ns cm
 nodeToCont _ _        = error "error: nodeToCont"
 
 -- |A predicate checking whether a context node represents a segment
-pSegnode :: CNode -> Bool
-pSegnode Cs {} = True
-pSegnode _     = False
+isNodeSeg :: CNode -> Bool
+isNodeSeg Cs {} = True
+isNodeSeg _     = False
+
+isNodeDec :: CNode -> Bool
+isNodeDec Ct {} = True
+isNodeDec _     = False
+
+-- |Get the names of declarations in a segment
+declNames :: Cont -> [Name]
+declNames c =
+  let cmp = mapCont c
+      dmp = OrdM.filter isNodeDec cmp
+  in OrdM.keys dmp
 
 -- |Get segment by a reversed path
 findSeg :: SegNest a => a -> Namespace -> a
@@ -259,7 +277,7 @@ allNamesCtx ctx@(Cont nsp cm) =
   in OrdM.foldrWithKey g qns cm
   where g :: Name -> CNode -> [Name] -> [Name]
         g x v xs =
-          if pSegnode v
+          if isNodeSeg v
           then let child = nodeToCont (nsp ++ [x]) v
                    ns = allNamesCtx child
                    x' = qualifiedName nsp x
@@ -281,7 +299,7 @@ namesExp (App e1 e2) =
   let ns1 = namesExp e1
       ns2 = namesExp e2
   in uniqueNames (ns1 ++ ns2)
-namesExp (SegVar _ eps) =
+namesExp (SVar _ eps) =
   let es = map fst eps
       nss = map namesExp es
   in uniqueNames (concat nss)
@@ -326,8 +344,8 @@ prec = 10
 instance Show Exp where
   showsPrec _ U       = showString "*"
   showsPrec _ (Var x) = let x' = if neutralName x then tail x else x in showString x'
-  showsPrec _ (SegVar ref [])  = showString $ showRef ref
-  showsPrec p (SegVar ref eps) = showParen (p > prec) $ showString (strnsp (rns ref)) . showString " " .
+  showsPrec _ (SVar ref [])  = showString $ showRef ref
+  showsPrec p (SVar ref eps) = showParen (p > prec) $ showString (strnsp (rns ref)) . showString " " .
                                  showList (map fst eps) . showString " . " . showString (rid ref)
   showsPrec p (App e1 e2) =
     let p1 = case e1 of
@@ -418,7 +436,7 @@ eval :: Env  -- ^ the local environment
      -> QExp
 eval _ U                = U
 eval r (Var x)          = valueOf r x
-eval r (SegVar ref eps) =
+eval r (SVar ref eps) =
   let pr = reverse (rns ref)
       r' = segEnv r pr eps
       x  = rid ref

@@ -45,7 +45,7 @@ $white+ ;
     { tok (eitherResIdent TV) }
 
 -- token Id
-[$u # [\t \n \  \( \) \, \. 0 1 2 3 4 5 6 7 8 9 \: \; \[ \\ \]]] [$u # [\t \n \  \( \) \, \. \: \; \[ \\ \]]] *
+[$u # [\t \n \  \( \) \, \. 0 1 2 3 4 5 6 7 8 9 \: \; \[ \\ \] \_]] [$u # [\t \n \  \( \) \, \. \: \; \[ \\ \]]] *
     { tok (eitherResIdent T_Id) }
 
 -- Keywords and Ident

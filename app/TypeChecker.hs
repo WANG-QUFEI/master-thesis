@@ -12,10 +12,8 @@ import           Control.Monad.Except
 import           Control.Monad.State
 
 import qualified Convertor            as Con
-import qualified Core.Abs             as Abs
 import           Core.Layout          (resolveLayout)
 import           Core.Par
---import           Debug.Trace
 import           Lang
 import           Text.Printf          (printf)
 import           Util
@@ -77,7 +75,7 @@ checkT s c (Var x) q = do
   let q' = getTypeQ s c x
   ct <- gets snd
   checkConvert s ct c q' q
-checkT s c (SegVar ref eps) q = do
+checkT s c (SVar ref eps) q = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
@@ -115,7 +113,7 @@ checkI :: LockStrategy s => s -> Cont -> Exp -> TypeCheckM QExp
 checkI s c (Var x) = do
   let q = getTypeQ s c x
   return q
-checkI s c (SegVar ref eps) = do
+checkI s c (SVar ref eps) = do
   let pr = reverse (rns ref)
       c' = findSeg c pr
       x  = rid ref
@@ -231,62 +229,25 @@ checkSegInst s cp cc eps = foldM g cc eps
           return cr
 
 -- |Parse and type check a file
-parseAndCheck :: LockStrategy s => s -> ConvertCheck -> String -> Either [String] (Abs.Context, Cont)
+parseAndCheck :: LockStrategy s => s -> ConvertCheck -> String -> Either [String] Cont
 parseAndCheck s ctc str = case pContext (resolveLayout True  $ myLexer str) of
   Left err -> Left (map errorMsg ["failed to parse the file", err])
   Right cxt -> case runG (Con.absCtx cxt) Con.initTree of
     Left err -> Left $ explain err
-    Right axt -> case runG (typeCheck axt) (emptyCont [], ctc) of
+    Right axt -> case runG (typeCheckProg s axt) (emptyCont [], ctc) of
       Left err -> Left $ explain err
-      Right c  -> Right (cxt, c)
-  where
-    typeCheck :: [Decl] -> TypeCheckM Cont
-    typeCheck axt = do
-      mapM_ checkUpdate axt
-      gets fst
+      Right c  -> Right c
 
-    checkUpdate :: Decl -> TypeCheckM ()
-    checkUpdate d = do
-      (c, ctc')  <- get
-      c' <- checkD s c d
-      put (c', ctc')
+typeCheckProg :: LockStrategy s => s -> [Decl] -> TypeCheckM Cont
+typeCheckProg s axt = do
+  mapM_ (checkUpdate s) axt
+  gets fst
 
--- |Type check an expression under given context and locking strategy
-checkExpr :: LockStrategy s => s -> ConvertCheck -> Abs.Context -> Cont -> Abs.Exp -> Either String Exp
-checkExpr s ctc cc ac ce =
-  let Right tree = runG (Con.ctxTree cc) Con.initTree
-  in case runG (Con.absExp (cns ac) ce) tree of
-    Left err -> Left $ unlines . map errorMsg $ explain err
-    Right e  -> soundExpr ac e
-  where
-    soundExpr :: Cont -> Exp -> Either String Exp
-    soundExpr _ U = Right U
-    soundExpr ctx e@(Abs x a m) =
-      case runG (checkD s ctx (Dec x a)) (emptyCont (cns ctx), ctc) of
-        Left err   -> Left $ unlines . map errorMsg $ explain err
-        Right ctx' -> case soundExpr ctx' m of
-                        Left err -> Left err
-                        Right _  -> Right e
-    soundExpr ctx e@(Let x a b m) =
-      case runG (checkD s ctx (Def x a b)) (emptyCont (cns ctx), ctc) of
-        Left err   -> Left $ unlines . map errorMsg $ explain err
-        Right ctx' -> case soundExpr ctx' m of
-                        Left err -> Left err
-                        Right _  -> Right e
-    soundExpr ctx e =
-      case runG (checkI s ctx e) (emptyCont (cns ctx), ctc) of
-        Left err -> Left $ unlines . map errorMsg $ explain err
-        Right _  -> Right e
-
--- |Type check an declaration/definition under given context and locking strategy
-checkDecl :: LockStrategy s => s -> ConvertCheck -> Abs.Context -> Cont -> Abs.Decl -> Either String Cont
-checkDecl s ctc cc cont cd =
-  let Right tree = runG (Con.ctxTree cc) Con.initTree
-  in case runG (Con.absDecl (cns cont) cd) tree of
-       Left err -> Left $ unlines . map errorMsg $ explain err
-       Right d  -> case runG (checkD s cont d) (emptyCont (cns cont), ctc) of
-                  Left err    -> Left $ unlines . map errorMsg $ explain err
-                  Right cont' -> Right cont'
+checkUpdate :: LockStrategy s => s -> Decl -> TypeCheckM ()
+checkUpdate s d = do
+  (c, ctc')  <- get
+  c' <- checkD s c d
+  put (c', ctc')
 
 -- |Read a quasi-expression back into an expression of the normal form
 readBack :: [String] -> QExp -> Exp
