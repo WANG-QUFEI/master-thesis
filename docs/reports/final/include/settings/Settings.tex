@@ -2,6 +2,7 @@
 
 % BASIC SETTINGS
 \usepackage{moreverb}								% List settings
+\usepackage{mathrsfs}
 \usepackage{textcomp}								% Fonts, symbols etc.
 \usepackage{lmodern}								% Latin modern font
 \usepackage{helvet}									% Enables font switching
@@ -99,7 +100,36 @@ singlelinecheck=false]{caption}
 \usepackage{stmaryrd}
 \usepackage{titlesec}
 \usepackage{listings}
+\usepackage{color}
 \usepackage{enumerate}
+\usepackage{fancyvrb}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{airforceblue}{rgb}{0.36, 0.54, 0.66}
+\definecolor{cornsilk}{rgb}{1.0, 0.97, 0.86}
+
+\lstset{ 
+  backgroundcolor=\color{backcolour},   
+  commentstyle=\color{airforceblue},
+  keywordstyle=\color{blue},
+  numberstyle=\tiny\color{codegray},
+  stringstyle=\color{codepurple},
+  escapeinside={(*}{*)},
+  basicstyle=\ttfamily\footnotesize,
+  breakatwhitespace=false,         
+  breaklines=false,  
+  captionpos=b,                    
+  keepspaces=true,                 
+  numbers=left,                    
+  numbersep=5pt,                  
+  showspaces=false,                
+  showstringspaces=false,
+  showtabs=false,                  
+  tabsize=2
+  }
 
 \newtheoremstyle{break}
   {\topsep}{\topsep}%
@@ -114,6 +144,9 @@ singlelinecheck=false]{caption}
 \theoremstyle{remark}
 \newtheorem{example}{Example}
 \newtheorem{principle}{Principle}
+\newtheorem*{problem}{Problem}
+
+\newcommand{\rmnum}[1]{\romannumeral #1}
 
 \newunicodechar{λ}{\ensuremath{\mathnormal\lambda}}
 \newunicodechar{←}{\ensuremath{\mathnormal\from}}

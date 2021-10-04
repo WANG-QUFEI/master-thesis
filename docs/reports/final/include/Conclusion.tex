@@ -1,2 +1,12 @@
 % CREATED BY DAVID FRISK, 2016
 \chapter{Conclusion}\label{chapter:conclusion}
+We have presented in this paper a language of dependent type theory as an extension to the pure lambda calculus with dependent types and definitions. We studied and implemented in the language a definition mechanism where convertibility checking with the presence of definitions during the type checking process could be handled more efficiently. As an application of the definition mechanism, we extended the language with a module system to show that the core concepts used in this mechanism, i.e., using closures to defer computation; transforming constants into primitives to avoid definition expansion; checking the convertibility of terms on the level of their intermediate form of evaluation by the syntactic identity, could be adapted to support new language features.
+
+Future work based on this project could be conducted on three directions:
+\begin{enumerate}
+\item More language facilities towards a well defined core language for functional programming: such as language support for basic data types, functions with the ability to pattern match on expressions and user defined (inductive) data types.
+\item Metatheory study on the properties of this language as a logic system, such as the decidability of the type checking algorithm.
+\item Incorporation of the languages formulated in the work of AUTOMATH. As one of the pioneering work in the field of dependent type theory, AUTOMATH provides ideas that are borrowed by this work and more left to be studied for a better understanding of the dependent type theory and the foundation of mathematical logic.
+\end{enumerate}
+
+Our work could be seen as a study into the basic problem of how definitions in the dependent type theory should be presented in an efficient way. As larger programs and more sophisticated problems put more demand on the performance of the proof assistant systems, a practical and efficient definition mechanism is crucial to tackle these challenges for the further development of the dependent type theory.

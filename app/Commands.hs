@@ -16,6 +16,7 @@ module Commands
   , unfold
   , checkExpr
   , checkProg
+  , isConvertible
   ) where
 
 import qualified Convertor       as Con
@@ -25,9 +26,12 @@ import           Lang
 import           TypeChecker
 import           Util
 
+import           Core.Layout
+import           Data.Char
 import           Data.List.Split
 import           Data.Map        (Map, (!))
 import qualified Data.Map        as M
+--import           Debug.Trace
 import           Text.Printf     (printf)
 
 -- |Data type for the commands
@@ -40,6 +44,7 @@ data Cmd = Help
          | HRed (Maybe Abs.Exp)
          | Show ShowItem
          | Lock LockOption
+         | CheckC Abs.Exp Abs.Exp
          | SetOpt SetItem
          deriving (Show)
 
@@ -64,11 +69,13 @@ data CmdSelector = CmdSel { funs    :: Map String ([String] -> Either String Cmd
                           , prompts :: Map String String}
 
 -- | Parse a string into a command, return an error message if no command
--- could be found
+-- could be found parsePorgExp str
 getCommand :: String -> Either String Cmd
 getCommand str =
   if head str /= ':'
-  then parsePorgExp str
+  then if isLetClause str
+       then let ss = tail . words $ str in parseLet ss
+       else parsePorgExp str
   else
     let ws = words str
     in case selectCmd (head ws) (CmdSel fm pm) of
@@ -79,29 +86,30 @@ getCommand str =
                      (":help",   \_ -> Right Help),
                      (":quit",   \_ -> Right Quit),
                      (":load",   parseLoad),
-                     (":let",    parseLet),
                      (":type",   parseType),
                      (":hRed",   parseHred),
                      (":show",   parseShow),
                      (":lock",   parseLock),
-                     (":set",    parseSet)]
+                     (":set",    parseSet),
+                     (":check_convert", parseCheckC)]
     pm = M.fromList [(":?", "show the usage message"),
                      (":help", "show the usage message"),
                      (":quit", "stop the program"),
-                     (":load", "<file>"),
+                     (":load", "<file_path>"),
+                     (":type", "<expression>"),
+                     (":hRed", "<expression>"),
                      (":show", "{-lock | -context}"),
                      (":lock", "{-all | -none | -add <[variable]> | -remove <[variable]>}"),
                      (":set",   "{-conversion [beta | eta]}"),
-                     (":type", "<expression>"),
-                     (":hRed", "<expression>")]
+                     (":check_convert", "<exp1> ~ <exp2>")]
 
 parsePorgExp :: String -> Either String Cmd
 parsePorgExp str =
-  let tokens = Par.myLexer str
+  let tokens = resolveLayout True $ Par.myLexer str
   in case Par.pContext tokens of
        Right ctx -> return $ Check (CProg ctx)
-       Left  _   ->
-         case Par.pExp tokens of
+       Left  _   -> let tokens' = Par.myLexer str in
+         case Par.pExp tokens' of
            Right e -> return $ Check (CExp e)
            Left  _ -> Left $ "unknown command: " ++ str
 
@@ -113,12 +121,27 @@ parseLoad ss = case ss of
   []  -> Left ":load <file>"
   x:_ -> return $ Load x
 
+isLetClause :: String -> Bool
+isLetClause str =
+  let ss = words str
+  in case ss of
+    "let" : _ : "=" : _ -> True
+    _                   -> False
+
 parseLet :: [String] -> Either String Cmd
 parseLet ss = case ss of
   n : "=" : exps -> do
     e <- parseExpr (unwords exps)
     return $ CLet n e
   _   -> Left ":let <name> = <expression>"
+
+parseCheckC :: [String] -> Either String Cmd
+parseCheckC [] = Left "no expressions specified"
+parseCheckC ss = do
+  let (s1, s2) = span (/= '~') (unwords ss)
+  e1 <- parseExpr s1
+  e2 <- parseExpr (tail s2)
+  return $ CheckC e1 e2
 
 parseType :: [String] -> Either String Cmd
 parseType ss = do
@@ -141,12 +164,16 @@ parseLock :: [String] -> Either String Cmd
 parseLock ss = case ss of
   ["-all"]             -> return $ Lock OptAllLock
   ["-none"]            -> return $ Lock OptNoneLock
-  ["-add", varlist]    -> do
-    vs <- parseList varlist
-    return $ Lock (OptAddLock vs)
-  ["-remove", varlist] -> do
-    vs <- parseList varlist
-    return $ Lock (OptRemoveLock vs)
+  "-add" : xs ->
+    let xs' = filter (not . isSpace) . unwords $ xs
+    in do
+      vs <- parseList xs'
+      return $ Lock (OptAddLock vs)
+  "-remove" : xs ->
+    let xs' = filter (not . isSpace) . unwords $ xs
+    in do
+      vs <- parseList xs'
+      return $ Lock (OptRemoveLock vs)
   _ -> Left ":lock {-all | -none | -add <[variable]>| -remove <[variable]>}"
 
 selectCmd :: String -> CmdSelector -> Maybe ([String] -> Either String Cmd)
@@ -174,13 +201,12 @@ parseSet tws = case tws of
   "-conversion" : ["eta"]  -> return $ SetOpt (SConvert Eta)
   _                        -> Left ":set -conversion [beta | eta]"
 
--- TODO: allow space interspersed
 parseList :: String -> Either String [String]
 parseList s =
   if head s == '[' && last s == ']'
   then let s' = init . tail $ s
        in Right (endBy "," s')
-  else Left "<varlist> must be in the form '[v1,v2,...,vn]' with no whitespace interspersed"
+  else Left "<variables> must be in the form '[v1,v2,...,vn]'"
 
 -- |Instantiate a segment with expressions
 segCont :: Cont -> Namespace -> [ExPos] -> Cont
@@ -297,3 +323,12 @@ checkProg s ctc ac cc =
     Right ds -> case runG (typeCheckProg s ds) (ac, ctc) of
                   Left err -> Left $ unlines . map errorMsg $ explain err
                   Right c  -> Right c
+
+isConvertible ::LockStrategy s => s -> ConvertCheck -> Cont -> Exp -> Exp -> Either String Bool
+isConvertible s ctc ac e1 e2 = do
+  let env = getEnv s ac
+      q1 = eval env e1
+      q2 = eval env e2
+  case runG (checkConvert s ctc ac q1 q2) (ac, ctc) of
+    Left err -> Left $ unlines . map errorMsg $ ("Not convertible" : explain err)
+    Right _  -> Right True

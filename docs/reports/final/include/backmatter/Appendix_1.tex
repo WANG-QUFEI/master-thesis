@@ -1,8 +1,112 @@
 % CREATED BY DAVID FRISK, 2016
 \chapter{Appendix}
+\section{Evaluation Using Closure}\label{apdix:closure}
+In the following demonstration, we use $\rightarrow_{\lambda}$ to denote the erase of $\lambda$s in $\beta$-reduction, $\rightarrow_s$ to denote the substitution and $()_e$ to denote the environment.
+\begin{align*}
+  (\lambda u \; . \; u \; (u \; b)) (\lambda z \; y \; x \; . \; a \; (z \; x) \; y) & \rightarrow_{\lambda} \\
+  (u \; (u \; b)) (u = \lambda z \; y \; x \; . \; a \; (z \; x) \; y)_e & \rightarrow_s \\
+  (\lambda z \; y \; x \; . \; a \; (z \; x) \; y) ((\lambda z \; y \; x \; . \; a \; (z \; x) \; y) \; b) & \rightarrow_{\lambda}\\
+  (\lambda y \; x \; . \; a \; (z \; x) \; y) (z = (\lambda z \; y \; x \; . \; a \; (z \; x) \; y) \; b)_e
+\end{align*}
+To show that the problem of capture of names could be avoided, we apply the result to arguments $y_0, x_0$.
+\begin{align*}
+  (\lambda y \; x \; . \; a \; (z \; x) \; y) (z = (\lambda z \; y \; x \; . \; a \; (z \; x) \; y) \; b)_e \; y_0 \; x_0 & \rightarrow_{\lambda} \\
+  (a \; (z \; x) \; y) (z = (\lambda z \; y \; x \; . \; a \; (z \; x) \; y) \; b, y = y_0, x = x_0)_e & \rightarrow_s \\
+  a \; (((\lambda z \; y \; x \; . \; a \; (z \; x) \; y) \; b) \; x_0) \; y_0 & \rightarrow_{\lambda} \\
+  a \; ((\lambda y \; x \; . \; a \; (z \; x) \; y) (z = b)_e \; x_0) \; y_0 & \rightarrow_{\lambda} \\
+  a \; (\lambda x \; . \; a \; (z \; x) \; y) (z = b, y = x_0)_e \; y_0 & 
+\end{align*}
+Suppose we apply the closure in the middle to another argument $x_1$, we get
+\begin{align*}
+  (\lambda x \; . \; a \; (z \; x) \; y) (z = b, y = x_0)_e \; x_1 & \rightarrow_\lambda \\
+  (a \; (z \; x) \; y) (z = b, y = x_0, x = x_1)_e & \rightarrow_s \\
+  a \; (b \; x_1) \; x_0 &
+\end{align*}
+which is correct.
+
+\section{$\eta$-Conversion}\label{apdix:eta}
+To check $\eta$-convertibility, instead of using a predicate as that in table \ref{theory:tab:check-convert}, two new forms of judgments are needed.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{l l l}
+    checkCI & $\Gamma \vdash_s q_1\,q_2 \Rightarrow t$ & $q_1$ and $q_2$ are convertible and their type can be inferred as $t$\\
+    checkCT & $\Gamma \vdash_s q_1\,q_2 \Leftarrow t$ & $q_1$ and $q_2$ are convertible given $t$ as their type
+  \end{tabular}
+  \caption{New Judgments for Checking $\eta$-Convertibility}
+  \label{apdix:tab:eta}
+\end{table}
+
+\subsection{CheckCI}
+\begin{align}
+  &\begin{prooftree}\label{apdix:checkCI:u}
+    \infer0{\Gamma \vdash_s U \sim U \Rightarrow U} 
+  \end{prooftree} \\
+  \nonumber \\
+  &\begin{prooftree}\label{apdix:checkCI:x}
+    \hypo{x == y}
+    \infer1{\Gamma \vdash_s x \sim y \Rightarrow \Gamma(s,x)} 
+  \end{prooftree} \\
+  \nonumber \\
+  &\begin{prooftree}\label{apdix:checkCI:app}
+    \hypo{\Gamma \vdash_s k_1 \sim k_2 \Rightarrow \langle [x : A] B, \rho \rangle}
+    \hypo{\Gamma \vdash_s v_1 \sim v_2 \Leftarrow A_\rho}
+    \infer2{\Gamma \vdash_s (k_1 \; v_1) \sim (k_2 \; v_2) \Rightarrow B_{(\rho, x = v_1)}} 
+  \end{prooftree} \\
+  \nonumber \\
+  &\begin{prooftree}\label{apdix:checkCI:x-clos}
+    \hypo{\Gamma \vdash_s x \Rightarrow \langle [z : A]M,\rho \rangle}
+    \hypo{\Gamma \vdash_s A_\rho \sim A'_{\rho'} \Rightarrow \_}
+    \hypo{\Gamma' \vdash_s q1 \sim q2 \Rightarrow t}
+    \infer3{\Gamma \vdash_s x \sim \langle [x' : A']B',\rho' \rangle \Rightarrow t} 
+  \end{prooftree}\left(\begin{array}{l l l}
+                         y &= & \nu(\tau(\Gamma), x) \\
+                         \Gamma' & = & (\Gamma, y : A_\rho) \\
+                         q1 & = & x \; y \\
+                         q2 & = & B'_{(\rho', x' = y)}
+                       \end{array}\right) \\
+  \nonumber \\
+  &\begin{prooftree}\label{apdix:checkCI:app-clos}
+    \hypo{\Gamma \vdash_s k \Rightarrow \langle [z : A]M,\rho \rangle}
+    \hypo{\Gamma \vdash_s A_\rho \sim A'_{\rho'} \Rightarrow \_}
+    \hypo{\Gamma' \vdash_s q1 \sim q2 \Rightarrow t}
+    \infer3{\Gamma \vdash_s (k\;v) \sim \langle [x' : A']B',\rho' \rangle \Rightarrow t} 
+  \end{prooftree}\left(\begin{array}{l l l}
+                         y &= & \nu(\tau(\Gamma), x') \\
+                         \Gamma' & = & (\Gamma, y : A_\rho) \\
+                         q1 & = & (k\;v)\;v \\
+                         q2 & = & B'_{(\rho', x' = y)}
+                       \end{array}\right) \\
+  \nonumber \\
+    &\begin{prooftree}\label{apdix:checkCT:clos}
+    \hypo{\Gamma \vdash_s A_\rho \sim A'_{\rho'} \Leftarrow U}
+    \hypo{(\Gamma, y : A_\rho), \vdash_s B_{(\rho, x = y)} \sim B'_{(\rho', x' = y)} \Rightarrow t}
+    \infer2{\Gamma \vdash_s \langle [x : A]B, \rho \rangle \sim \langle [x' : A']B', \rho' \rangle \Rightarrow t} 
+  \end{prooftree}\left(\begin{array}{l l l}
+                         y & = & \nu(\tau(\Gamma), x_1)
+                       \end{array}\right)\\
+  \nonumber
+\end{align}
+
+\subsection{CheckCT}
+\begin{align}
+  &\begin{prooftree}\label{apdix:checkCT:v}
+    \hypo{(\Gamma, y:A_\rho) \vdash_s (v1\;y)_{\varrho(s,\Gamma)} \sim (v2\;y)_{\varrho(s,\Gamma)} \Leftarrow B_{(\rho, x = y)}}
+    \infer1{\Gamma \vdash_s v1 \sim v2 \Leftarrow \langle [x : A]B, \rho \rangle} 
+  \end{prooftree}\left(\begin{array}{l l l}
+                         y &= & \nu(\tau(\Gamma), x)
+                       \end{array}\right) \\
+  \nonumber \\
+  &\begin{prooftree}\label{apdix:checkCT:t}
+    \hypo{\Gamma \vdash_s v1 \sim v2 \Rightarrow t'}
+    \hypo{\Gamma \vdash_s t \sim t' \Rightarrow \_}
+    \infer2{\Gamma \vdash_s v1 \sim v2 \Leftarrow t} 
+  \end{prooftree}
+\end{align}
+
 \section{Concrete Syntax for the Basic Language} \label{apdix:concrete-syntax-basic}
-\begin{verbatim}
-position token Id (char - ["\\\n\t[]():;. "])+;
+\begin{Verbatim}[fontsize=\small]
+position token Id ((char - ["\\\n\t[]():;,.0123456789 "])
+  (char - ["\\\n\t[]():;,. "])*);
 
 entrypoints Context, CExp, CDecl;
 
@@ -18,18 +122,19 @@ CWhere.  CExp  ::= "[" Id ":" CExp "=" CExp "]" CExp ;
 CDec.    CDecl ::= Id ":" CExp;
 CDef.    CDecl ::= Id ":" CExp "=" CExp;
 
-
 terminator CDecl ";";
 
 coercions CExp 3;
 
+layout toplevel;
+
 comment "--";
 
 comment "{-" "-}";
-\end{verbatim}
+\end{Verbatim}
 
 \section{Concrete Syntax for the Extended Language} \label{apdix:concrete-syntax-extend}
-\begin{verbatim}
+\begin{Verbatim}[fontsize=\small]
 position token Id ((char - ["\\\n\t[]():;,.0123456789 "]) 
   (char - ["\\\n\t[]():;,. "])*);
 
@@ -66,55 +171,174 @@ layout toplevel;
 comment "--";
 
 comment "{-" "-}";
-\end{verbatim}
+\end{Verbatim}
 
-\section{Test Case} \label{apdix:loop}
-\begin{verbatim}
+\section{Variation of Hurkens Paradox} \label{apdix:loop}
+\begin{Verbatim}[fontsize=\small]
 Pow : * -> * =
-  [X : *] X -> * ;
+  [X : *] X -> *
 
 T : * -> * =
-  [X : *] Pow (Pow X) ;
+  [X : *] Pow (Pow X)
 
-⊥ : * = [X : *] X ;
+abs : * = [X : *] X
 
-funT : [X : *] [Y : *] (X -> Y) -> T X -> T Y =
-  [X : *][Y : *][f : X -> Y][t : T X][g : Y -> *] t ([x : X] g (f x)) ;
+not : * -> * = [X : *] X -> abs
 
-¬ : * -> * =
-  [X : *] X -> ⊥ ;
+A : * = [X : *] (T X -> X) -> X
 
-U : * = [X : *] (T X -> X) -> T X ;
+intro : T A -> A =
+  [t : T A][X : *][f : T X -> X] f ([g : Pow X] t ([z : A] g (z X f)))
 
-tau : T U -> U =
-  [t : T U][X : *][f : T X -> X] [p : Pow X] t ([x : U] p (f (x X f))) ;
+match : A -> T A =
+  [z : A]z (T A) ([t : T (T A)][g : Pow A] t ([x : T A] g (intro x)))
 
-sigma : U -> T U =
-  [z : U] z U tau ;
+delta : A -> A = [z : A] intro (match z)
 
-delta : U -> U = [z : U] tau (sigma z) ;
+Q : T A = [p : Pow A][z : A]match z p -> p z
 
-Q : T U =
-  [p : U -> *][z : U] sigma z p -> p z ;
+cDelta : Pow A -> Pow A =  [p : Pow A][z:A]p (delta z)
 
-B : Pow U =
-  [z : U] ¬ ([p : Pow U] sigma z p -> p (delta z)) ;
+a0 : A = intro Q
 
-C : U = tau Q ;
+lem1 : [p : Pow A]Q p -> p a0 = [p : Pow A][h : Q p]h a0 ([x : A]h (delta x))
 
-lem1 : Q B
-  = [z : U] [k : sigma z B] [l : [p : Pow U] sigma z p -> p (delta z)] l B k ([p : Pow U] l ([z1 : U] p (delta z1))) ;
+Ed : Pow A = [z:A][p:Pow A]match z p -> p (delta z)
 
-A : * = [p : Pow U] Q p -> p C ;
+lem2 :  Ed a0  = [p:Pow A]lem1 (cDelta p)
 
-lem2 : ¬ A
-  = [h : A] h B lem1 ([p : Pow U] h ([z : U] p (delta z))) ;
+B : Pow A =  [z : A] not (Ed z)
 
-lem3 : A
-  = [p : Pow U] [h : Q p] h C ([x : U] h (delta x)) ;
+lem3 : Q B = [z : A] [k : match z B] [l : Ed z] l B k ([p:Pow A]l (cDelta p))
 
-loop : ⊥
-  = lem2 lem3 ;
+lem4 : not (Ed a0) = lem1 B lem3
 
-delta2 : U -> U = [z : U] delta (delta z) ;
-\end{verbatim}
+loop : abs = lem4 lem2
+\end{Verbatim}
+
+\section{Example of Head Reduction}\label{apdix:hred}
+\begin{Verbatim}[fontsize=\small]
+1:  lem4 lem2
+2:  lem1 B lem3 lem2  
+3:  lem3 a0 ([ x : A ] lem3 (delta x)) lem2 
+4:  lem2 B ([ x : A ] lem3 (delta x)) ([ p : Pow A ] lem2 (cDelta p))
+5:  lem1 (cDelta B) ([ x : A ] lem3 (delta x))
+      ([ p : Pow A ] lem2 (cDelta p))
+6:  lem3 (delta a0) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta p))
+7:  lem2 (cDelta B) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+8:  lem1 (cDelta (cDelta B)) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+9:  lem3 (delta (delta a0)) ([ x : A ] lem3 (delta (delta (delta x))))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+10: lem2 (cDelta (cDelta B)) ([ x : A ] lem3 (delta (delta (delta x))))
+      ([ p : Pow A ] lem2 (cDelta (cDelta (cDelta p))))
+\end{Verbatim}
+
+\section{Variation of Hurkens Paradox with Segment}\label{apdix:paradox:seg}
+\begin{Verbatim}[fontsize=\small]
+ lambek = seg
+
+  T : * -> *
+
+  mon : [X : *][Y : *] (X -> Y) -> (T X -> T Y)
+
+  A : * = [X : *] (T X -> X) -> X
+
+  intro : T A -> A =
+
+    [z : T A][X : *][f : T X -> X]
+
+    [u : A -> X = [a : A] a X f]
+
+    [v : T A -> T X = mon A X u] f (v z)
+
+  match : A -> T A = [a : A] a (T A) (mon (T A) A intro)
+
+  mint : T A -> T A =
+
+    [z : T A] match (intro z)
+
+Pow : * -> * = [X:*] X -> *
+
+T : * -> * = [X : *] Pow (Pow X)
+
+mon0 : [X:*][Y:*](X -> Y) -> (T X -> T Y) =
+
+  [X:*][Y:*][f:X -> Y][u : T X][v: Pow Y] u ([x:X] v (f x))
+
+s = lambek [T, mon0]
+
+A : * = s.A
+
+intro : T A -> A = s.intro
+
+match : A -> T A = s.match
+
+abs : * = [X : *] X
+
+not : * -> * = [X : *] X -> abs
+
+delta : A -> A = [z : A] intro (match z)
+
+Q : T A = [p : Pow A][z : A] match z p -> p z
+
+cDelta : Pow A -> Pow A =  [p : Pow A] [z:A] p (delta z)
+
+a0 : A = intro Q
+
+lem1 : [p : Pow A] Q p -> p a0 = [p : Pow A][h : Q p] h a0 ([x : A] h (delta x))
+
+Ed : Pow A = [z:A][p:Pow A] match z p -> p (delta z)
+
+lem2 :  Ed a0  = [p:Pow A] lem1 (cDelta p)
+
+B : Pow A =  [z : A] not (Ed z)
+
+lem3 : Q B = [z : A] [k : match z B] [l : Ed z] l B k ([p:Pow A] l (cDelta p))
+
+lem4 : not (Ed a0) = lem1 B lem3
+
+loop : abs = lem4 lem2
+\end{Verbatim}
+
+\section{Example of Head Reduction With Segment}\label{apdix:hred:extend}
+\begin{Verbatim}[fontsize=\small]
+1:  lem4 lem2
+2:  lem1 B lem3 lem2
+3:  lem3 a0 ([ x : A ] lem3 (delta x)) lem2
+4:  lem2 B ([ x : A ] lem3 (delta x)) ([ p : Pow A ] lem2 (cDelta p))
+5:  lem1 (cDelta B) ([ x : A ] lem3 (delta x)) ([ p : Pow A ] lem2 (cDelta p))
+6:  lem3 (delta a0) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta p))
+7:  lem2 (cDelta B) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+8:  lem1 (cDelta (cDelta B)) ([ x : A ] lem3 (delta (delta x)))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+9:  lem3 (delta (delta a0)) ([ x : A ] lem3 (delta (delta (delta x))))
+      ([ p : Pow A ] lem2 (cDelta (cDelta p)))
+10: lem2 (cDelta (cDelta B)) ([ x : A ] lem3 (delta (delta (delta x))))
+      ([ p : Pow A ] lem2 (cDelta (cDelta (cDelta p))))    
+\end{Verbatim}
+
+\section{REPL Command List}\label{apdix:command}
+\begin{table}[h]
+  \centering
+  \footnotesize
+  \begin{tabular}{l p{10cm}}
+    \texttt{<statement>} & A statement could be an expression or a declaration. \newline For an expression,  it will be type checked and evaluated and the result will be bound to the name ``\_it'' in the dynamic context. \newline For an declaration, it will be type checked and added to the static context.\\
+    \texttt{:load <file\_path>} & Load the file of path <file\_path> with the current locking strategy. Once successfully loaded, the context of the file will become the new static context and the dynamic context will be reset to its initial state. \\
+    \texttt{:let  <name> = <expression>} & Bind an expression to a name. The expression will be type checked first and if it is valid, its type will be inferred and a definition consisting of the name, the type and the expression will be added to the dynamic context. \\
+    \texttt{:type <expression>} & Infer the type of an expression after it is type checked. \\
+    \texttt{:hRed <expression>} & Apply head reduction on an expression after it is type checked. \\
+    \texttt{:show {-lock | -context}} & Option ``-lock'': show the current lock strategy; \newline Option ``-context'': show the current type checking context. \\
+    \texttt{:lock {-all | -none | -add | -remove}} & Change lock strategy. ``-all'': lock all constants; ``-none'': lock no constant; ``-add [variables]'': add a list of names to be locked; ``-remove [variables]'': remove a list of names to be locked. Default strategy is ``-none''. \\
+    \texttt{:set {-conversion <beta | eta>}} & Set the convertibility check support, $\beta$-conversion or $\eta$-conversion. \\
+    \texttt{:check\_convert <exp1> $\sim$ <exp2>} & Check the convertibility of two expressions if they are both valid \\ 
+    \texttt{:quit}     & Stop and quit. \\
+    \texttt{:?, :help} & Show this usage message. \\
+  \end{tabular}
+  \caption{REPL Command List}
+  \label{result:tab:commands}
+\end{table}

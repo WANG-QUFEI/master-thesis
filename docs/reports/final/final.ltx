@@ -8,8 +8,8 @@
 \documentclass[12pt,a4paper,twoside,openright]{report}
 \input{include/settings/Settings}
 
-\newcommand{\oneLineTitle}{A Haskell Implementation for a Dependently Typed Language}
-\newcommand{\multiLineTitle}[1]{A Haskell Implementation for a \\[#1] Dependently Typed Language}
+\newcommand{\oneLineTitle}{A Haskell Implementation for a Dependent Type Theory with Definitions}
+\newcommand{\multiLineTitle}[1]{A Haskell Implementation for a \\[#1] Dependent Type Theory with Definitions}
 % The term [#1] indicates that there will be 1 rowbreak to split the title into two pieces, first part before \\[#1] and second part after. If you have a very long title and need to split it up into 3 rows, just use \\[#1] multiple times.
 
 % \newcommand{\oneLineSubtitle}{A Subtitle that can be Very Much Longer if Necessary}
@@ -35,13 +35,13 @@
 
 % OTHER FRONTMATTER
 % List of figures (add to table of contents)
-% \cleardoublepage
-% \addcontentsline{toc}{chapter}{\listfigurename} 
-% \listoffigures
+%\cleardoublepage
+%\addcontentsline{toc}{chapter}{\listfigurename} 
+%\listoffigures
 % List of tables (add to table of contents)
-% \cleardoublepage
-% \addcontentsline{toc}{chapter}{\listtablename}  
-% \listoftables
+\cleardoublepage
+\addcontentsline{toc}{chapter}{\listtablename}  
+\listoftables
 
 % START OF MAIN DOCUMENT
 \cleardoublepage
@@ -50,7 +50,7 @@
 
 \setlength{\parskip}{3pt}
 
-\input{include/Terminology}
+%%\input{include/Terminology}
 
 % INTRODUCTION
 \input{include/Introduction}

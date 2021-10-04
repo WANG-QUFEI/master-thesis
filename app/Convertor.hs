@@ -14,6 +14,7 @@ import           Core.Abs                   (Id (..))
 import qualified Core.Abs                   as Abs
 import           Core.Print                 (printTree)
 import           Data.Maybe                 (fromJust, fromMaybe)
+--import           Debug.Trace
 import           Lang
 import           Text.Printf                (printf)
 import           Util
@@ -62,7 +63,7 @@ instance InformativeError CheckConvertError where
     [printf "name '%s' already exists" n,
      "error found in namespace " ++ strnsp ns]
   explain (VarNotKnown ns n) =
-    ["variable not in scope!: " ++ n,
+    ["variable not in scope: " ++ n,
      "error found in namespace: " ++ strnsp ns]
   explain (SegNotKnown ns path) =
     ["unknown segment: " ++ strnsp path,
@@ -220,12 +221,12 @@ absDecl ns (Abs.Def ident a b) = do
   b' <- absExp ns b
   modify $ bindNode TDef ident Nothing
   return $ Def (idName ident) a' b'
-absDecl ns (Abs.Seg ident ads) = do
+absDecl ns (Abs.Seg ident cds) = do
   checkDup ns ident
   let name = idName ident
   ptree <- get
   put $ Node TSeg ident OrdM.empty
-  ds <- mapM (absDecl (ns ++ [name])) ads
+  ds <- mapM (absDecl (ns ++ [name])) cds
   ctree <- get
   put ptree
   modify $ bindNode TSeg ident (Just (leaves ctree))
@@ -341,13 +342,13 @@ convertDecl (Abs.Def ident a b) = do
   b' <- convertExp b
   modify $ \c -> bindConD c name a' b'
   return $ Def name a' b'
-convertDecl (Abs.Seg ident ads) = do
-  let name = idName ident
+convertDecl (Abs.Seg ident cds) = do
   checkDupCtx ident
+  let name = idName ident
   pc <- get
   ns <- gets cns
   put $ emptyCont (ns ++ [name])
-  ds <- mapM convertDecl ads
+  ds <- mapM convertDecl cds
   cc <- get
   put pc
   modify $ \c -> bindConS c (idName ident) (Cs $ mapCont cc)

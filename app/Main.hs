@@ -17,6 +17,7 @@ import           Data.Char
 import qualified Data.HashMap.Strict.InsOrd as OrdM
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as TI
+--import           Debug.Trace
 import           System.Console.Haskeline
 import           System.Directory
 import qualified Text.Show.Unicode          as U
@@ -64,7 +65,7 @@ handleInput str =
                let text = T.unpack t
                unless (isEmptyString text) (parseExec text)
              _    -> do
-               lift $ modify (\s -> s {buff = (True, T.append t (T.pack (str' ++ "\n")))})
+               lift $ modify (\s -> s {buff = (True, T.append t (T.pack (str ++ "\n")))})
       else case str' of
              ":{" -> do
                lift $ modify (\s -> s {buff = (True, T.empty)})
@@ -93,31 +94,42 @@ parseExec str =
       if OrdM.size (mapCont dc) < 2
         then handleLoad fp
         else promptExec "load/reload a file will erase all the bindings, continue? [Y/N] " (handleLoad fp)
-    Right (CLet x ce) -> handleLet x ce
-    Right (CType ce) -> handleGetType ce
-    Right (HRed me)  -> handleHred me
-    Right (Show si)  -> handleShow si
-    Right (Lock lopt)  -> handleLock lopt
-    Right (SetOpt sopt) -> handleSet sopt
+    Right (CLet x ce)      -> handleLet x ce
+    Right (CType ce)       -> handleGetType ce
+    Right (HRed me)        -> handleHred me
+    Right (Show si)        -> handleShow si
+    Right (Lock lopt)      -> handleLock lopt
+    Right (SetOpt sopt)    -> handleSet sopt
+    Right (CheckC ce1 ce2) -> handleCheckC ce1 ce2
 
 usage :: InputT (StateT ReplState IO) ()
 usage = let msg = [ " Commands available:"
-                  , "   :?, :help                               show this usage message"
-                  , "   :quit                                   stop the program"
-                  , "   :load <file>                            load <file> with the current locking strategy, default strategy is '-none'"
-                  , "   :let  <name> = <expression>             bind an expression to a name"
-                  , "   :type <expression>                      infer the type of a valid expression"
-                  , "   :hRed <expression>                      apply head reduction on one valid expression"
-                  , "   :show {-lock | -context}"
+                  , "   <statement>                             A statement could be an expression or a declaration"
+                  , "                                           For an expression, it will be type checked and evaluated and the"
+                  , "   let <name> = <expression>               Bind an expression to a name if the expression is valid"
+                  , "                                           If the expression is valid, its type will be inferred and a definition"
+                  , "                                           consisting of the name, the type and the expression will be bound to the"
+                  , "                                           name “_it” in the dynamic context"
+                  , "                                           For an declaration, it will be type checked and added to the static context"
+                  , "   :load <file>                            Load <file> with the current locking strategy"
+                  , "                                           Once successfully loaded, the context of the file will become the new static context and"
+                  , "                                           the dynamic context will be reset to its initial state"
+                  , "                                           be added to the dynamic context"
+                  , "   :type <expression>                      Infer the type of an expression after it is type checked"
+                  , "   :hRed <expression>                      Apply head reduction on an expression after it is type checked"
+                  , "   :show {-lock | -context}                Show information about the current state"
                   , "      -lock                                show the current lock strategy"
                   , "      -context                             show the type checking context"
-                  , "   :lock {-all | -none | -add | -remove}"
+                  , "   :lock {-all | -none | -add | -remove}   Change lock strategy"
                   , "      -all                                 lock all constants"
                   , "      -none                                unlock all constants"
                   , "      -add    <[variable]>                 add a list of names to be locked"
                   , "      -remove <[variable]>                 remove a list of names to be locked"
                   , "   :set {-conversion}"
                   , "      -conversion  <beta | eta>            set the convertibility checking support, beta conversion or eta conversion"
+                  , "   :check_convert <exp1> ~ <exp2>          Check the convertibility of two expressions if they are both valid"
+                  , "   :quit                                   stop the program"
+                  , "   :?, :help                               show this usage message"
                    ]
         in outputStr (unlines msg)
 
@@ -152,6 +164,27 @@ handleLoad fp = do
       Right ctx -> do
         outputStr' $ okayMsg "file loaded!"
         lift $ modify (\s -> s {context = ctx, bindCtx = initDynamicContext})
+
+handleCheckC :: Abs.Exp -> Abs.Exp -> InputT (StateT ReplState IO) ()
+handleCheckC ce1 ce2 = do
+  s  <- lift $ gets lockStrategy
+  ct <- lift $ gets conversion
+  sc <- lift $ gets context
+  dc <- lift $ gets bindCtx
+  let ctx = combineCtx sc dc
+  case checkExpr s ct ctx ce1 of
+    Left err -> do
+      outputStr' (errorMsg "the first expression is not valid")
+      outputStr' err
+    Right (e1, _) ->
+      case checkExpr s ct ctx ce2 of
+        Left err -> do
+          outputStr' (errorMsg "the second expression is not valid")
+          outputStr' err
+        Right (e2, _) ->
+          case isConvertible s ct ctx e1 e2 of
+            Left err -> outputStr' err
+            Right _  -> outputStr' (okayMsg "checked convertible")
 
 handleCheck :: CheckItem -> InputT (StateT ReplState IO) ()
 handleCheck (CExp cexp) = do
@@ -270,7 +303,9 @@ handleLock (OptRemoveLock ss) = do
   lift . modify $ \s -> s {lockStrategy = ls'}
 
 handleSet :: SetItem -> InputT (StateT ReplState IO) ()
-handleSet (SConvert Beta) =
+handleSet (SConvert Beta) = do
   lift . modify $ \s -> s {conversion = Beta}
-handleSet (SConvert Eta) =
+  outputStr' (okayMsg "set to beta-conversion")
+handleSet (SConvert Eta) = do
   lift . modify $ \s -> s {conversion = Eta}
+  outputStr' (okayMsg "set to eta-conversion")

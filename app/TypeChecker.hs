@@ -172,9 +172,49 @@ convertEta s c (App m1 n1) (App m2 n2) = do
       let r1 = bindEnvQ r' x n1
       return $ eval r1 b
     _ -> throwError $ NotFunctionClos q
-convertEta s c q1@Clos {} q2@Clos {} = do
-  convertEtaT s c q1 q2 U
-  return U
+convertEta s c q1@(Var x) q2@(Clos (Abs x' a' _) r') = do
+  let tx = getTypeQ s c x
+  case tx of
+    Clos (Abs _ a _) r -> do
+      let qa  = eval r a
+          qa' = eval r' a'
+      void $ convertEta s c qa' qa
+      let y   = freshVar x' (namesCtx c)
+          r0  = getEnv s c
+          q1' = eval r0 (App q1 (Var y))
+          q2' = eval r0 (App q2 (Var y))
+          c'  = bindConT c y qa
+      convertEta s c' q1' q2'
+    _  -> throwError $ NotConvertible q1 q2
+convertEta s c q2@Clos {} q1@Var {} = convertEta s c q1 q2
+convertEta s c q1@(App m _) q2@(Clos (Abs x' a' _) r') = do
+  t <- checkI s c m
+  case t of
+    Clos (Abs _ a _) r -> do
+      let qa  = eval r a
+          qa' = eval r' a'
+      void $ convertEta s c qa' qa
+      let y   = freshVar x' (namesCtx c)
+          r0  = getEnv s c
+          q1' = eval r0 (App q1 (Var y))
+          q2' = eval r0 (App q2 (Var y))
+          c'  = bindConT c y qa
+      convertEta s c' q1' q2'
+    _  -> throwError $ NotConvertible q1 q2
+convertEta s c q2@Clos {}  q1@App {} = convertEta s c q1 q2
+convertEta s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) = do
+  let qa1 = eval r1 a1
+      qa2 = eval r2 a2
+  convertEtaT s c qa1 qa2 U
+  let names = namesCtx c
+      y     = freshVar x1 names
+      y'    = qualifiedName' (cns c) y
+      r1'   = bindEnvQ r1 x1 (Var y')
+      r2'   = bindEnvQ r2 x2 (Var y')
+      qb1   = eval r1' b1
+      qb2   = eval r2' b2
+      c'    = bindConT c y qa1
+  convertEta s c' qb1 qb2
 convertEta _ _ q1 q2 = throwError $ NotConvertible q1 q2
 
 -- |Check that two q-expressions are convertible under a given type
@@ -191,19 +231,6 @@ convertEtaT s c q1 q2 (Clos (Abs x a b) r') = do
       c'    = bindConT c y qa
       qb    = eval r'' b
   convertEtaT s c' qm qn qb
-convertEtaT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
-  let qa1 = eval r1 a1
-      qa2 = eval r2 a2
-  convertEtaT s c qa1 qa2 U
-  let names = namesCtx c
-      y     = freshVar x1 names
-      y'    = qualifiedName' (cns c) y
-      r1'   = bindEnvQ r1 x1 (Var y')
-      r2'   = bindEnvQ r2 x2 (Var y')
-      qb1   = eval r1' b1
-      qb2   = eval r2' b2
-      c'    = bindConT c y qa1
-  convertEtaT s c' qb1 qb2 U
 convertEtaT s c q1 q2 t = do
   t' <- convertEta s c q1 q2
   void $ convertEta s c t t'
