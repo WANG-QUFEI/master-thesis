@@ -181,8 +181,8 @@ handleCheckC ce1 ce2 = do
         Left err -> do
           outputStr' (errorMsg "the second expression is not valid")
           outputStr' err
-        Right (e2, _) ->
-          case isConvertible s ct ctx e1 e2 of
+        Right (e2, t) ->
+          case isConvertible s ct ctx e1 e2 t of
             Left err -> outputStr' err
             Right _  -> outputStr' (okayMsg "checked convertible")
 

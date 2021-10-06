@@ -324,11 +324,12 @@ checkProg s ctc ac cc =
                   Left err -> Left $ unlines . map errorMsg $ explain err
                   Right c  -> Right c
 
-isConvertible ::LockStrategy s => s -> ConvertCheck -> Cont -> Exp -> Exp -> Either String Bool
-isConvertible s ctc ac e1 e2 = do
+isConvertible ::LockStrategy s => s -> ConvertCheck -> Cont -> Exp -> Exp -> Exp -> Either String Bool
+isConvertible s ctc ac e1 e2 t = do
   let env = getEnv s ac
       q1 = eval env e1
       q2 = eval env e2
-  case runG (checkConvert s ctc ac q1 q2) (ac, ctc) of
+      qt = eval env t
+  case runG (checkConvert' s ctc ac q1 q2 qt) (ac, ctc) of
     Left err -> Left $ unlines . map errorMsg $ ("Not convertible" : explain err)
     Right _  -> Right True

@@ -137,6 +137,10 @@ checkConvert :: LockStrategy s => s -> ConvertCheck -> Cont -> QExp -> QExp -> T
 checkConvert _ Beta c q1 q2 = convertBeta (cns c) (namesCtx c) q1 q2
 checkConvert s Eta  c q1 q2 = void (convertEta s c q1 q2)
 
+checkConvert' :: LockStrategy s => s -> ConvertCheck -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
+checkConvert' _ Beta c q1 q2 _ = convertBeta (cns c) (namesCtx c) q1 q2
+checkConvert' s Eta  c q1 q2 t = void (convertEtaT s c q1 q2 t)
+
 convertBeta :: Namespace -> [String] -> QExp -> QExp -> TypeCheckM ()
 convertBeta _ _ U U = return ()
 convertBeta _ _ (Var x) (Var x') =
@@ -163,8 +167,8 @@ convertEta _ _ U U = return U
 convertEta s c (Var x) (Var y)
   | x == y = return (getTypeQ s c x)
   | otherwise = throwError $ NotConvertible (Var x) (Var y)
-convertEta s c (App m1 n1) (App m2 n2) = do
-  q <- convertEta s c m1 m2
+convertEta s c (App k1 n1) (App k2 n2) = do
+  q <- convertEta s c k1 k2
   case q of
     Clos (Abs x a b) r' -> do
       let qa = eval r' a
@@ -172,37 +176,26 @@ convertEta s c (App m1 n1) (App m2 n2) = do
       let r1 = bindEnvQ r' x n1
       return $ eval r1 b
     _ -> throwError $ NotFunctionClos q
-convertEta s c q1@(Var x) q2@(Clos (Abs x' a' _) r') = do
-  let tx = getTypeQ s c x
-  case tx of
-    Clos (Abs _ a _) r -> do
-      let qa  = eval r a
-          qa' = eval r' a'
-      void $ convertEta s c qa' qa
-      let y   = freshVar x' (namesCtx c)
-          r0  = getEnv s c
-          q1' = eval r0 (App q1 (Var y))
-          q2' = eval r0 (App q2 (Var y))
-          c'  = bindConT c y qa
-      convertEta s c' q1' q2'
-    _  -> throwError $ NotConvertible q1 q2
-convertEta s c q2@Clos {} q1@Var {} = convertEta s c q1 q2
-convertEta s c q1@(App m _) q2@(Clos (Abs x' a' _) r') = do
-  t <- checkI s c m
-  case t of
-    Clos (Abs _ a _) r -> do
-      let qa  = eval r a
-          qa' = eval r' a'
-      void $ convertEta s c qa' qa
-      let y   = freshVar x' (namesCtx c)
-          r0  = getEnv s c
-          q1' = eval r0 (App q1 (Var y))
-          q2' = eval r0 (App q2 (Var y))
-          c'  = bindConT c y qa
-      convertEta s c' q1' q2'
-    _  -> throwError $ NotConvertible q1 q2
-convertEta s c q2@Clos {}  q1@App {} = convertEta s c q1 q2
-convertEta s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) = do
+convertEta s c q1@Clos {} q2@Clos {} = do
+    convertEtaT s c q1 q2 U
+    return U
+convertEta _ _ q1 q2 = throwError $ NotConvertible q1 q2
+
+-- |Check that two q-expressions are convertible under a given type
+convertEtaT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
+convertEtaT s c k1 k2 (Clos (Abs x a b) r') = do
+  let names = namesCtx c
+      y     = freshVar x names
+      r     = getEnv s c
+      qm    = eval r (App k1 (Var y))
+      qn    = eval r (App k2 (Var y))
+      y'    = qualifiedName' (cns c) y
+      r''   = bindEnvQ r' x (Var y')
+      qa    = eval r' a
+      c'    = bindConT c y qa
+      qb    = eval r'' b
+  convertEtaT s c' qm qn qb
+convertEtaT s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) U = do
   let qa1 = eval r1 a1
       qa2 = eval r2 a2
   convertEtaT s c qa1 qa2 U
@@ -214,23 +207,7 @@ convertEta s c (Clos (Abs x1 a1 b1) r1) (Clos (Abs x2 a2 b2) r2) = do
       qb1   = eval r1' b1
       qb2   = eval r2' b2
       c'    = bindConT c y qa1
-  convertEta s c' qb1 qb2
-convertEta _ _ q1 q2 = throwError $ NotConvertible q1 q2
-
--- |Check that two q-expressions are convertible under a given type
-convertEtaT :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-convertEtaT s c q1 q2 (Clos (Abs x a b) r') = do
-  let names = namesCtx c
-      y     = freshVar x names
-      r     = getEnv s c
-      qm    = eval r (App q1 (Var y))
-      qn    = eval r (App q2 (Var y))
-      y'    = qualifiedName' (cns c) y
-      r''   = bindEnvQ r' x (Var y')
-      qa    = eval r' a
-      c'    = bindConT c y qa
-      qb    = eval r'' b
-  convertEtaT s c' qm qn qb
+  convertEtaT s c' qb1 qb2 U
 convertEtaT s c q1 q2 t = do
   t' <- convertEta s c q1 q2
   void $ convertEta s c t t'
