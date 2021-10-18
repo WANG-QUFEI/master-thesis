@@ -1,4 +1,4 @@
-position token Id (char - ["\\\n\t[]():;. "])+;
+position token Id ((char - ["\\\n\t[]():;,.0123456789 "]) (char - ["\\\n\t[]():;,. "])*);
 
 entrypoints Context, CExp, CDecl;
 

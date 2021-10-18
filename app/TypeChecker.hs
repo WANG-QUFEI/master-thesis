@@ -130,13 +130,13 @@ convertEta _ _ U U = return U
 convertEta s c (Var x) (Var x')
   | x == x' = return (getTypeQ s c x)
   | otherwise = throwError $ NotConvertible (Var x) (Var x')
-convertEta s c (App m1 n1) (App m2 n2) = do
-  v <- convertEta s c m1 m2
+convertEta s c (App k1 v1) (App k2 v2) = do
+  v <- convertEta s c k1 k2
   case v of
     Clos (Abs x a b) r -> do
       let va = eval a r
-      convertEtaT s c n1 n2 va
-      let r' = consEVar r x n1
+      convertEtaT s c v1 v2 va
+      let r' = consEVar r x v1
       return $ eval b r'
     _ -> throwError $ NotFunctionClos v
 convertEta s c v1@Clos {} v2@Clos {} = do
@@ -145,13 +145,13 @@ convertEta s c v1@Clos {} v2@Clos {} = do
 convertEta _ _ v v' = throwError $ NotConvertible v v'
 
 convertEtaT  :: LockStrategy s => s -> Cont -> QExp -> QExp -> QExp -> TypeCheckM ()
-convertEtaT s c v1 v2 (Clos (Abs x a b) r) = do
+convertEtaT s c k1 k2 (Clos (Abs x a b) r) = do
   let va = eval a r
       y  = freshVar x (namesCtx c)
       c' = consCVar c y va
       r0 = getEnv s c
-      m = eval (App v1 (Var y)) r0
-      n = eval (App v2 (Var y)) r0
+      m = eval (App k1 (Var y)) r0
+      n = eval (App k2 (Var y)) r0
       r' = consEVar r x (Var y)
       vb = eval b r'
   convertEtaT s c' m n vb
