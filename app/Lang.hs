@@ -242,10 +242,12 @@ getDef :: Cont -> Name -> (Exp, Cont)
 getDef c x =
   let (pr, x') = varPath (cns c) x
       c' = findSeg c pr
-      mn = OrdM.lookup x' (mapCont c')
+      m  = mapCont c'
+      sc = splitCont x' c'
+      mn = OrdM.lookup x' m
   in case fromJust mn of
-    Ct _   -> (Var x, c')
-    Cd _ d -> (d, c')
+    Ct _   -> (Var x, sc)
+    Cd _ d -> (d, sc)
     Cs _   -> error "error: getDef"
 
 -- |Get the definition of a variable from an environment
